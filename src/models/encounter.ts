@@ -107,11 +107,6 @@ export const EncounterCombatantSchema = z.object({
    */
   decisions: z.enum(["ask", "auto"]).nullable().default(null),
   /**
-   * Who rolls its dice: `engine`, or `table` (each roll stops the action until the numbers rolled
-   * at the table are entered: `enter_roll`); `null`: the encounter's `dice`.
-   */
-  dice: z.enum(["engine", "table"]).nullable().default(null),
-  /**
    * Its square on a 5-foot grid (the top-left one, for a creature larger than Medium), or `null`
    * when positions aren't used: then the caller says what's within 5 feet or in range.
    */
@@ -327,25 +322,12 @@ export const PendingSchema = z.object({
     "indomitable",
     "deflect_attacks",
     "relentless_rage",
-    "roll",
   ]),
   question: z.string(),
   /** `question` as a message (for translation); absent in documents saved before it. */
   question_message: MessageSchema.optional(),
   /** What `auto` would answer (only when it can turn the failure into a success). */
   recommended: z.boolean().default(true),
-  /** `kind: roll`: the dice to roll at the table (`count`d`sides`, two d20s keep one) and why. */
-  roll: z
-    .object({
-      /** In dice notation: "1d20", "2d20" (Advantage or Disadvantage), "8d6". */
-      dice: z.string(),
-      count: z.int().min(1),
-      sides: z.int().min(1),
-      keep: z.enum(["higher", "lower"]).nullable(),
-      purpose: MessageSchema,
-    })
-    .nullable()
-    .default(null),
 });
 export type Pending = z.infer<typeof PendingSchema>;
 
@@ -428,13 +410,14 @@ export const EncounterSchema = z.object({
   zones: z.array(ZoneSchema).default([]),
   /** Decisions after a roll: `ask` the combatant (or its player), or `auto` (the recommendation). */
   decisions: z.enum(["ask", "auto"]).default("auto"),
-  /** Who rolls the combatants' dice by default: the `engine`, or the `table` (`enter_roll`). */
-  dice: z.enum(["engine", "table"]).default("engine"),
-  /**
-   * An action waiting for a decision (`decide`) or for dice rolled at the table (`enter_roll`);
-   * nothing else can happen until it's answered.
-   */
-  pending: PendingSchema.nullable().default(null),
+  /** An action waiting for a decision (`decide`); nothing else can happen until it's answered. */
+  pending: z
+    .preprocess(
+      // Older documents: a stop for dice rolled at the table (no longer supported) is dropped.
+      (p) => ((p as { kind?: unknown } | null | undefined)?.kind === "roll" ? null : p),
+      PendingSchema.nullable(),
+    )
+    .default(null),
   /** Roll a dying character's Death Saving Throw at the start of its turn (else just a reminder). */
   auto_death_saves: z.boolean().default(true),
   /** Walls and terrain on the grid (positions only). */
@@ -471,10 +454,10 @@ export function parseEncounter(input: unknown): Encounter {
 
 const n = z.int();
 /**
- * `manual` on an action that resolves an effect: the engine checks it's allowed and spends its
- * costs (economy, slot, uses, Concentration, daily uses, Recharge) as usual, rolls nothing and
- * applies no outcome; the result is a `DeclaredResult` and the table applies the outcome with
- * `effects`.
+ * `manual` on an action that rolls: played by hand, a dice roller. No target (targets and areas
+ * are ignored) and no action economy; its resources are checked and spent (slots, uses, daily
+ * uses, Recharge, Concentration); the actor's dice are rolled and nothing is applied. The result
+ * is a `DeclaredResult`; the table applies the outcome (`effects`).
  */
 const manual = z.boolean().optional();
 /**
@@ -489,7 +472,8 @@ const AttackActionSchema = z.object({
   type: z.literal("attack"),
   force,
   id: z.string(),
-  target: z.string(),
+  /** Required, except played by hand (`manual`). */
+  target: z.string().optional(),
   attack: z.string(),
   mode: z.enum(["normal", "advantage", "disadvantage"]).optional(),
   two_handed: z.boolean().optional(),
@@ -519,7 +503,8 @@ const UnarmedActionSchema = z.object({
   type: z.literal("unarmed"),
   force,
   id: z.string(),
-  target: z.string(),
+  /** Required, except played by hand (`manual`). */
+  target: z.string().optional(),
   option: z.enum(["grapple", "shove"]),
   shove: z.enum(["push", "prone"]).optional(),
   save: z.enum(["str", "dex"]).optional(),
@@ -618,7 +603,6 @@ export const EncounterActionSchema = z
       /** `false`: don't spend Legendary Resistance automatically on a failed save. */
       auto_legendary_resistance: z.boolean().optional(),
       decisions: z.enum(["ask", "auto"]).optional(),
-      dice: z.enum(["engine", "table"]).optional(),
     }),
     z.object({
       type: z.literal("add_character"),
@@ -627,18 +611,9 @@ export const EncounterActionSchema = z
       name: z.string().optional(),
       side: z.string().optional(),
       decisions: z.enum(["ask", "auto"]).optional(),
-      dice: z.enum(["engine", "table"]).optional(),
     }),
     /** Answer the pending decision. */
     z.object({ type: z.literal("decide"), use: z.boolean() }),
-    /** The dice the pending roll asks for, as rolled at the table (`pending.roll`), in order. */
-    z.object({ type: z.literal("enter_roll"), values: z.array(n).min(1) }),
-    /** Change who rolls: one combatant's dice (`null`: the encounter's), or the encounter's. */
-    z.object({
-      type: z.literal("set_dice"),
-      id: z.string().optional(),
-      mode: z.enum(["engine", "table"]).nullable(),
-    }),
     /** Change who decides: one combatant's mode (`null`: the encounter's), or the encounter's. */
     z.object({
       type: z.literal("set_decisions"),

@@ -105,8 +105,6 @@ export const REFUSAL_CODES = [
   "out_of_range",
   /** With `positions: required`, the actor or a target isn't on a map in use. */
   "off_map",
-  /** An entered roll with the wrong number of dice, or a value a die can't roll. */
-  "invalid_roll",
   "total_cover",
   "no_path",
   "no_movement",

@@ -242,25 +242,6 @@ describe("fight mode", () => {
     expect(run.encounter.combatants.find((c) => c.id === "brakka")?.inspiration).not.toBeNull();
   });
 
-  it("asks for the numbers rolled at the table, again when they don't fit the dice", async () => {
-    const run = await fight([
-      "dice table brakka",
-      "next",
-      "next",
-      "next",
-      "check athletics 10",
-      "25",
-      "x",
-      "12",
-      "quit",
-      "n",
-    ]);
-    expect(run.output).toContain("Brakka: roll 1d20 for Athletics check.");
-    expect(run.output).toContain("A d20 rolls 1 to 20, not 25");
-    expect(run.output).toContain("Enter the numbers rolled, e.g. 4 6");
-    expect(run.output).toContain("Brakka's Athletics check: 17 vs DC 10: success.");
-  });
-
   it("places combatants on a grid, shows it, and measures reach", async () => {
     const run = await fight([
       "place brakka 0 0",

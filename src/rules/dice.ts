@@ -1,7 +1,6 @@
 import type { RollResult } from "../models/combat";
-import type { Message } from "../models/messages";
 import { message, RuleError } from "./messages";
-import { announce, mathRng, type Rng } from "./rng";
+import { mathRng, type Rng } from "./rng";
 
 const DICE_PATTERN = /^(\d+)d(\d+)([+-]\d+)?$/i;
 
@@ -31,10 +30,8 @@ export function parseDiceExpression(expression: string): DiceExpression {
   return { count, sides, modifier };
 }
 
-/** Roll a dice expression (`purpose`: what it's for, when a table may roll it: `Rng.dice`). */
-export function roll(expression: string, rng: Rng = mathRng, purpose?: Message): RollResult {
+export function roll(expression: string, rng: Rng = mathRng): RollResult {
   const { count, sides, modifier } = parseDiceExpression(expression);
-  announce(rng, count, sides, purpose ?? message("roll.dice", { dice: `${count}d${sides}` }));
   const rolls = Array.from({ length: count }, () => rng.int(1, sides));
   return {
     dice_expression: expression,

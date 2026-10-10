@@ -791,20 +791,17 @@ missing parameter or a message pasted into a string.
   same encounter and states (`replayHistory`); `undoAction` replays all but the last action, so
   undoing a `decide` brings its question back. `POST /v1/encounters/apply` returns the steps in
   `log`. The fight CLI keeps one for `undo`.
-- **Manual play.** `manual: true` on `attack`, `unarmed`, `cast`, `feature`, `save_action` or
-  `legendary` declares the action by hand: the same code path checks it (the rules run with dice
-  that don't count, `unrolled`, and no decision asked, so `rng` draws nothing) and spends its
-  costs (economy, slot or Pact slot, feature uses, Concentration, a monster's daily uses and
-  Recharge), then stops before any outcome. The result is a `DeclaredResult` (actor, action,
-  name, slot level, target ids) with a `manual.declared` note; the table applies the outcome with
-  `effects`, so Resistance, Concentration saves and HP limits stay the engine's.
-- **Rolls for an action played by hand.** With the actor's dice `engine`, a `manual` action runs
-  its rules with `handRng(c)`: the `Rng.dice` hook says whose dice come next, and only the
-  actor's are drawn from `rng` (recorded, so undo replays them); anyone else's (a target's save)
-  come from the dice that don't count. `makeAttack` / `castSpell` roll damage on a miss
-  (`damage_on_miss`), once-per-turn riders are left out (they follow a hit the table hasn't
-  decided), and `declare` reports `DeclaredResult.rolls` and notes. A feature's healing and a
-  save's damage are rolled the same way. Table dice keep the old behaviour: nothing rolled.
+- **Manual play, a dice roller.** `manual: true` on `attack`, `unarmed`, `cast`, `feature`,
+  `save_action` or `legendary` is handled at the top of its case in `run`, before any target,
+  range or economy check: the actor's resources are checked and spent (slots through the play
+  actions, so `force` can still override `no_resources`; feature uses; a monster's daily uses and
+  Recharge; Concentration), its dice rolled without a target, and `byHand` builds the
+  `DeclaredResult` and its notes. Attacks go through `rollAttack` (shares `prepareAttack` with
+  `makeAttack`: the mode comes from `attackMode` with no target, so only the actor's own state and
+  the `mode` asked count; riders' target requirements are the table's to judge; damage is rolled
+  whatever the d20). Spells go through `castSpell` with `by_hand`: an attack roll per beam or
+  ray with its damage, else the damage rolled once, a save's (or follow-up save's) DC, healing.
+  Nothing else changes in the documents; undo replays the dice like any action's.
 - **GM override.** `force: true` on an action taken in turns turns a refusal of legality into a
   note: `run` checks those with `refuse(reason)` instead of `fail`, which throws unless the action
   is forced and the reason's refusal code is in `FORCEABLE_REFUSALS` (turn, Incapacitated,
@@ -815,19 +812,6 @@ missing parameter or a message pasted into a string.
   economy flag already spent stays spent. Unknown ids, missing input, defeated creatures, paths,
   Total Cover and refusals from the rules functions (`RuleError`) aren't forceable.
   `checkAction` reports the overrides it would make.
-- **Dice rolled at the table.** `Rng.dice(request)` is told before each group of dice is drawn
-  (`DiceRequest`: who rolls, count, sides, `keep` for Advantage or Disadvantage, purpose). The
-  rules announce their dice (`roll`, `rollD20`, `rollDamage` take a purpose) and say whose they
-  are with `rollingFor(rng, id)`; the innermost one wins, so a target's save inside a caster's
-  spell is the target's while the spell's damage is the caster's. An encounter's `attempt` gives
-  the action an `rng` whose `dice` hook throws for a combatant whose `dice` (or the encounter's)
-  is `table`, unless the action's recorded dice already cover the request: the action stops
-  (`pending.kind: "roll"`, `pending.roll`), and `enter_roll` checks the values and replays it with
-  the recorded dice plus the entered ones, the same mechanism as `decide`. Rolls in one action
-  stop one at a time, in the order the rules draw them; a decision after a roll comes after its
-  roll is entered; a reroll (Indomitable) asks again. Entered dice aren't drawn from `rng`, so a
-  result's `rolls` lists only the engine's and undo replays `enter_roll` as an action. A
-  monster's Hit Points rolled when it joins stay the engine's.
 
 ### Previews
 
@@ -1075,13 +1059,11 @@ Where the SRD is silent or ambiguous, the engine picks a reading and lists it he
 
 **Encounters**
 
-- **What an action declared by hand (manual) still does.** Its costs, and what doesn't depend on
-  the roll: an attack extends Rage and ends hiding, and the Help, Vex, Sap or mark its roll would
-  use is used (the table rolled it); a spell with a Verbal component ends hiding. A feature keeps
-  what it does to the turn and that `effects` can't express (Action Surge's action, Cunning
-  Action's Dash, Flurry of Blows' attacks, a Bardic Inspiration die) and leaves healing, removed
-  conditions and saves to the table. Unknown outcomes aren't recorded: a declared attack isn't a
-  hit, so Cleave, Divine Smite and once-per-turn riders (Sneak Attack) don't follow from it.
+- **What an action played by hand (manual) spends.** Resources only, never the action economy
+  or the turn: the same attack can be rolled any number of times. It changes nothing else: no
+  Rage extension, hiding, Help, Vex, Sap or marks used, no Action Surge action or granted attacks,
+  no Bardic Inspiration die given. A Grapple or Shove shows its DC with the target's choice of
+  Strength or Dexterity (`ability: null`) unless `save` names one.
 - Initiative ties go to the higher Initiative bonus, then the order combatants joined (the SRD
   leaves ties to the GM and players: `set_order`).
 - Dash uses the walking Speed.

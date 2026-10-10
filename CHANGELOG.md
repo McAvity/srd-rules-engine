@@ -8,15 +8,6 @@ migrated when it's loaded.
 ## [Unreleased]
 
 ### Added
-- Played by hand with the engine's dice: an action with `manual: true` whose actor's dice are
-  `engine` rolls the actor's own dice and shows them in `DeclaredResult.rolls` (`DeclaredRolls`:
-  `attacks` per target with the d20 roll, mode and reasons, total, the target's AC and whether it
-  would hit, and its damage, rolled hit or miss with crit dice doubled; `damage` rolled once;
-  `healing`; a forced save's `ability` and `dc`), with notes (`manual.attack`, `manual.damage`,
-  `manual.healing`, `manual.save`). Nothing is applied, the targets' saves aren't rolled and
-  once-per-turn riders (Sneak Attack) aren't added; with `table` dice nothing is rolled, as
-  before (`rolls: null`). `makeAttack` and `castSpell` take `damage_on_miss`; a spell attack's
-  `SpellAttackRoll.damage` is its rolled damage.
 - Saving throws on demand: the `check` action takes `save: Ability` (a `D20TestResult`, note
   `save.result`), with the combatant's conditions, a DC or none, nothing applied.
 - Messages for any language: `renderMessage(message, catalog, { locale })` (and `formatMessage`'s
@@ -35,23 +26,20 @@ migrated when it's loaded.
   ("GM override: Brakka has no attacks left this turn"). A cost that can't be paid isn't spent (no
   slot of that level left: the spell is cast without one). Other refusals still refuse.
   `checkAction` with `force` lists what it would override (`overrides`, `override_codes`).
-- Dice rolled at the table: `dice: "engine" | "table"` on the encounter (default `engine`) and on
-  each combatant (`null`: the encounter's; `add_character` / `add_monster` take it), changed with
-  `{ type: "set_dice", id?, mode }`. With `table`, each roll the combatant makes (attack rolls,
-  saves, checks, Initiative, damage and healing dice, Recharge, Death Saving Throws, Hit Point
-  Dice, a Bardic Inspiration die) stops the action: `encounter.pending` has `kind: "roll"` and
-  `roll: { dice, count, sides, keep, purpose }` ("2d20" keeping the higher for Advantage), with a
-  question ("Ilse: roll 8d6 for fire damage for Fireball."). `{ type: "enter_roll", values }`
-  answers it and the action goes on as if the engine had drawn them; a wrong count or a value the
-  die can't roll is refused (code `invalid_roll`). Rolls belong to who makes them: a spell's
-  damage is the caster's, each target's save its own. `Rng` has an optional `dice(request)` hook
-  (`DiceRequest`) told before each group of dice. The fight CLI asks for the numbers
-  (`dice table|engine [<t>]`).
-- Manual play: `manual: true` on `attack`, `unarmed`, `cast`, `feature`, `save_action` and
-  `legendary` checks the action and spends its costs (economy, slot, uses, Concentration, daily
-  uses, Recharge) without rolling or applying an outcome; the result is a `DeclaredResult` (who,
-  what, slot level, target ids), and `use_feature` takes `manual` to spend a feature's uses
-  without its healing.
+- Manual play, a dice roller: `manual: true` on `attack`, `unarmed`, `cast`, `feature`,
+  `save_action` and `legendary` rolls the actor's dice with no target (`target`, `targets` and
+  `area` are optional and ignored) and no action economy (Action, Bonus Action, Reaction, attacks
+  of the Attack action, the round's legendary actions, turn, once-per-turn riders), and applies
+  nothing. Resources are checked and spent: spell and Pact Magic slots, feature uses, a monster's
+  daily uses and Recharge, Concentration. The result is a `DeclaredResult` (who, what, slot
+  level, `rolls`: `DeclaredRolls` with `attacks` (one `AttackDice` per attack roll, each beam or
+  ray: the d20, mode and reasons from the actor's own state, bonus, total, `critical_hit`,
+  `critical_miss`, the damage rolled whatever the d20 with crit dice doubled, riders asked for),
+  `damage` rolled once, `healing`, and a forced save's `ability` and `dc`), with notes
+  (`manual.declared`, `manual.attack`, `manual.damage`, `manual.healing`, `manual.save`).
+  `rollAttack(attacker, attack, options)` rolls one attack without a target; `castSpell` takes
+  `by_hand` (its result's `by_hand`: `SpellDice`); `use_feature` takes `manual` to spend a
+  feature's uses without its healing.
 - `encounter.positions` (`optional` by default, or `required`), set by the GM with
   `{ type: "set_positions", mode }`: when required and anyone is on the map, an attack, spell,
   save effect, Help, Grapple, Shove or feature that checks reach or range is refused if the actor

@@ -30,7 +30,6 @@
               "once_per_turn",
               "out_of_range",
               "off_map",
-              "invalid_roll",
               "total_cover",
               "no_path",
               "no_movement",

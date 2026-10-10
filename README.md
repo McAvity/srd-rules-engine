@@ -291,11 +291,10 @@ so the player or GM can choose (`decide`), with `"auto"` the engine uses them on
 change the outcome (`cast`), once-per-turn riders (Sneak Attack), recharges (a
 breath weapon on 5–6), conditions with durations (`effects` with `{ rounds: 10 }` or
 `{ until: { at: "end" } }`), Concentration saves when damaged, a Concentration spell's
-conditions ending with it, and Rage ending when it isn't extended. A table that rolls its own
-dice declares an action by hand (`manual: true`): the engine checks it and spends its costs, and
-the outcome is applied with `effects`. Or it rolls its own dice and lets the engine resolve them:
-with `dice: "table"` (the encounter's or a combatant's) each roll stops the action and asks for
-the numbers (`enter_roll`). A GM can rule that something happens anyway: `force: true` applies an
+conditions ending with it, and Rage ending when it isn't extended. Played by hand
+(`manual: true`), an action is a dice roller, like a virtual tabletop's: the engine rolls its
+dice and spends its resources, with no target and no action economy, and the table applies the
+outcome with `effects`. A GM can rule that something happens anyway: `force: true` applies an
 action refused for its legality (turn, economy, range, movement, resources), noting the override.
 
 What a combatant can do now, for a UI's buttons: `combatantOptions(encounter, id, ctx)` lists
@@ -382,8 +381,7 @@ commands (`attack goblin greatsword`, `cast fireball 2 3`, `feature second wind`
 acts for someone else (legendary actions, reactions). Targets are ids, names, numbers from the
 order, or the start of a word ("dragon"). `options` lists what a combatant can do. With `--ask`,
 decisions after a roll are y/n questions that show the roll, defaulting to the engine's
-recommendation; `ask on|off` changes it mid-fight, for everyone or one combatant. `dice table`
-(for everyone or one combatant) asks for the numbers of each roll instead. `save` (or
+recommendation; `ask on|off` changes it mid-fight, for everyone or one combatant. `save` (or
 quitting) writes the characters' state files and `encounter.json`; resume with
 `--encounter characters/encounter.json`. `place brakka 0 0` puts a combatant on a 5-foot grid,
 `move 3 2` moves to a square, `map` draws it; with positions, reach, range and cover are checked.
@@ -418,7 +416,7 @@ export default { fetch: handler };                // Cloudflare Workers
 | `POST /v1/state/sheet` · `/v1/state/reconcile` | Play sheet and state issues · fit a state to a changed build |
 | `POST /v1/state/attack` | `{ attacker: {build, state}, target: {build, state}, attack, mode?, two_handed?, riders?, ally_adjacent? }` → the attack, and the target's state after the damage |
 | `POST /v1/state/cast` | `{ caster: {build, state}, spell, targets: [{build, state}], slot_level?, pact? }` → the spell's results, the caster's state (slot spent, Concentration) and the targets' states |
-| `POST /v1/encounters/apply` | `{ encounter, characters: { key: {build, state} }, action }` (one or a list, all or nothing) → `{ encounter, states, notes, messages, events, log, pending, applied }` (`log`: each action with the dice it drew): Initiative, turns, attacks, spells, effects on monsters and characters; a list stops at a decision to make or dice to roll at the table (`pending`), answered with `{ type: "decide", use }` or `{ type: "enter_roll", values }` |
+| `POST /v1/encounters/apply` | `{ encounter, characters: { key: {build, state} }, action }` (one or a list, all or nothing) → `{ encounter, states, notes, messages, events, log, pending, applied }` (`log`: each action with the dice it drew): Initiative, turns, attacks, spells, effects on monsters and characters; a list stops at a decision to make (`pending`), answered with `{ type: "decide", use }` |
 | `POST /v1/encounters/options` | `{ encounter, characters, id }` → what that combatant can do now (`combatantOptions`; schema in `schemas/options.schema.json`) |
 | `POST /v1/encounters/reachable` · `/preview-move` · `/preview-area` | `{ encounter, characters, id }` (+ `to` or `path`; + `area` and `spell`, `ability` or `legendary`) → where it can move, what a move or an area would do (schemas in `schemas/`) |
 | `POST /v1/encounters/check` | `{ encounter, characters, action }` → `{ ok, reasons }`: whether the engine would take the action now, without applying it |

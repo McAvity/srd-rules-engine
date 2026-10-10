@@ -176,7 +176,6 @@
                       "once_per_turn",
                       "out_of_range",
                       "off_map",
-                      "invalid_roll",
                       "total_cover",
                       "no_path",
                       "no_movement",
@@ -499,7 +498,6 @@
                             "once_per_turn",
                             "out_of_range",
                             "off_map",
-                            "invalid_roll",
                             "total_cover",
                             "no_path",
                             "no_movement",
@@ -616,7 +614,6 @@
                       "once_per_turn",
                       "out_of_range",
                       "off_map",
-                      "invalid_roll",
                       "total_cover",
                       "no_path",
                       "no_movement",
@@ -939,7 +936,6 @@
                             "once_per_turn",
                             "out_of_range",
                             "off_map",
-                            "invalid_roll",
                             "total_cover",
                             "no_path",
                             "no_movement",
@@ -1056,7 +1052,6 @@
                       "once_per_turn",
                       "out_of_range",
                       "off_map",
-                      "invalid_roll",
                       "total_cover",
                       "no_path",
                       "no_movement",
@@ -1379,7 +1374,6 @@
                             "once_per_turn",
                             "out_of_range",
                             "off_map",
-                            "invalid_roll",
                             "total_cover",
                             "no_path",
                             "no_movement",
@@ -1496,7 +1490,6 @@
                       "once_per_turn",
                       "out_of_range",
                       "off_map",
-                      "invalid_roll",
                       "total_cover",
                       "no_path",
                       "no_movement",
@@ -1819,7 +1812,6 @@
                             "once_per_turn",
                             "out_of_range",
                             "off_map",
-                            "invalid_roll",
                             "total_cover",
                             "no_path",
                             "no_movement",
@@ -1936,7 +1928,6 @@
                       "once_per_turn",
                       "out_of_range",
                       "off_map",
-                      "invalid_roll",
                       "total_cover",
                       "no_path",
                       "no_movement",
@@ -2259,7 +2250,6 @@
                             "once_per_turn",
                             "out_of_range",
                             "off_map",
-                            "invalid_roll",
                             "total_cover",
                             "no_path",
                             "no_movement",
@@ -2376,7 +2366,6 @@
                       "once_per_turn",
                       "out_of_range",
                       "off_map",
-                      "invalid_roll",
                       "total_cover",
                       "no_path",
                       "no_movement",
@@ -2699,7 +2688,6 @@
                             "once_per_turn",
                             "out_of_range",
                             "off_map",
-                            "invalid_roll",
                             "total_cover",
                             "no_path",
                             "no_movement",
@@ -2816,7 +2804,6 @@
                       "once_per_turn",
                       "out_of_range",
                       "off_map",
-                      "invalid_roll",
                       "total_cover",
                       "no_path",
                       "no_movement",
@@ -3139,7 +3126,6 @@
                             "once_per_turn",
                             "out_of_range",
                             "off_map",
-                            "invalid_roll",
                             "total_cover",
                             "no_path",
                             "no_movement",
@@ -3262,13 +3248,6 @@
                 "ask",
                 "auto"
               ]
-            },
-            "dice": {
-              "type": "string",
-              "enum": [
-                "engine",
-                "table"
-              ]
             }
           },
           "required": [
@@ -3303,13 +3282,6 @@
                 "ask",
                 "auto"
               ]
-            },
-            "dice": {
-              "type": "string",
-              "enum": [
-                "engine",
-                "table"
-              ]
             }
           },
           "required": [
@@ -3332,60 +3304,6 @@
           "required": [
             "type",
             "use"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "enter_roll"
-            },
-            "values": {
-              "minItems": 1,
-              "type": "array",
-              "items": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
-              }
-            }
-          },
-          "required": [
-            "type",
-            "values"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "set_dice"
-            },
-            "id": {
-              "type": "string"
-            },
-            "mode": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": [
-                    "engine",
-                    "table"
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "type",
-            "mode"
           ],
           "additionalProperties": false
         },
@@ -4235,7 +4153,6 @@
           "required": [
             "type",
             "id",
-            "target",
             "option"
           ],
           "additionalProperties": false
@@ -4598,7 +4515,6 @@
                   "required": [
                     "type",
                     "id",
-                    "target",
                     "attack"
                   ],
                   "additionalProperties": false
@@ -4650,7 +4566,6 @@
                   "required": [
                     "type",
                     "id",
-                    "target",
                     "option"
                   ],
                   "additionalProperties": false
@@ -5193,7 +5108,6 @@
           "required": [
             "type",
             "id",
-            "target",
             "attack"
           ],
           "additionalProperties": false

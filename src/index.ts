@@ -297,11 +297,13 @@ export {
   type SaveActionResult,
   type SpellAttackRoll,
   type SpellCastResult,
+  type SpellDice,
   type SpellFollowUpResult,
   type SpellTargetResult,
   useSaveAction,
 } from "./rules/casting";
 export {
+  type AttackDice,
   type AttackModeOptions,
   type AttackOptions,
   type AttackResult,
@@ -330,6 +332,7 @@ export {
   type RollMode,
   resolveMode,
   rollAbilityCheck,
+  rollAttack,
   rollD20,
   rollD20Test,
   rollSavingThrow,
@@ -394,7 +397,6 @@ export {
 } from "./rules/messages";
 export { attackOdds, averageDamage, failOdds } from "./rules/odds";
 export {
-  type DiceRequest,
   fixedRng,
   mathRng,
   type Rng,
@@ -440,6 +442,7 @@ export {
   createEncounter,
   currentCombatant,
   type DeclaredResult,
+  type DeclaredRolls,
   type EncounterContext,
   EncounterError,
   type EncounterResult,

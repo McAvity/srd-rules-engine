@@ -39,7 +39,7 @@ import {
 import { abilityModifier } from "./dice";
 import { spaceForSize } from "./grid";
 import { message, plainMessage, RuleError, texts } from "./messages";
-import { announce, mathRng, type Rng, rollingFor } from "./rng";
+import { mathRng, type Rng } from "./rng";
 import type { AttackLine } from "./sheet";
 import { parseRange } from "./weapons";
 
@@ -189,10 +189,7 @@ export function inspire(
   if (!die || total >= target) return null;
   const question = message("decision.inspiration", { name: c.name, what, total, target, die });
   const use = decide(decision("inspiration", c, question, target - total <= die));
-  if (!use) return null;
-  const roller = rollingFor(rng, c.id);
-  announce(roller, 1, die, message("roll.inspiration"));
-  return roller.int(1, die);
+  return use ? rng.int(1, die) : null;
 }
 
 /** A legendary action: an attack it makes, an action it uses, a saving throw effect, or text. */
@@ -428,15 +425,10 @@ export interface D20Roll {
 export function rollD20({
   mode = "normal",
   rng = mathRng,
-  purpose,
 }: {
   mode?: RollMode;
   rng?: Rng;
-  /** What it's for, for a table rolling it (`Rng.dice`). */
-  purpose?: Message;
 } = {}): D20Roll {
-  const keep = mode === "advantage" ? "higher" : mode === "disadvantage" ? "lower" : null;
-  announce(rng, keep ? 2 : 1, 20, purpose ?? message("roll.d20"), keep);
   if (mode === "normal") {
     const d20 = rng.int(1, 20);
     return { rolls: [d20], d20, mode };
@@ -511,29 +503,15 @@ export interface AttackOptions {
   forgo_advantage?: boolean;
   /** A flat bonus to the attack roll (Sundering Blow: +5). */
   bonus?: number;
-  /**
-   * Roll the damage on a miss too (an attack played by hand: the table decides whether it hits);
-   * `instances` and `outcome` stay empty on a miss.
-   */
-  damage_on_miss?: boolean;
 }
 
-/**
- * Make one attack with one of the attacker's attack lines (by name, or the line itself).
- *
- * A natural 1 always misses. A roll of `critical_hit_on` or more (a natural 20, or 19 with
- * Improved Critical) is a Critical Hit, which hits regardless of the target's AC (SRD "Critical
- * Hit") and rolls the damage dice twice. Conditions add Advantage or Disadvantage (`attackMode`),
- * and a hit on a Paralyzed or Unconscious target within 5 feet is a Critical Hit.
- */
-export function makeAttack(
+/** Check an attack and work out its mode, rider damage and extra damage, before any roll. */
+function prepareAttack(
   attacker: Combatant,
   attack: string | AttackLine,
-  target: Combatant,
+  target: Combatant | null,
   {
-    rng = mathRng,
     mode = "normal",
-    two_handed = false,
     riders = [],
     ally_adjacent = false,
     within_5ft,
@@ -541,14 +519,11 @@ export function makeAttack(
     modes = [],
     light_extra = false,
     cleave = false,
-    decide = recommend,
-    damage_on_miss = false,
     forgo = [],
     extra_damage = [],
     forgo_advantage = false,
-    bonus = 0,
-  }: AttackOptions = {},
-): AttackResult {
+  }: AttackOptions,
+) {
   const line =
     typeof attack === "string" ? attacker.attacks.find((a) => a.name === attack) : attack;
   if (!line) {
@@ -590,10 +565,11 @@ export function makeAttack(
     const rider = line.riders.find((r) => r.id === request.rider || r.name === request.rider);
     if (!rider)
       throw new RuleError(message("rule.no_rider", { attack: line.name, rider: request.rider }));
-    if (rider.requires === "target_damaged" && target.hp >= target.max_hp) {
+    // Without a target (rolled by hand), the table judges what the rider needs.
+    if (rider.requires === "target_damaged" && target && target.hp >= target.max_hp) {
       throw new RuleError(message("rule.needs_target_missing_some", { rider: rider.name }));
     }
-    if (rider.requires === "advantage_or_ally") {
+    if (rider.requires === "advantage_or_ally" && target) {
       const ok =
         effective.mode === "advantage" || (ally_adjacent && effective.mode !== "disadvantage");
       if (!ok) {
@@ -629,12 +605,33 @@ export function makeAttack(
   for (const x of extra_damage) {
     extra.push({ dice: x.dice, bonus: 0, type: x.type === "weapon" ? line.damage_type : x.type });
   }
-  const roller = rollingFor(rng, attacker.id);
-  const roll = rollD20({
-    mode: effective.mode,
-    rng: roller,
-    purpose: message("roll.attack_with", { attack: line.name }),
-  });
+  return { line, effective, extra, riderNames };
+}
+
+/**
+ * Make one attack with one of the attacker's attack lines (by name, or the line itself).
+ *
+ * A natural 1 always misses. A roll of `critical_hit_on` or more (a natural 20, or 19 with
+ * Improved Critical) is a Critical Hit, which hits regardless of the target's AC (SRD "Critical
+ * Hit") and rolls the damage dice twice. Conditions add Advantage or Disadvantage (`attackMode`),
+ * and a hit on a Paralyzed or Unconscious target within 5 feet is a Critical Hit.
+ */
+export function makeAttack(
+  attacker: Combatant,
+  attack: string | AttackLine,
+  target: Combatant,
+  options: AttackOptions = {},
+): AttackResult {
+  const {
+    rng = mathRng,
+    two_handed = false,
+    light_extra = false,
+    cleave = false,
+    decide = recommend,
+    bonus = 0,
+  } = options;
+  const { line, effective, extra, riderNames } = prepareAttack(attacker, attack, target, options);
+  const roll = rollD20({ mode: effective.mode, rng });
   let total = roll.d20 + line.attack_bonus + bonus;
   const critical_miss = roll.d20 === 1;
   const criticalRoll = !critical_miss && roll.d20 >= Math.min(20, attacker.critical_hit_on);
@@ -668,16 +665,13 @@ export function makeAttack(
     reason_messages: effective.reason_messages,
     inspiration,
   };
-  if (!hit && !damage_on_miss) {
-    return { ...base, damage: null, riders: [], instances: [], outcome: null };
-  }
+  if (!hit) return { ...base, damage: null, riders: [], instances: [], outcome: null };
   let base_parts = line.damage_parts;
   if (light_extra && line.light_extra_damage_parts) base_parts = line.light_extra_damage_parts;
   else if (cleave && line.cleave_damage_parts) base_parts = line.cleave_damage_parts;
   else if (two_handed && line.two_handed_damage_parts) base_parts = line.two_handed_damage_parts;
   const parts = [...base_parts, ...extra];
-  const damage = rollDamage(parts, { critical: critical_hit, rng: roller, what: line.name });
-  if (!hit) return { ...base, damage, riders: riderNames, instances: [], outcome: null };
+  const damage = rollDamage(parts, { critical: critical_hit, rng });
   const instances = damage.parts.map((p) => ({ amount: p.total, type: p.type }));
   const outcome = takeDamage(
     { hp: target.hp, temp: target.temp_hp, max: target.max_hp },
@@ -686,6 +680,59 @@ export function makeAttack(
     { critical: critical_hit },
   );
   return { ...base, damage, riders: riderNames, instances, outcome };
+}
+
+/** One attack's dice rolled without a target (`rollAttack`). */
+export interface AttackDice {
+  readonly attack: string;
+  readonly roll: D20Roll;
+  readonly bonus: number;
+  readonly total: number;
+  readonly critical_hit: boolean;
+  readonly critical_miss: boolean;
+  /** Why the roll had Advantage or Disadvantage, if it did. */
+  readonly reasons: readonly string[];
+  readonly reason_messages: readonly Message[];
+  /** `null` for an attack without damage. */
+  readonly damage: RolledDamage | null;
+  /** The riders added to the damage (Sneak Attack). */
+  readonly riders: readonly string[];
+}
+
+/**
+ * Roll one attack without a target (played by hand): the d20 with the mode from the attacker's
+ * own state and `mode` / `modes`, and the damage, rolled whatever the d20 (the table decides
+ * whether it hits), its dice doubled on a Critical Hit (the attacker's crit range). Riders asked
+ * for are added; what they need from a target is the table's to judge.
+ */
+export function rollAttack(
+  attacker: Combatant,
+  attack: string | AttackLine,
+  options: AttackOptions = {},
+): AttackDice {
+  const { rng = mathRng, two_handed = false, light_extra = false, cleave = false } = options;
+  const { line, effective, extra, riderNames } = prepareAttack(attacker, attack, null, options);
+  const roll = rollD20({ mode: effective.mode, rng });
+  const bonus = line.attack_bonus + (options.bonus ?? 0);
+  const critical_miss = roll.d20 === 1;
+  const critical_hit = !critical_miss && roll.d20 >= Math.min(20, attacker.critical_hit_on);
+  let base_parts = line.damage_parts;
+  if (light_extra && line.light_extra_damage_parts) base_parts = line.light_extra_damage_parts;
+  else if (cleave && line.cleave_damage_parts) base_parts = line.cleave_damage_parts;
+  else if (two_handed && line.two_handed_damage_parts) base_parts = line.two_handed_damage_parts;
+  const parts = [...base_parts, ...extra];
+  return {
+    attack: line.name,
+    roll,
+    bonus,
+    total: roll.d20 + bonus,
+    critical_hit,
+    critical_miss,
+    reasons: effective.reasons,
+    reason_messages: effective.reason_messages,
+    damage: parts.length ? rollDamage(parts, { critical: critical_hit, rng }) : null,
+    riders: riderNames,
+  };
 }
 
 export interface SaveResult {
@@ -758,10 +805,9 @@ export function rollSavingThrow(
     };
   }
   const resolved = resolveMode(mode, saveModes(combatant, ability));
-  const what = message("roll.save", { ability: message(`ability.${ability}`) });
-  const roller = rollingFor(rng, combatant.id);
-  let roll = rollD20({ mode: resolved.mode, rng: roller, purpose: what });
+  let roll = rollD20({ mode: resolved.mode, rng });
   let total = roll.d20 + bonus;
+  const what = message("roll.save", { ability: message(`ability.${ability}`) });
   // Indomitable: "If you fail a saving throw, you can reroll it with a bonus equal to your
   // Fighter level. You must use the new roll."
   let indomitable = false;
@@ -776,7 +822,7 @@ export function rollSavingThrow(
     });
     if (decide(decision("indomitable", combatant, question, dc - bonus - reroll <= 20))) {
       indomitable = true;
-      roll = rollD20({ mode: resolved.mode, rng: roller, purpose: what });
+      roll = rollD20({ mode: resolved.mode, rng });
       total = roll.d20 + bonus + reroll;
     }
   }
@@ -937,11 +983,7 @@ export function rollD20Test(
       };
     }
     const resolved = resolveMode(mode, saveModes(combatant, ability));
-    const roll = rollD20({
-      mode: resolved.mode,
-      rng: rollingFor(rng, combatant.id),
-      purpose: message("roll.save", { ability: message(`ability.${ability}`) }),
-    });
+    const roll = rollD20({ mode: resolved.mode, rng });
     return {
       ...base,
       kind: "save",
@@ -965,11 +1007,7 @@ export function rollD20Test(
     within_5ft: line.kind === "melee",
     ability: line.ability,
   });
-  const roll = rollD20({
-    mode: moded.mode,
-    rng: rollingFor(rng, combatant.id),
-    purpose: message("roll.attack_with", { attack: line.name }),
-  });
+  const roll = rollD20({ mode: moded.mode, rng });
   const total = roll.d20 + line.attack_bonus;
   const critical_miss = roll.d20 === 1;
   const critical = !critical_miss && roll.d20 >= Math.min(20, combatant.critical_hit_on);
@@ -1044,7 +1082,7 @@ export function rollAbilityCheck(
   const resolved = resolveMode(mode, reasons);
   const label = message(skill ? `skill.${skill}` : `ability.${ability}`);
   const rolled = message("roll.check", { label });
-  let roll = rollD20({ mode: resolved.mode, rng: rollingFor(rng, combatant.id), purpose: rolled });
+  let roll = rollD20({ mode: resolved.mode, rng });
   // Reliable Talent: "treat a d20 roll of 9 or lower as a 10" with a proficient skill.
   const reliable =
     skill !== null &&

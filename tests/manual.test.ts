@@ -5,58 +5,65 @@ import {
   type CharacterBuild,
   type CharacterState,
   checkAction,
-  combatantOptions,
   computePlaySheet,
   createEncounter,
   createHistory,
   createState,
+  type D20TestResult,
   type DeclaredResult,
   type Encounter,
   type EncounterAction,
+  EncounterActionSchema,
   EncounterError,
+  parseEncounter,
   recordAction,
   scriptedRng,
   undoAction,
 } from "../src/index";
-import { autocomplete, catalog, classBuild, levelUpIn } from "./helpers";
+import { autocomplete, catalog, classBuild, fighterBuild, levelUpIn } from "./helpers";
 
-// Manual play: an action declared by hand (`manual: true`) is checked and its costs spent as
-// usual, and no outcome is applied. With the table rolling (`dice: "table"`) nothing is rolled
-// (an empty `scriptedRng` would throw); with the engine's dice, the actor's own dice are rolled
-// and shown (`rolls`).
+// Manual play is a dice roller (`manual: true`): no target, no action economy, no outcome; the
+// actor's resources are checked and spent (slots, uses, daily uses, Recharge, Concentration) and
+// its dice rolled. The table applies what happens.
 
-/** A level 5 Wizard with Fireball and Fly prepared. */
+/** A level 5 Wizard with Fireball, Scorching Ray, Fly and Haste prepared. */
 function wizard(): CharacterBuild {
   let b = levelUpIn(autocomplete(classBuild("wizard", { name: "Ilse" })), "wizard", 4);
   b = builder.setChoice(b, catalog, "class:wizard:5#spellbook", ["fly", "haste"]).build;
+  const third = b.choices["class:wizard:3#spellbook"] ?? [];
+  const other = third.find((x) => x !== "scorching-ray") as string;
+  b = builder.setChoice(b, catalog, "class:wizard:3#spellbook", ["scorching-ray", other]).build;
   const prepared = b.choices["class:wizard#prepared"] ?? [];
-  const picks = ["fireball", "fly", ...prepared.slice(2)];
-  return builder.setChoice(b, catalog, "class:wizard#prepared", picks).build;
+  const picks = ["fireball", "fly", "haste", "scorching-ray"];
+  const rest = prepared.filter((x) => !picks.includes(x)).slice(0, prepared.length - picks.length);
+  return builder.setChoice(b, catalog, "class:wizard#prepared", [...picks, ...rest]).build;
 }
 
-/** An encounter of Ilse and monsters, in this Initiative order, started. */
-function session(monsters: string[], build = wizard()) {
-  let encounter: Encounter = createEncounter({ dice: "table" });
+/** One character first in the order, then monsters; started. */
+function session(key: string, build: CharacterBuild, monsters: string[]) {
+  let encounter: Encounter = createEncounter();
   let state: CharacterState = createState(build, catalog);
-  const ctx = () => ({ catalog, characters: { ilse: { build, state } } });
-  let history = createHistory(encounter, { ilse: state });
-  const act = (action: EncounterAction) => {
-    const r = applyEncounterAction(encounter, action, { ...ctx(), rng: scriptedRng([]) });
-    encounter = r.encounter;
-    state = r.states.ilse ?? state;
-    history = recordAction(history, action, r);
-    return r;
-  };
-  const ids = ["ilse", ...monsters.map((m, i) => (monsters.indexOf(m) === i ? m : `${m}-2`))];
+  const ctx = () => ({ catalog, characters: { [key]: { build, state } } });
+  const ids = [key, ...monsters.map((m, i) => (monsters.indexOf(m) === i ? m : `${m}-2`))];
   for (const action of [
-    { type: "add_character", character: "ilse", side: "party" },
+    { type: "add_character", character: key, side: "party" },
     ...monsters.map((monster) => ({ type: "add_monster", monster, side: "enemies" })),
     ...ids.map((id, i) => ({ type: "set_initiative", id, value: 20 - i })),
     { type: "start" },
   ] as EncounterAction[]) {
-    act(action);
+    encounter = applyEncounterAction(encounter, action, {
+      ...ctx(),
+      rng: scriptedRng([]),
+    }).encounter;
   }
-  history = createHistory(encounter, { ilse: state });
+  let history = createHistory(encounter, { [key]: state });
+  const act = (rolls: number[], action: EncounterAction) => {
+    const r = applyEncounterAction(encounter, action, { ...ctx(), rng: scriptedRng(rolls) });
+    encounter = r.encounter;
+    state = r.states[key] ?? state;
+    history = recordAction(history, action, r);
+    return r;
+  };
   return {
     act,
     ctx,
@@ -64,139 +71,284 @@ function session(monsters: string[], build = wizard()) {
     state: () => state,
     history: () => history,
     sheet: () => computePlaySheet(build, state, catalog),
-    hp: (id: string) => encounter.combatants.find((c) => c.id === id)?.hp,
+    get: (id: string) => encounter.combatants.find((c) => c.id === id),
   };
 }
 
-const fireball = (targets: string[]): EncounterAction => ({
-  type: "cast",
-  id: "ilse",
-  spell: "fireball",
-  slot_level: 3,
-  targets,
+const declared = (r: { result: unknown }) => r.result as DeclaredResult;
+const greatsword: EncounterAction = {
+  type: "attack",
+  id: "brakka",
+  attack: "Greatsword",
   manual: true,
-});
+};
+const slots = (s: ReturnType<typeof session>, level: number) =>
+  s.sheet().play.spell_slots.find((x) => x.level === level)?.spent;
 
-describe("declared by hand (manual)", () => {
-  it("Fireball: a 3rd-level slot and the action spent, nothing rolled, no damage", () => {
-    const s = session(["goblin-warrior", "goblin-warrior"]);
-    const before = [s.hp("goblin-warrior"), s.hp("goblin-warrior-2")];
-    const r = s.act(fireball(["goblin-warrior", "goblin-warrior-2"]));
-    expect(r.rolls).toEqual([]);
-    expect(r.result).toEqual({
-      manual: true,
-      by: "ilse",
-      action: "cast",
-      name: "Fireball",
-      slot_level: 3,
-      targets: ["goblin-warrior", "goblin-warrior-2"],
-      rolls: null,
-    } satisfies DeclaredResult);
-    expect([s.hp("goblin-warrior"), s.hp("goblin-warrior-2")]).toEqual(before);
-    expect(s.sheet().play.spell_slots.find((x) => x.level === 3)?.spent).toBe(1);
-    expect(s.encounter().combatants.find((c) => c.id === "ilse")?.used.action).toBe(true);
-    expect(r.messages).toEqual([
-      expect.objectContaining({
-        code: "manual.declared",
-        text: "Ilse declares Fireball at level 3 on Goblin Warrior, Goblin Warrior 2, by hand.",
-      }),
-    ]);
+describe("manual play: a dice roller", () => {
+  it("an attack without a target rolls the d20 and the damage, as often as it's asked", () => {
+    const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
+    const before = s.encounter();
+    for (let i = 0; i < 3; i++) {
+      const r = s.act([15, 3, 4], greatsword);
+      expect(r.rolls).toEqual([15, 3, 4]);
+      expect(declared(r)).toEqual({
+        manual: true,
+        by: "brakka",
+        action: "attack",
+        name: "Greatsword",
+        slot_level: null,
+        rolls: {
+          attacks: [
+            {
+              attack: "Greatsword",
+              roll: { rolls: [15], d20: 15, mode: "normal" },
+              bonus: 5,
+              total: 20,
+              critical_hit: false,
+              critical_miss: false,
+              reasons: [],
+              reason_messages: [],
+              damage: {
+                parts: [{ dice: "2d6", bonus: 3, type: "slashing", rolls: [3, 4], total: 10 }],
+                total: 10,
+                critical: false,
+              },
+              riders: [],
+            },
+          ],
+          damage: null,
+          healing: null,
+          save: null,
+        },
+      } satisfies DeclaredResult);
+      expect(r.notes).toEqual([
+        "Brakka uses Greatsword, by hand.",
+        "Greatsword attack roll: 20 (15 on the die).",
+        "Greatsword damage rolled: 10 slashing (3 + 4).",
+      ]);
+    }
+    // Nothing else changed: no economy spent, no HP.
+    expect(s.encounter()).toEqual(before);
   });
 
-  it("refused for today's reasons: no 3rd-level slot left, or no action left", () => {
-    const s = session(["goblin-warrior"]);
-    s.act(fireball(["goblin-warrior"]));
-    const again = () => s.act(fireball(["goblin-warrior"]));
-    expect(again).toThrow("has already used its action");
-    // Two more turns' worth of slots: the third 3rd-level cast has none left.
-    const next = { type: "next_turn" } as const;
-    s.act(next);
-    s.act(next);
-    s.act(fireball(["goblin-warrior"]));
-    s.act(next);
-    s.act(next);
+  it("a natural 20 doubles the damage dice; a Poisoned attacker has Disadvantage", () => {
+    const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
+    const [crit] = declared(s.act([20, 1, 2, 3, 4], greatsword)).rolls.attacks;
+    expect(crit).toMatchObject({ critical_hit: true, damage: { critical: true, total: 13 } });
+    expect(crit?.damage?.parts[0]?.rolls).toEqual([1, 2, 3, 4]);
+    s.act([], {
+      type: "effects",
+      id: "brakka",
+      actions: [{ type: "add_condition", condition: "poisoned" }],
+    });
+    const r = s.act([15, 4, 3, 4], greatsword);
+    const [poisoned] = declared(r).rolls.attacks;
+    expect(poisoned?.roll).toEqual({ rolls: [15, 4], d20: 4, mode: "disadvantage" });
+    expect(poisoned?.reasons).toEqual(["Disadvantage: Brakka is Poisoned"]);
+    expect(r.notes[1]).toBe(
+      "Greatsword attack roll: 9 (4 on the die); Disadvantage: Brakka is Poisoned.",
+    );
+  });
+
+  it("Scorching Ray at level 3: four rays, each with 2d6 fire; the slot is spent", () => {
+    const s = session("ilse", wizard(), ["goblin-warrior"]);
+    const ray: EncounterAction = {
+      type: "cast",
+      id: "ilse",
+      spell: "scorching-ray",
+      slot_level: 3,
+      manual: true,
+    };
+    const dice = [10, 1, 2, 11, 3, 4, 12, 5, 6, 13, 1, 1];
+    const r = declared(s.act(dice, ray));
+    expect(r.slot_level).toBe(3);
+    expect(r.rolls.attacks.map((a) => [a.roll.d20, a.damage?.total])).toEqual([
+      [10, 3],
+      [11, 7],
+      [12, 11],
+      [13, 2],
+    ]);
+    expect(r.rolls.attacks[0]?.damage?.parts[0]).toMatchObject({ dice: "2d6", type: "fire" });
+    expect(slots(s, 3)).toBe(1);
+    // Two 3rd-level slots at level 5: the third cast has none left.
+    s.act(dice, ray);
     try {
-      s.act(fireball(["goblin-warrior"]));
+      s.act(dice, ray);
       expect.unreachable();
     } catch (error) {
       if (!(error instanceof EncounterError)) throw error;
       expect(error.messages).toEqual(["Ilse: No level 3 spell slots left"]);
       expect(error.codes).toEqual(["no_resources"]);
     }
+    // The GM can still force it: cast, no slot spent.
+    const forced = declared(s.act(dice, { ...ray, force: true }));
+    expect(forced.rolls.attacks).toHaveLength(4);
+    expect(slots(s, 3)).toBe(2);
   });
 
-  it("a Concentration spell starts Concentration (and ends the previous one)", () => {
-    const s = session(["goblin-warrior"]);
-    s.act({ type: "cast", id: "ilse", spell: "fly", targets: ["ilse"], manual: true });
+  it("Fireball rolls 8d6 once and shows the DC; no saves, no area, no HP changed", () => {
+    const s = session("ilse", wizard(), ["goblin-warrior"]);
+    const eight = [1, 2, 3, 4, 5, 6, 1, 2];
+    const r = s.act(eight, { type: "cast", id: "ilse", spell: "fireball", manual: true });
+    expect(r.rolls).toEqual(eight);
+    const { rolls } = declared(r);
+    expect(rolls.save).toEqual({ ability: "dex", dc: s.sheet().spellcasting[0]?.save_dc });
+    expect(rolls.damage?.parts[0]).toMatchObject({ dice: "8d6", type: "fire", total: 24 });
+    expect(rolls.attacks).toEqual([]);
+    expect(r.notes).toEqual([
+      "Ilse uses Fireball at level 3, by hand.",
+      `Fireball: DC ${rolls.save?.dc} Dexterity saving throw.`,
+      "Fireball damage rolled: 24 fire (1 + 2 + 3 + 4 + 5 + 6 + 1 + 2).",
+    ]);
+    expect(s.get("goblin-warrior")?.hp).toBe(10);
+    expect(slots(s, 3)).toBe(1);
+    expect(s.get("ilse")?.used.action).toBe(false);
+  });
+
+  it("a Concentration spell starts Concentration and replaces the previous one", () => {
+    const s = session("ilse", wizard(), ["goblin-warrior"]);
+    s.act([], { type: "cast", id: "ilse", spell: "fly", manual: true });
     expect(s.state().concentration).toBe("Fly");
-    s.act({ type: "next_turn" });
-    s.act({ type: "next_turn" });
-    s.act({ type: "cast", id: "ilse", spell: "bane", targets: ["goblin-warrior"], manual: true });
-    expect(s.state().concentration).toBe("Bane");
+    s.act([], { type: "cast", id: "ilse", spell: "haste", manual: true });
+    expect(s.state().concentration).toBe("Haste");
   });
 
-  it("a monster's 1/Day spell counts its daily use; a Recharge action is marked used", () => {
-    const s = session(["adult-black-dragon", "adult-red-dragon"]);
-    s.act({ type: "next_turn" }); // the black dragon's turn
+  it("Second Wind rolls its healing and spends a use; out of uses, it's refused", () => {
+    const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
+    const wind: EncounterAction = {
+      type: "feature",
+      id: "brakka",
+      feature: "Second Wind",
+      manual: true,
+    };
+    const uses = s.sheet().play.uses.find((u) => u.key.endsWith(":second-wind"))?.max ?? 0;
+    expect(uses).toBeGreaterThan(0);
+    for (let i = 0; i < uses; i++) {
+      const r = s.act([7], wind);
+      expect(declared(r).rolls.healing).toBe(8);
+      expect(r.notes).toContain("Second Wind healing rolled: 8.");
+    }
+    expect(() => s.act([7], wind)).toThrow(EncounterError);
+    expect(s.get("brakka")?.used.bonus_action).toBe(false);
+    expect(s.state().hp.current).toBeNull();
+  });
+
+  it("a monster's 1/Day spell and its Recharge breath: spent, rolled, refused when gone", () => {
+    const s = session("brakka", fighterBuild(), ["adult-black-dragon", "adult-red-dragon"]);
     const sphere: EncounterAction = {
       type: "cast",
       id: "adult-black-dragon",
       spell: "vitriolic-sphere",
-      targets: ["ilse"],
       manual: true,
     };
-    const r = s.act(sphere);
-    expect(r.result).toMatchObject({ manual: true, name: "Vitriolic Sphere", targets: ["ilse"] });
-    expect(s.state().hp.current).toBeNull(); // untouched
-    const black = s.encounter().combatants.find((c) => c.id === "adult-black-dragon");
-    expect(black?.daily_used).toEqual({ "Spellcasting#vitriolic-sphere": 1 });
-    s.act({ type: "next_turn" }); // the red dragon's turn
-    s.act({
+    // Its effects are text in the SRD data: nothing to roll, the daily use spent.
+    const r = s.act([], sphere);
+    expect(declared(r).rolls).toEqual({ attacks: [], damage: null, healing: null, save: null });
+    expect(r.messages.map((m) => m.code)).toContain("spell.manual");
+    expect(s.get("adult-black-dragon")?.daily_used).toEqual({
+      "Spellcasting#vitriolic-sphere": 1,
+    });
+    expect(() => s.act([], sphere)).toThrow("1 time today");
+    const breath: EncounterAction = {
       type: "save_action",
       id: "adult-red-dragon",
       ability: "Fire Breath",
-      targets: ["ilse"],
       manual: true,
-    });
-    const red = s.encounter().combatants.find((c) => c.id === "adult-red-dragon");
-    expect(red?.expended).toEqual(["Fire Breath"]);
-    s.act({ type: "next_turn" });
-    s.act({ type: "next_turn" }); // the black dragon again, a new round
-    expect(() => s.act(sphere)).toThrow("1 time today");
+    };
+    const fire = declared(s.act(Array<number>(17).fill(2), breath));
+    expect(fire.rolls.save).toEqual({ ability: "dex", dc: 21 });
+    expect(fire.rolls.damage?.parts[0]).toMatchObject({ dice: "17d6", total: 34 });
+    expect(s.get("adult-red-dragon")?.expended).toEqual(["Fire Breath"]);
+    expect(() => s.act([], breath)).toThrow("hasn't recharged");
   });
 
-  it("checkAction and combatantOptions agree; undo reverts a declaration", () => {
-    const s = session(["goblin-warrior"]);
-    expect(checkAction(s.encounter(), fireball(["goblin-warrior"]), s.ctx()).ok).toBe(true);
-    s.act(fireball(["goblin-warrior"]));
-    expect(checkAction(s.encounter(), fireball(["goblin-warrior"]), s.ctx()).codes).toEqual([
-      "economy_used",
-    ]);
-    expect(
-      combatantOptions(s.encounter(), "ilse", s.ctx()).spells.find((x) =>
-        x.label.startsWith("Fireball"),
-      )?.available,
-    ).toBe(false);
+  it("Grapple by hand shows the DC; a legendary attack rolls without spending uses", () => {
+    const s = session("brakka", fighterBuild(), ["adult-blue-dragon"]);
+    const grapple = declared(
+      s.act([], { type: "unarmed", id: "brakka", option: "grapple", manual: true }),
+    );
+    expect(grapple.rolls.save).toEqual({ ability: null, dc: 13 });
+    const tail: EncounterAction = {
+      type: "legendary",
+      id: "adult-blue-dragon",
+      action: "Tail Swipe",
+      manual: true,
+    };
+    for (let i = 0; i < 4; i++) {
+      const [rend] = declared(s.act(Array<number>(9).fill(1), tail)).rolls.attacks;
+      expect(rend?.attack).toBe("Rend");
+    }
+    expect(s.get("adult-blue-dragon")?.legendary_used).toBe(0);
+  });
+
+  it("checkAction agrees; undo gives the slot back", () => {
+    const s = session("ilse", wizard(), ["goblin-warrior"]);
+    const fireball: EncounterAction = { type: "cast", id: "ilse", spell: "fireball", manual: true };
+    expect(checkAction(s.encounter(), fireball, s.ctx()).ok).toBe(true);
+    s.act(Array<number>(8).fill(1), fireball);
+    expect(slots(s, 3)).toBe(1);
     const undone = undoAction(s.history(), s.ctx());
-    expect(undone.encounter.combatants.find((c) => c.id === "ilse")?.used.action).toBe(false);
     expect(undone.states.ilse?.spell_slots_spent ?? []).toEqual([]);
   });
+});
 
-  it("an attack by hand uses the attack, rolls nothing and deals nothing", () => {
-    const s = session(["goblin-warrior"]);
-    const sheet = s.sheet();
-    const attack = sheet.attacks[0]?.name as string;
-    const hp = s.hp("goblin-warrior");
-    const r = s.act({
-      type: "attack",
-      id: "ilse",
-      target: "goblin-warrior",
-      attack,
-      manual: true,
+describe("a saving throw on demand (check with save)", () => {
+  it("rolls a Restrained goblin's Dexterity save with Disadvantage, nothing else changes", () => {
+    const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
+    s.act([], {
+      type: "effects",
+      id: "goblin-warrior",
+      actions: [{ type: "add_condition", condition: "restrained" }],
     });
-    expect(r.result).toMatchObject({ manual: true, action: "attack", targets: ["goblin-warrior"] });
-    expect(r.rolls).toEqual([]);
-    expect(s.hp("goblin-warrior")).toBe(hp);
-    expect(s.encounter().combatants.find((c) => c.id === "ilse")?.used.action).toBe(true);
+    const before = s.encounter();
+    const r = s.act([14, 3], { type: "check", id: "goblin-warrior", save: "dex", dc: 15 });
+    expect(r.result as D20TestResult).toMatchObject({
+      kind: "save",
+      ability: "dex",
+      roll: { rolls: [14, 3], d20: 3, mode: "disadvantage" },
+      dc: 15,
+      success: false,
+    });
+    expect(r.notes[0]).toMatch(
+      /^Goblin Warrior's Dexterity saving throw: \d+ vs DC 15; .*: failure\.$/,
+    );
+    expect(s.encounter()).toEqual(before);
+  });
+
+  it("without a DC it shows the total", () => {
+    const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
+    const r = s.act([10], { type: "check", id: "brakka", save: "str" });
+    expect(r.result).toMatchObject({ kind: "save", dc: null, success: null });
+    expect(r.notes[0]).toMatch(/^Brakka's Strength saving throw: \d+\.$/);
+  });
+});
+
+describe("table dice are gone", () => {
+  it("an older document drops its dice settings and a pending roll", () => {
+    const old = {
+      ...createEncounter(),
+      dice: "table",
+      combatants: [{ id: "x", name: "X", side: "party", dice: "table" }],
+      pending: {
+        action: { type: "check", id: "x", ability: "str" },
+        rolls: [],
+        answers: [],
+        combatant: "x",
+        kind: "roll",
+        question: "X: roll 1d20 for Strength check.",
+        recommended: false,
+      },
+    };
+    const parsed = parseEncounter(old);
+    expect(parsed.pending).toBeNull();
+    expect("dice" in parsed).toBe(false);
+    expect("dice" in (parsed.combatants[0] ?? {})).toBe(false);
+  });
+
+  it("set_dice and enter_roll are unknown actions", () => {
+    const parse = (a: unknown) => EncounterActionSchema.safeParse(a).success;
+    expect(parse({ type: "set_dice", mode: "table" })).toBe(false);
+    expect(parse({ type: "enter_roll", values: [3] })).toBe(false);
   });
 });

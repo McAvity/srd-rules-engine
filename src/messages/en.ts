@@ -756,37 +756,18 @@ export const MESSAGES_EN = {
   "label.move": "Move",
   "label.move_zone": "Move {label} ({id})",
   "label.end_zone": "End {label} ({id})",
-  // Manual play.
-  "manual.declared":
-    "{name} declares {what}{level, plural, =0 {} other { at level #}}{count, plural, =0 {} other { on {targets}}}, by hand.",
+  // Manual play: a dice roller.
+  "manual.declared": "{name} uses {what}{level, plural, =0 {} other { at level #}}, by hand.",
   "manual.attack":
-    "Attack roll against {target}: {roll}{hit, select, true {, would hit} other {, would miss}}{critical, select, true { (Critical Hit)} other {}}.",
+    "{attack} attack roll: {total} ({d20} on the die){critical, select, hit {, a Critical Hit} miss {, a natural 1} other {}}{count, plural, =0 {} other {; {reasons, list, semicolon}}}.",
   "manual.damage":
     "{what} damage rolled{critical, select, true { (Critical Hit)} other {}}: {parts, list, plus}.",
   "manual.damage_part": "{total} {type} ({rolls, list, plus})",
   "manual.healing": "{what} healing rolled: {amount}.",
-  "manual.save": "{what}: DC {dc} {ability} saving throw.",
-  // Dice rolled at the table (`dice: "table"`): what a roll is for, and the question.
-  "roll.dice": "{dice}",
-  "roll.d20": "a d20 roll",
-  "roll.damage": "{type} damage",
-  "roll.damage_for": "{type} damage for {what}",
-  "roll.healing": "healing",
-  "roll.healing_for": "healing for {what}",
-  "roll.initiative": "Initiative",
-  "roll.inspiration": "the Bardic Inspiration die",
-  "roll.recharge": "{action}'s Recharge",
-  "roll.death_save": "a Death Saving Throw",
-  "roll.hit_die": "a Hit Point Die",
-  "roll.hit_points": "{name}'s Hit Points",
-  "dice.question":
-    "{name}: roll {count}d{sides}{keep, select, higher { and keep the higher} lower { and keep the lower} other {}} for {purpose}.",
-  "refusal.no_roll_to_enter": "There's no roll to enter",
+  "manual.save":
+    "{what}: DC {dc} {ability, select, none {Strength or Dexterity (the target's choice)} other {{ability}}} saving throw.",
   // `force: true`: a refusal the GM overrode.
   "override.applied": "GM override: {reason}",
-  "refusal.roll_count": "Enter {count, plural, one {# die} other {# dice}}, not {given}",
-  "refusal.roll_range": "A d{sides} rolls 1 to {sides}, not {value}",
-  "refusal.encounter_dice_mode": "The encounter's dice are engine or table",
   // List joiners (`{x, list, or}`…): plain separators put between the items.
   "list.comma": ", ",
   "list.plus": " + ",
