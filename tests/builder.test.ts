@@ -155,7 +155,13 @@ describe("what picking an option would change (previewOption)", () => {
 
   it("Defense on a Fighter in Chain Mail: AC 16 → 17", () => {
     expect(svc.previewOption(fighterBuild(), catalog, key, "defense")).toEqual([
-      { stat: "armor_class", label: "AC", before: 16, after: 17 },
+      {
+        stat: "armor_class",
+        label: "AC",
+        label_message: { code: "stat.armor_class", params: {}, text: "AC" },
+        before: 16,
+        after: 17,
+      },
     ]);
     // Compared with the choice unanswered, whatever is picked now.
     expect(svc.previewOption(fighterBuild(), catalog, key, "archery")).toEqual([]);
@@ -164,7 +170,13 @@ describe("what picking an option would change (previewOption)", () => {
   it("Skillful's Perception shows as Passive Perception 10 → 12", () => {
     const b = fighterBuild();
     expect(svc.previewOption(b, catalog, "species:human#skillful", "perception")).toEqual([
-      { stat: "passive_perception", label: "Passive Perception", before: 10, after: 12 },
+      {
+        stat: "passive_perception",
+        label: "Passive Perception",
+        label_message: { code: "stat.passive_perception", params: {}, text: "Passive Perception" },
+        before: 10,
+        after: 12,
+      },
     ]);
   });
 });

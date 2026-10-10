@@ -1,6 +1,7 @@
 /** The character build: the player's choices, and nothing derived from them. */
 
 import { z } from "zod";
+import { MESSAGES_EN } from "../messages/en";
 import { ABILITIES, type Ability } from "./content";
 import { DocumentVersionSchema } from "./version";
 
@@ -10,17 +11,10 @@ export type AbilityMethod = (typeof ABILITY_METHODS)[number];
 export const ALIGNMENTS = ["LG", "NG", "CG", "LN", "N", "CN", "LE", "NE", "CE"] as const;
 export type Alignment = (typeof ALIGNMENTS)[number];
 
-export const ALIGNMENT_NAMES: Readonly<Record<Alignment, string>> = {
-  LG: "Lawful Good",
-  NG: "Neutral Good",
-  CG: "Chaotic Good",
-  LN: "Lawful Neutral",
-  N: "Neutral",
-  CN: "Chaotic Neutral",
-  LE: "Lawful Evil",
-  NE: "Neutral Evil",
-  CE: "Chaotic Evil",
-};
+/** English names; message codes `alignment.<id>` (`MESSAGES_EN`) for other languages. */
+export const ALIGNMENT_NAMES: Readonly<Record<Alignment, string>> = Object.fromEntries(
+  ALIGNMENTS.map((a) => [a, MESSAGES_EN[`alignment.${a}`]]),
+) as Record<Alignment, string>;
 
 export type AbilityMap = Partial<Record<Ability, number>>;
 

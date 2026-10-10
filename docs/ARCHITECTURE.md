@@ -739,11 +739,16 @@ sentence rendered from `MESSAGES_EN[code]` (`src/messages/en.ts`). Encounter and
 `takeDamage`, `adjustDamage` and `castSpell` have them; attack, save and check results have
 `reason_messages` next to `reasons` (each "Advantage: …" a `roll.reason` message around the
 cause, which a `ModeReason` carries as `message`). Templates are a small subset of ICU
-MessageFormat (`{x}`, `plural`, `select`, `list` joined by `,`, `+`, `;` or "or"); a parameter can
-be a nested message (a save's roll, an ability's name, the reason an effect ends), so a
-translation rephrases every part. An app renders them with its own catalog
-(`renderMessage(message, catalog)`, English `text` for a code it lacks). Content names in params
-(spells, conditions, damage types) stay as the catalog has them.
+MessageFormat (`{x}`, `plural`, `select`, `list`); a parameter can be a nested message (a save's
+roll, an ability's name, the reason an effect ends), so a translation rephrases every part. An app
+renders them with its own catalog (`renderMessage(message, catalog, { locale })`, English `text`
+for a code it lacks). Nothing English is left outside the catalog: a `plural` picks its option by
+`Intl.PluralRules(locale)` (`zero`, `one`, `two`, `few`, `many`, `other`; an exact `=n` first,
+English rules without a locale), and lists are joined with the catalog's `list.comma`,
+`list.plus`, `list.semicolon`, `list.or` and `list.and` (plain separators). Names the builder
+shows have codes too: `step.<id>` (`STEP_TITLES`), `alignment.<id>` (`ALIGNMENT_NAMES`), `stat.*`
+(`StatChange.label_message`), and a D20 Test's `label` has `label_message`. Content names in
+params (spells, conditions, damage types) stay as the catalog has them.
 
 Internally the services collect `Message`s, not strings (`run()` in the encounter,
 `applyAction`), and derive `notes` with `texts()`, so the compiler refuses an uncoded sentence.

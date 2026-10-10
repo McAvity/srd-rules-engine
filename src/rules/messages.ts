@@ -3,10 +3,13 @@
  * `Message` by rendering it with its own catalog (same codes, its own templates):
  *
  * - `{name}`: a parameter (a nested message is rendered with the same catalog; a list is joined
- *   with ", ");
+ *   with the catalog's `list.comma`);
  * - `{name, list}` / `{name, list, plus}` / `{name, list, semicolon}` / `{name, list, or}` /
- *   `{name, list, and}`: a list joined with ", ", " + ", "; ", " or " or " and ";
- * - `{n, plural, one {…} other {…}}` (also `=0 {…}`): by the number, `#` standing for it;
+ *   `{name, list, and}`: a list joined with the catalog's `list.comma`, `list.plus`,
+ *   `list.semicolon`, `list.or` or `list.and` (English when the catalog lacks it);
+ * - `{n, plural, one {…} other {…}}` (also `=0 {…}`, and `zero`, `two`, `few`, `many`): by the
+ *   number, `#` standing for it: an exact `=n` first, then the category the language's rules give
+ *   (`Intl.PluralRules` for the `locale` rendered with, English by default), then `other`;
  * - `{key, select, a {…} b {…} other {…}}`: by the value (`true`/`false` for a boolean).
  */
 
@@ -15,18 +18,27 @@ import type { Message, MessageParam } from "../models/messages";
 
 export type MessageCatalog = Readonly<Record<string, string>>;
 
+/** How to render: the `locale` whose plural rules pick a `plural` option (default `en`). */
+export interface RenderOptions {
+  readonly locale?: string;
+}
+
 type Node =
   | string
   | { arg: string; kind: "value" | "list"; style: string | null }
   | { arg: string; kind: "plural" | "select"; options: Record<string, Node[]> }
   | { hash: true };
 
-const LIST_JOINERS: Readonly<Record<string, string>> = {
-  plus: " + ",
-  semicolon: "; ",
-  or: " or ",
-  and: " and ",
-};
+const pluralRules = new Map<string, Intl.PluralRules>();
+/** The plural category of `n` in `locale` (`one`, `few`, `many`…). */
+function pluralCategory(n: number, locale: string): string {
+  let rules = pluralRules.get(locale);
+  if (!rules) {
+    rules = new Intl.PluralRules(locale);
+    pluralRules.set(locale, rules);
+  }
+  return rules.select(n);
+}
 
 const parsed = new Map<string, Node[]>();
 
@@ -121,16 +133,21 @@ export function formatMessage(
   params: Readonly<Record<string, MessageParam>>,
   catalog: MessageCatalog = MESSAGES_EN,
   strict = false,
+  { locale = "en" }: RenderOptions = {},
 ): string {
+  const joiner = (style: string | null): string =>
+    catalog[`list.${style ?? "comma"}`] ??
+    (MESSAGES_EN as MessageCatalog)[`list.${style ?? "comma"}`] ??
+    ", ";
   const value = (arg: string): MessageParam | undefined => {
     const v = params[arg];
     if (v === undefined && strict)
       throw new Error(`Message parameter '${arg}' missing: ${template}`);
     return v;
   };
-  const show = (v: MessageParam, joiner = ", "): string => {
-    if (Array.isArray(v)) return v.map((x) => show(x)).join(joiner);
-    if (typeof v === "object") return renderMessage(v as Message, catalog);
+  const show = (v: MessageParam, by = joiner(null)): string => {
+    if (Array.isArray(v)) return v.map((x) => show(x)).join(by);
+    if (typeof v === "object") return renderMessage(v as Message, catalog, { locale });
     return String(v);
   };
   const run = (nodes: readonly Node[], n: number | null): string =>
@@ -140,12 +157,14 @@ export function formatMessage(
         if ("hash" in node) return n === null ? "#" : String(n);
         const v = value(node.arg);
         if (v === undefined) return `{${node.arg}}`;
-        if (!("options" in node)) return show(v, LIST_JOINERS[node.style ?? ""] ?? ", ");
+        if (!("options" in node)) {
+          return show(v, node.kind === "list" ? joiner(node.style) : joiner(null));
+        }
         if (node.kind === "plural") {
           const count = Number(v);
           const option =
             node.options[`=${count}`] ??
-            (count === 1 ? node.options.one : undefined) ??
+            node.options[pluralCategory(count, locale)] ??
             node.options.other;
           return run(option as Node[], count);
         }
@@ -156,10 +175,19 @@ export function formatMessage(
   return run(parse(template), null);
 }
 
-/** A message in another catalog (an app's translation); its `text` when the code isn't there. */
-export function renderMessage(message: Message, catalog: MessageCatalog = MESSAGES_EN): string {
+/**
+ * A message in another catalog (an app's translation, rendered with its `locale`'s plural rules);
+ * its `text` when the code isn't there.
+ */
+export function renderMessage(
+  message: Message,
+  catalog: MessageCatalog = MESSAGES_EN,
+  options: RenderOptions = {},
+): string {
   const template = catalog[message.code];
-  return template === undefined ? message.text : formatMessage(template, message.params, catalog);
+  return template === undefined
+    ? message.text
+    : formatMessage(template, message.params, catalog, false, options);
 }
 
 /** An engine message: its English text rendered from `MESSAGES_EN`. */

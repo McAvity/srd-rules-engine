@@ -8,6 +8,15 @@ migrated when it's loaded.
 ## [Unreleased]
 
 ### Added
+- Messages for any language: `renderMessage(message, catalog, { locale })` (and `formatMessage`'s
+  new last argument, `RenderOptions`) picks a `plural` option by the locale's rules
+  (`Intl.PluralRules`: `zero`, `one`, `two`, `few`, `many`, `other`; `=n` first; English rules
+  without a locale, as before). List joiners are catalog entries: `list.comma`, `list.plus`,
+  `list.semicolon`, `list.or`, `list.and` (English when a catalog lacks them). New codes in
+  `MESSAGES_EN`: `step.<id>` (the builder's step titles, `STEP_TITLES` now reads them),
+  `alignment.<id>` (`ALIGNMENT_NAMES`), `stat.*`; `StatChange.label_message` and
+  `D20TestResult.label_message` (`rollCheck`, `rollD20Test`: `roll.check`, `roll.save`,
+  `roll.attack_label`).
 - GM override: `force: true` on an action taken in turns (`attack`, `cast`, `move`, `feature`,
   `legendary`…) applies it despite a refusal of legality, one of `FORCEABLE_REFUSALS`
   (`not_your_turn`, `incapacitated`, `economy_used`, `no_attacks_left`, `once_per_turn`,

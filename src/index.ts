@@ -398,6 +398,7 @@ export {
 export {
   formatMessage,
   type MessageCatalog,
+  type RenderOptions,
   RuleError,
   renderMessage,
 } from "./rules/messages";

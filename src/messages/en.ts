@@ -588,6 +588,7 @@ export const MESSAGES_EN = {
   "refusal.no_movement_left": "{name} has no movement left this turn",
   // Decisions: questions asked after a roll (Decision, encounter.pending).
   "roll.attack_with": "attack roll with {attack}",
+  "roll.attack_label": "{attack} attack roll",
   "roll.spell_attack_with": "spell attack roll with {spell}",
   "roll.save": "{ability} saving throw",
   "roll.check": "{label} check",
@@ -777,6 +778,39 @@ export const MESSAGES_EN = {
   "refusal.roll_count": "Enter {count, plural, one {# die} other {# dice}}, not {given}",
   "refusal.roll_range": "A d{sides} rolls 1 to {sides}, not {value}",
   "refusal.encounter_dice_mode": "The encounter's dice are engine or table",
+  // List joiners (`{x, list, or}`…): plain separators put between the items.
+  "list.comma": ", ",
+  "list.plus": " + ",
+  "list.semicolon": "; ",
+  "list.or": " or ",
+  "list.and": " and ",
+  // The builder's steps (`STEP_TITLES`).
+  "step.class": "Class",
+  "step.species": "Species",
+  "step.background": "Background",
+  "step.abilities": "Ability Scores",
+  "step.equipment": "Equipment",
+  "step.features": "Class & Feat Features",
+  "step.spells": "Spells",
+  "step.proficiencies": "Skills & Tools",
+  "step.languages": "Languages",
+  "step.details": "Name & Alignment",
+  // Alignments (`ALIGNMENT_NAMES`).
+  "alignment.LG": "Lawful Good",
+  "alignment.NG": "Neutral Good",
+  "alignment.CG": "Chaotic Good",
+  "alignment.LN": "Lawful Neutral",
+  "alignment.N": "Neutral",
+  "alignment.CN": "Chaotic Neutral",
+  "alignment.LE": "Lawful Evil",
+  "alignment.NE": "Neutral Evil",
+  "alignment.CE": "Chaotic Evil",
+  // Sheet numbers an option changes (`StatChange`; abilities use `ability.*`).
+  "stat.armor_class": "AC",
+  "stat.max_hp": "HP",
+  "stat.initiative": "Initiative",
+  "stat.speed": "Speed",
+  "stat.passive_perception": "Passive Perception",
 } as const;
 
 export type MessageCode = keyof typeof MESSAGES_EN;

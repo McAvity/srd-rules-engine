@@ -819,6 +819,8 @@ export interface D20TestResult {
   readonly name: string;
   /** `Stealth check`, `Dexterity saving throw`, `Longsword attack roll`. */
   readonly label: string;
+  /** `label` as a message (`roll.check`, `roll.save`, `roll.attack_label`), for translation. */
+  readonly label_message: Message;
   /** The ability rolled with (`null`: an attack line with none). */
   readonly ability: Ability | null;
   readonly skill: string | null;
@@ -867,6 +869,9 @@ export function rollD20Test(
       kind: "check",
       name: combatant.name,
       label: `${label} check`,
+      label_message: message("roll.check", {
+        label: message(check.skill ? `skill.${check.skill as Skill}` : `ability.${check.ability}`),
+      }),
       ability: check.ability,
       skill: check.skill,
       dc,
@@ -881,7 +886,17 @@ export function rollD20Test(
   if ("save" in request) {
     const ability = request.save;
     const label = `${ABILITY_NAMES[ability]} saving throw`;
-    const base = { ...none, kind: "save", name: combatant.name, label, ability, skill: null, dc };
+    const label_message = message("roll.save", { ability: message(`ability.${ability}`) });
+    const base = {
+      ...none,
+      kind: "save",
+      name: combatant.name,
+      label,
+      label_message,
+      ability,
+      skill: null,
+      dc,
+    };
     if (dc !== null) {
       const save = rollSavingThrow(combatant, ability, dc, { rng, mode, decide: never });
       return {
@@ -953,6 +968,7 @@ export function rollD20Test(
     kind: "attack",
     name: combatant.name,
     label: `${line.name} attack roll`,
+    label_message: message("roll.attack_label", { attack: line.name }),
     ability: line.ability,
     skill: null,
     attack: line.name,

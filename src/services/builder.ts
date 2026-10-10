@@ -8,6 +8,7 @@
  */
 
 import { type Catalog, lookup } from "../content/catalog";
+import { MESSAGES_EN } from "../messages/en";
 import {
   type AbilityMap,
   type AbilityMethod,
@@ -43,18 +44,10 @@ import {
 import { message, texts, toMessage } from "../rules/messages";
 import { computeSheet, type DerivedSheet } from "../rules/sheet";
 
-export const STEP_TITLES: Readonly<Record<Step, string>> = {
-  class: "Class",
-  species: "Species",
-  background: "Background",
-  abilities: "Ability Scores",
-  equipment: "Equipment",
-  features: "Class & Feat Features",
-  spells: "Spells",
-  proficiencies: "Skills & Tools",
-  languages: "Languages",
-  details: "Name & Alignment",
-};
+/** English titles; message codes `step.<id>` (`MESSAGES_EN`) for other languages. */
+export const STEP_TITLES: Readonly<Record<Step, string>> = Object.fromEntries(
+  STEPS.map((s) => [s, MESSAGES_EN[`step.${s}`]]),
+) as Record<Step, string>;
 
 export class BuildError extends Error {
   override name = "BuildError";
@@ -438,6 +431,8 @@ export interface StatChange {
   readonly stat: string;
   /** `AC`, `HP`, `Initiative`, `Speed`, `Passive Perception`, `Strength`. */
   readonly label: string;
+  /** `label` as a message (`stat.*`, `ability.*`), for translation. */
+  readonly label_message: Message;
   readonly before: number;
   readonly after: number;
 }
@@ -463,20 +458,26 @@ export function previewOption(
     catalog,
   );
   if (!after.scores_complete) return [];
-  const rows: [string, string, (s: DerivedSheet) => number][] = [
-    ["armor_class", "AC", (s) => s.armor_class.total],
-    ["max_hp", "HP", (s) => s.max_hp?.total ?? 0],
-    ["initiative", "Initiative", (s) => s.initiative.total],
-    ["speed", "Speed", (s) => s.speed.total],
-    ["passive_perception", "Passive Perception", (s) => s.passive_perception],
-    ...ABILITIES.map((a): [string, string, (s: DerivedSheet) => number] => [
+  const rows: [string, Message, (s: DerivedSheet) => number][] = [
+    ["armor_class", message("stat.armor_class"), (s) => s.armor_class.total],
+    ["max_hp", message("stat.max_hp"), (s) => s.max_hp?.total ?? 0],
+    ["initiative", message("stat.initiative"), (s) => s.initiative.total],
+    ["speed", message("stat.speed"), (s) => s.speed.total],
+    ["passive_perception", message("stat.passive_perception"), (s) => s.passive_perception],
+    ...ABILITIES.map((a): [string, Message, (s: DerivedSheet) => number] => [
       a,
-      ABILITY_NAMES[a],
+      message(`ability.${a}`),
       (s) => s.scores[a],
     ]),
   ];
   return rows
-    .map(([stat, label, of]) => ({ stat, label, before: of(before), after: of(after) }))
+    .map(([stat, label, of]) => ({
+      stat,
+      label: label.text,
+      label_message: label,
+      before: of(before),
+      after: of(after),
+    }))
     .filter((c) => c.before !== c.after);
 }
 

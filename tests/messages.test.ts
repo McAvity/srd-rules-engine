@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ALIGNMENT_NAMES,
   type AttackResult,
   applyAction,
   applyEncounterAction,
@@ -21,6 +22,7 @@ import {
   type RuleError,
   renderMessage,
   resolve,
+  STEP_TITLES,
   seededRng,
   validateBuild,
 } from "../src/index";
@@ -51,6 +53,58 @@ describe("message templates", () => {
 
   it("a missing parameter is an engine bug", () => {
     expect(() => message("readied.taken", { name: "Brakka" })).toThrow("'trigger' missing");
+  });
+});
+
+describe("other languages", () => {
+  const turns = "{n, plural, one {# tura} few {# tury} many {# tur} other {# tury}}";
+
+  it("plurals follow the locale's rules; English and no locale as before", () => {
+    const pl = { "test.turns": turns };
+    const m = (n: number): Message => ({ code: "test.turns", params: { n }, text: "" });
+    expect([1, 2, 5, 22, 1.5].map((n) => renderMessage(m(n), pl, { locale: "pl" }))).toEqual([
+      "1 tura",
+      "2 tury",
+      "5 tur",
+      "22 tury",
+      "1.5 tury",
+    ]);
+    // Without a locale, English rules: 1 is `one`, the rest `other`.
+    expect(formatMessage(turns, { n: 2 })).toBe("2 tury");
+    expect(formatMessage(turns, { n: 5 }, MESSAGES_EN, false, { locale: "pl" })).toBe("5 tur");
+    // An exact match still comes first; a missing category falls back to `other`.
+    expect(
+      formatMessage("{n, plural, =2 {two!} other {#}}", { n: 2 }, MESSAGES_EN, false, {
+        locale: "pl",
+      }),
+    ).toBe("two!");
+    expect(
+      formatMessage("{n, plural, one {#!} other {# x}}", { n: 5 }, MESSAGES_EN, false, {
+        locale: "pl",
+      }),
+    ).toBe("5 x");
+  });
+
+  it("list joiners come from the catalog, English when it has none", () => {
+    const names = ["Brakka", "Lute", "Pip"];
+    const it = { "list.or": " o ", "list.and": " e " };
+    expect(formatMessage("{a, list, or} / {a, list, and} / {a}", { a: names }, it)).toBe(
+      "Brakka o Lute o Pip / Brakka e Lute e Pip / Brakka, Lute, Pip",
+    );
+    expect(formatMessage("{a, list, or}", { a: names })).toBe("Brakka or Lute or Pip");
+    expect(formatMessage("{a, list, or}", { a: names }, {})).toBe("Brakka or Lute or Pip");
+  });
+
+  it("the builder's step titles, alignments and stat labels have codes", () => {
+    expect(MESSAGES_EN["step.abilities"]).toBe(STEP_TITLES.abilities);
+    expect(MESSAGES_EN["alignment.CG"]).toBe(ALIGNMENT_NAMES.CG);
+    const [ac] = builder.previewOption(
+      fighterBuild(),
+      catalog,
+      "class:fighter#fighting_style",
+      "defense",
+    );
+    expect(ac?.label_message).toMatchObject({ code: "stat.armor_class", text: ac?.label });
   });
 });
 

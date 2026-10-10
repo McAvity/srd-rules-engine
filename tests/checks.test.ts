@@ -43,6 +43,7 @@ describe("a character's rolls outside an encounter (rollCheck)", () => {
       },
     );
     expect(r).toMatchObject({ kind: "check", label: "Perception check", total: 4 + r.bonus });
+    expect(r.label_message).toMatchObject({ code: "roll.check", text: "Perception check" });
     expect(r.roll).toEqual({ rolls: [15, 4], d20: 4, mode: "disadvantage" });
     expect(r.reasons).toEqual(["Disadvantage: Brakka is Poisoned"]);
     // A DC gives success; asked Advantage cancels the Disadvantage.
