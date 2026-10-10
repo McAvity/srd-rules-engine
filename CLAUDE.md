@@ -48,6 +48,12 @@ tests/             # vitest; classes.test.ts: every class × species × backgrou
 
 ## Key conventions
 
+- **Inform, don't decide policy.** The engine is for any client, so it's as general as possible:
+  it reports everything the rules say (every refusal reason with its code and category, rolls,
+  costs) and the caller chooses what to enforce. Play by hand, GM overrides, table settings are
+  the client's policies: no app-specific modes or flags threaded through the reducers. Answer a
+  mode-shaped request with general information or primitives (see the workspace CLAUDE.md).
+
 - **rules/** is pure logic: no I/O. `src/index.ts` and `src/http/` must stay platform-neutral.
   `src/index.ts` never imports `content/srd.ts` (the bundled data): import `srdCatalog` from
   `src/srd.ts` (tests: `../src/srd`).

@@ -16,6 +16,11 @@ document: builder setters for builds, `applyAction` for play states, `applyEncou
 encounters. Nothing derived is stored: sheets and combatants are recomputed from the documents
 and the catalog.
 
+The engine informs; its callers decide. It's meant for any client (an app, a CLI, a bot), so it
+reports everything the rules say about an action (every reason it would be refused, the rolls,
+the costs) and leaves the policy to the caller: how strictly to play, what to override, what to
+roll without resolving. Rules are general primitives, not modes for one way of playing.
+
 | Layer | Module | Responsibility |
 |---|---|---|
 | Content | `content/**/*.yaml`, `src/content/` | Rules data in packs; schema + cross-reference validation at load |
