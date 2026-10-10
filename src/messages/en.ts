@@ -145,6 +145,8 @@ export const MESSAGES_EN = {
   "why.found_by": "{name} finds it",
   "check.result":
     "{name}'s {label} check: {total}{dc, select, none {} other { vs DC {dc}}}{count, plural, =0 {} other {; {reasons, list, semicolon}}}{outcome, select, true {: success} false {: failure} other {}}.",
+  "save.result":
+    "{name}'s {ability} saving throw: {automatic, select, none {{total}{dc, select, none {} other { vs DC {dc}}}{count, plural, =0 {} other {; {reasons, list, semicolon}}}} other {fails automatically ({automatic})}}{outcome, select, true {: success} false {: failure} other {}}.",
   "combatant.joins_hp": "{name} joins with {hp} HP.",
   "combatant.joins": "{name} joins.",
   "combatant.leaves": "{name} leaves the encounter.",
@@ -757,6 +759,13 @@ export const MESSAGES_EN = {
   // Manual play.
   "manual.declared":
     "{name} declares {what}{level, plural, =0 {} other { at level #}}{count, plural, =0 {} other { on {targets}}}, by hand.",
+  "manual.attack":
+    "Attack roll against {target}: {roll}{hit, select, true {, would hit} other {, would miss}}{critical, select, true { (Critical Hit)} other {}}.",
+  "manual.damage":
+    "{what} damage rolled{critical, select, true { (Critical Hit)} other {}}: {parts, list, plus}.",
+  "manual.damage_part": "{total} {type} ({rolls, list, plus})",
+  "manual.healing": "{what} healing rolled: {amount}.",
+  "manual.save": "{what}: DC {dc} {ability} saving throw.",
   // Dice rolled at the table (`dice: "table"`): what a roll is for, and the question.
   "roll.dice": "{dice}",
   "roll.d20": "a d20 roll",

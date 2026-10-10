@@ -21,7 +21,9 @@ import {
 import { autocomplete, catalog, classBuild, levelUpIn } from "./helpers";
 
 // Manual play: an action declared by hand (`manual: true`) is checked and its costs spent as
-// usual; nothing is rolled (an empty `scriptedRng` would throw) and no outcome is applied.
+// usual, and no outcome is applied. With the table rolling (`dice: "table"`) nothing is rolled
+// (an empty `scriptedRng` would throw); with the engine's dice, the actor's own dice are rolled
+// and shown (`rolls`).
 
 /** A level 5 Wizard with Fireball and Fly prepared. */
 function wizard(): CharacterBuild {
@@ -34,7 +36,7 @@ function wizard(): CharacterBuild {
 
 /** An encounter of Ilse and monsters, in this Initiative order, started. */
 function session(monsters: string[], build = wizard()) {
-  let encounter: Encounter = createEncounter();
+  let encounter: Encounter = createEncounter({ dice: "table" });
   let state: CharacterState = createState(build, catalog);
   const ctx = () => ({ catalog, characters: { ilse: { build, state } } });
   let history = createHistory(encounter, { ilse: state });
@@ -88,6 +90,7 @@ describe("declared by hand (manual)", () => {
       name: "Fireball",
       slot_level: 3,
       targets: ["goblin-warrior", "goblin-warrior-2"],
+      rolls: null,
     } satisfies DeclaredResult);
     expect([s.hp("goblin-warrior"), s.hp("goblin-warrior-2")]).toEqual(before);
     expect(s.sheet().play.spell_slots.find((x) => x.level === 3)?.spent).toBe(1);

@@ -798,6 +798,13 @@ missing parameter or a message pasted into a string.
   Recharge), then stops before any outcome. The result is a `DeclaredResult` (actor, action,
   name, slot level, target ids) with a `manual.declared` note; the table applies the outcome with
   `effects`, so Resistance, Concentration saves and HP limits stay the engine's.
+- **Rolls for an action played by hand.** With the actor's dice `engine`, a `manual` action runs
+  its rules with `handRng(c)`: the `Rng.dice` hook says whose dice come next, and only the
+  actor's are drawn from `rng` (recorded, so undo replays them); anyone else's (a target's save)
+  come from the dice that don't count. `makeAttack` / `castSpell` roll damage on a miss
+  (`damage_on_miss`), once-per-turn riders are left out (they follow a hit the table hasn't
+  decided), and `declare` reports `DeclaredResult.rolls` and notes. A feature's healing and a
+  save's damage are rolled the same way. Table dice keep the old behaviour: nothing rolled.
 - **GM override.** `force: true` on an action taken in turns turns a refusal of legality into a
   note: `run` checks those with `refuse(reason)` instead of `fail`, which throws unless the action
   is forced and the reason's refusal code is in `FORCEABLE_REFUSALS` (turn, Incapacitated,

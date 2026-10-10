@@ -5699,6 +5699,17 @@
                 "cha"
               ]
             },
+            "save": {
+              "type": "string",
+              "enum": [
+                "str",
+                "dex",
+                "con",
+                "int",
+                "wis",
+                "cha"
+              ]
+            },
             "dc": {
               "type": "integer",
               "minimum": -9007199254740991,

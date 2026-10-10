@@ -45,6 +45,8 @@ export interface CastOptions {
   spellcasting?: string;
   /** Advantage or Disadvantage on spell attack rolls. */
   mode?: RollMode;
+  /** Roll a spell attack's damage on a miss too (played by hand: the table decides the hit). */
+  damage_on_miss?: boolean;
   rng?: Rng;
   /** Answers decisions (Bardic Inspiration, Legendary Resistance); default: `recommended`. */
   decide?: Decide;
@@ -75,6 +77,8 @@ export interface SpellAttackRoll {
   readonly reason_messages: readonly Message[];
   /** The Bardic Inspiration die rolled and added to a miss, if any. */
   readonly inspiration: number | null;
+  /** This attack's damage as rolled (before halving on a miss), `null` when none was rolled. */
+  readonly damage?: RolledDamage | null;
 }
 
 export interface SpellTargetResult {
@@ -165,6 +169,7 @@ export function castSpell(
     slot_level,
     pact = false,
     spellcasting,
+    damage_on_miss = false,
     mode = "normal",
     rng: source = mathRng,
     decide = (d) => d.recommended,
@@ -343,14 +348,14 @@ export function castSpell(
       const hit = roll.d20 === 20 || (!critical_miss && total >= target.armor_class);
       const critical_hit = roll.d20 === 20 || (hit && effective.critical_on_hit);
       const { reasons, reason_messages } = effective;
-      const attack = {
-        ...{ roll, total, hit, critical_hit, critical_miss },
-        ...{ reasons, reason_messages, inspiration },
-      };
       const rolled =
-        (hit || potent) && parts.length
+        (hit || potent || damage_on_miss) && parts.length
           ? rollDamage(partsFor(beam === 0), { critical: critical_hit, rng, what: spell.name })
           : null;
+      const attack = {
+        ...{ roll, total, hit, critical_hit, critical_miss },
+        ...{ reasons, reason_messages, inspiration, damage: rolled },
+      };
       let instances = rolled ? toInstances(rolled) : [];
       if (!hit) instances = instances.map((d) => ({ ...d, amount: Math.floor(d.amount / 2) }));
       const conditions = hit ? conditionsOn(m, "hit") : [];

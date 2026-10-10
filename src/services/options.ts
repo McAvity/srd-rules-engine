@@ -853,7 +853,8 @@ function oddsOf(
     return { ...odds, ...chances, average_damage: round(onHit(parts, chances)) };
   }
   if ("automatic_failure" in result) {
-    // A save forced by itself (grapple, shove): no damage.
+    // A save forced by itself (grapple, shove): no damage. A save on demand (`check`) has none.
+    if (result.dc === null || "kind" in result) return null;
     return { ...odds, fail_save: round(saveFail(result)) };
   }
   const hit = "targets" in result ? result.targets.find((t) => t.target === 0) : undefined;

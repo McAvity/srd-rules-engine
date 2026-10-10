@@ -8,6 +8,17 @@ migrated when it's loaded.
 ## [Unreleased]
 
 ### Added
+- Played by hand with the engine's dice: an action with `manual: true` whose actor's dice are
+  `engine` rolls the actor's own dice and shows them in `DeclaredResult.rolls` (`DeclaredRolls`:
+  `attacks` per target with the d20 roll, mode and reasons, total, the target's AC and whether it
+  would hit, and its damage, rolled hit or miss with crit dice doubled; `damage` rolled once;
+  `healing`; a forced save's `ability` and `dc`), with notes (`manual.attack`, `manual.damage`,
+  `manual.healing`, `manual.save`). Nothing is applied, the targets' saves aren't rolled and
+  once-per-turn riders (Sneak Attack) aren't added; with `table` dice nothing is rolled, as
+  before (`rolls: null`). `makeAttack` and `castSpell` take `damage_on_miss`; a spell attack's
+  `SpellAttackRoll.damage` is its rolled damage.
+- Saving throws on demand: the `check` action takes `save: Ability` (a `D20TestResult`, note
+  `save.result`), with the combatant's conditions, a DC or none, nothing applied.
 - Messages for any language: `renderMessage(message, catalog, { locale })` (and `formatMessage`'s
   new last argument, `RenderOptions`) picks a `plural` option by the locale's rules
   (`Intl.PluralRules`: `zero`, `one`, `two`, `few`, `many`, `other`; `=n` first; English rules

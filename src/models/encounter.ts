@@ -962,12 +962,16 @@ export const EncounterActionSchema = z
       target: z.string(),
       spell: z.string().optional(),
     }),
-    /** An ability check, with a skill or not, against a DC or not. Uses no action by itself. */
+    /**
+     * An ability check, with a skill or not, or a saving throw (`save`), against a DC or not. Uses
+     * no action by itself; a save applies nothing (the table does).
+     */
     z.object({
       type: z.literal("check"),
       id: z.string(),
       skill: z.enum(SKILLS).optional(),
       ability: z.enum(ABILITIES).optional(),
+      save: z.enum(ABILITIES).optional(),
       dc: n.optional(),
       mode: z.enum(["normal", "advantage", "disadvantage"]).optional(),
     }),

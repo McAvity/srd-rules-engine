@@ -511,6 +511,11 @@ export interface AttackOptions {
   forgo_advantage?: boolean;
   /** A flat bonus to the attack roll (Sundering Blow: +5). */
   bonus?: number;
+  /**
+   * Roll the damage on a miss too (an attack played by hand: the table decides whether it hits);
+   * `instances` and `outcome` stay empty on a miss.
+   */
+  damage_on_miss?: boolean;
 }
 
 /**
@@ -537,6 +542,7 @@ export function makeAttack(
     light_extra = false,
     cleave = false,
     decide = recommend,
+    damage_on_miss = false,
     forgo = [],
     extra_damage = [],
     forgo_advantage = false,
@@ -662,13 +668,16 @@ export function makeAttack(
     reason_messages: effective.reason_messages,
     inspiration,
   };
-  if (!hit) return { ...base, damage: null, riders: [], instances: [], outcome: null };
+  if (!hit && !damage_on_miss) {
+    return { ...base, damage: null, riders: [], instances: [], outcome: null };
+  }
   let base_parts = line.damage_parts;
   if (light_extra && line.light_extra_damage_parts) base_parts = line.light_extra_damage_parts;
   else if (cleave && line.cleave_damage_parts) base_parts = line.cleave_damage_parts;
   else if (two_handed && line.two_handed_damage_parts) base_parts = line.two_handed_damage_parts;
   const parts = [...base_parts, ...extra];
   const damage = rollDamage(parts, { critical: critical_hit, rng: roller, what: line.name });
+  if (!hit) return { ...base, damage, riders: riderNames, instances: [], outcome: null };
   const instances = damage.parts.map((p) => ({ amount: p.total, type: p.type }));
   const outcome = takeDamage(
     { hp: target.hp, temp: target.temp_hp, max: target.max_hp },
