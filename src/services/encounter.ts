@@ -93,7 +93,7 @@ import {
   type Terrain,
 } from "../rules/grid";
 import { message, plainMessage, ruleReason, texts, toMessage } from "../rules/messages";
-import { mathRng, type Rng } from "../rules/rng";
+import { announce, type DiceRequest, mathRng, type Rng, rollingFor } from "../rules/rng";
 import type { AttackLine } from "../rules/sheet";
 import { encounterEvents } from "./events";
 import { applyAction, combatantFromCharacter, computePlaySheet, PlayError } from "./play";
@@ -177,7 +177,11 @@ export interface EncounterResult {
 
 /** A new encounter. `auto_death_saves: false` leaves Death Saving Throws to the players. */
 export function createEncounter(
-  options: { auto_death_saves?: boolean; decisions?: "ask" | "auto" } = {},
+  options: {
+    auto_death_saves?: boolean;
+    decisions?: "ask" | "auto";
+    dice?: "engine" | "table";
+  } = {},
 ): Encounter {
   return EncounterSchema.parse(options);
 }
@@ -329,10 +333,24 @@ export function applyEncounterAction(
   };
   let r: Omit<EncounterResult, "events" | "rolls">;
   if (action.type === "decide") {
-    if (!pending) fail(message("refusal.there_no_decision_make"));
+    if (!pending || pending.kind === "roll") fail(message("refusal.there_no_decision_make"));
     // Replay the stopped action with the same dice and one more answer.
     const clear = { ...encounter, pending: null };
     r = attempt(clear, pending.action, counted, pending.rolls, [...pending.answers, action.use]);
+  } else if (action.type === "enter_roll") {
+    const asked = pending?.kind === "roll" ? pending.roll : null;
+    if (!pending || !asked) fail(message("refusal.no_roll_to_enter"));
+    if (action.values.length !== asked.count) {
+      fail(message("refusal.roll_count", { count: asked.count, given: action.values.length }));
+    }
+    const wrong = action.values.find((v) => v < 1 || v > asked.sides);
+    if (wrong !== undefined) {
+      fail(message("refusal.roll_range", { value: wrong, sides: asked.sides }));
+    }
+    // Replay the stopped action with the dice so far and the ones rolled at the table.
+    const clear = { ...encounter, pending: null };
+    const rolls = [...pending.rolls, ...action.values];
+    r = attempt(clear, pending.action, counted, rolls, pending.answers);
   } else {
     if (pending) {
       const question = pending.question_message ?? plainMessage(pending.question);
@@ -347,7 +365,7 @@ export function applyEncounterAction(
     outer.catalog,
     outer.characters,
     r.states,
-    action.type === "decide" && pending ? pending.action : action,
+    (action.type === "decide" || action.type === "enter_roll") && pending ? pending.action : action,
   );
   return { ...r, events, rolls: drawn };
 }
@@ -362,7 +380,18 @@ class PendingDecision {
   ) {}
 }
 
-/** Run an action with recorded dice; a decision without an answer leaves it pending. */
+/** Thrown when dice rolled at the table haven't been entered: the action stops for them. */
+class PendingRoll {
+  constructor(
+    readonly request: DiceRequest,
+    readonly by: string,
+  ) {}
+}
+
+/**
+ * Run an action with recorded dice (drawn earlier, or entered from the table); a decision without
+ * an answer, or a table's roll not entered yet, leaves it pending.
+ */
 function attempt(
   encounter: Encounter,
   action: EncounterAction,
@@ -372,6 +401,10 @@ function attempt(
 ): Omit<EncounterResult, "events" | "rolls"> {
   const recorded: number[] = [];
   const base = outer.rng ?? mathRng;
+  const table = (id: string) => {
+    const c = encounter.combatants.find((x) => x.id === id);
+    return (c?.dice ?? encounter.dice) === "table";
+  };
   const rng: Rng = {
     int: (min, max) => {
       const value =
@@ -379,10 +412,39 @@ function attempt(
       recorded.push(value);
       return value;
     },
+    // A table's dice stop the action, unless they're already among the recorded ones.
+    dice: (request) => {
+      if (recorded.length + request.count <= rolls.length) return;
+      if (request.by && table(request.by)) throw new PendingRoll(request, request.by);
+    },
   };
   try {
     return run(encounter, action, { ...outer, rng }, answers);
   } catch (error) {
+    if (error instanceof PendingRoll) {
+      const { count, sides, keep, purpose } = error.request;
+      const name = encounter.combatants.find((x) => x.id === error.by)?.name ?? error.by;
+      const question = message("dice.question", { name, count, sides, keep: keep ?? "", purpose });
+      const stopped = {
+        action,
+        rolls: recorded,
+        answers: [...answers],
+        combatant: error.by,
+        kind: "roll" as const,
+        question: question.text,
+        question_message: question,
+        recommended: false,
+        roll: { dice: `${count}d${sides}`, count, sides, keep, purpose },
+      };
+      return {
+        encounter: EncounterSchema.parse({ ...encounter, pending: stopped }),
+        states: {},
+        notes: [question.text],
+        messages: [question],
+        result: null,
+        pending: stopped,
+      };
+    }
     if (!(error instanceof PendingDecision)) throw error;
     const stopped = {
       action,
@@ -393,6 +455,7 @@ function attempt(
       question: error.question.text,
       question_message: error.question,
       recommended: error.recommended,
+      roll: null,
     };
     return {
       encounter: EncounterSchema.parse({ ...encounter, pending: stopped }),
@@ -476,7 +539,7 @@ function run(
     const ref = characterRef(ctx, c);
     let r: ReturnType<typeof applyAction>;
     try {
-      r = applyAction(ref.build, ref.state, ctx.catalog, a, { rng });
+      r = applyAction(ref.build, ref.state, ctx.catalog, a, { rng: rollingFor(rng, c.id) });
     } catch (error) {
       if (error instanceof PlayError) {
         throw new EncounterError(
@@ -744,7 +807,12 @@ function run(
     });
     if (!who.length) return;
     const views = who.map((t) => encounterCombatant(e, t.id, ctx));
-    const r = saveAgainst({ ...save, conditions: z.conditions }, z.damage, views, { rng, decide });
+    const r = saveAgainst({ ...save, conditions: z.conditions }, z.damage, views, {
+      rng,
+      decide,
+      by: z.by,
+      what: z.label,
+    });
     notes.push(
       message("zone.save", {
         label: z.label,
@@ -796,7 +864,7 @@ function run(
           !(z.once_per_turn && z.saved.includes(t.id)),
       );
     if (!who.length) return;
-    const rolled = rollDamage(z.damage, { rng });
+    const rolled = rollDamage(z.damage, { rng: rollingFor(rng, z.by), what: z.label });
     const instances = rolled.parts.map((p) => ({ amount: p.total, type: p.type }));
     for (const t of who) {
       z.saved.push(t.id);
@@ -816,7 +884,7 @@ function run(
         const { count, sides } = parseDiceExpression(d.dice);
         return { ...d, dice: `${count * n}d${sides}`, bonus: d.bonus * n };
       });
-      const rolled = rollDamage(parts, { rng });
+      const rolled = rollDamage(parts, { rng: rollingFor(rng, z.by), what: z.label });
       const instances = rolled.parts.map((p) => ({ amount: p.total, type: p.type }));
       notes.push(
         message("zone.move_damage", {
@@ -907,7 +975,7 @@ function run(
       },
       parts,
       views,
-      { rng, decide },
+      { rng, decide, by: c.id, what: trait.name },
     );
     for (const hit of r.targets) {
       const t = around[hit.target] as EncounterCombatant;
@@ -940,7 +1008,7 @@ function run(
       // "each creature of the azer's choice": its enemies, unless the caller says otherwise.
       const who = aura.choice ? around.filter((x) => !alliesOf(e, x.id, c)) : around;
       if (!who.length) continue;
-      const rolled = rollDamage(dice, { rng });
+      const rolled = rollDamage(dice, { rng: rollingFor(rng, c.id), what: trait.name });
       const instances = rolled.parts.map((p) => ({ amount: p.total, type: p.type }));
       for (const t of who) {
         notes.push(
@@ -1087,7 +1155,9 @@ function run(
         const min = Number(
           /^(\d)/.exec(all.find((a) => a.name === name)?.recharge ?? "")?.[1] ?? 7,
         );
-        const d6 = rng.int(1, 6);
+        const roller = rollingFor(rng, c.id);
+        announce(roller, 1, 6, message("roll.recharge", { action: name }));
+        const d6 = roller.int(1, 6);
         if (d6 >= min) {
           c.expended = c.expended.filter((x) => x !== name);
           notes.push(message("recharge.yes", { name: c.name, action: name, roll: d6 }));
@@ -1582,9 +1652,8 @@ function run(
         const view = encounterCombatant(e, t.id, ctx);
         if (decide(decision("deflect_attacks", view, ask, true))) {
           t.used.reaction = true;
-          let cut = rollDamage([{ dice: deflect.dice, bonus: deflect.bonus, type: "none" }], {
-            rng,
-          }).total;
+          const reduce = [{ dice: deflect.dice, bonus: deflect.bonus, type: "none" }];
+          let cut = rollDamage(reduce, { rng: rollingFor(rng, t.id), what: deflect.name }).total;
           const total = instances.reduce((a, d) => a + d.amount, 0);
           notes.push(
             message("reaction.reduces", {
@@ -2120,8 +2189,9 @@ function run(
         }
         const kind = spell.mechanics?.damage[0]?.type ?? "radiant";
         const more = rollDamage([{ dice: versus.dice, bonus: 0, type: kind }], {
-          rng,
+          rng: rollingFor(rng, c.id),
           critical: options.critical,
+          what: spell.name,
         }).total;
         notes.push(
           message("spell.bonus_vs", {
@@ -2503,6 +2573,7 @@ function run(
           in_lair: action.in_lair ?? false,
           auto_legendary_resistance: action.auto_legendary_resistance ?? true,
           decisions: action.decisions ?? null,
+          dice: action.dice ?? null,
         }),
       );
       notes.push(message("combatant.joins_hp", { name: action.name ?? numbered, hp }));
@@ -2525,6 +2596,7 @@ function run(
           character: action.character,
           side: action.side ?? "party",
           decisions: action.decisions ?? null,
+          dice: action.dice ?? null,
         }),
       );
       notes.push(message("combatant.joins", { name }));
@@ -2532,6 +2604,13 @@ function run(
     }
     case "decide":
       return fail(message("refusal.there_no_decision_make"));
+    case "set_dice": {
+      if (action.id !== undefined) find(action.id).dice = action.mode;
+      else e.dice = action.mode ?? fail(message("refusal.encounter_dice_mode"));
+      break;
+    }
+    case "enter_roll":
+      return fail(message("refusal.no_roll_to_enter"));
     case "set_decisions": {
       if (action.id !== undefined) find(action.id).decisions = action.mode;
       else e.decisions = action.mode ?? fail(message("refusal.encounter_mode_ask_auto"));
@@ -2571,7 +2650,11 @@ function run(
           if (surprised.has(c.id)) {
             reasons.push(modeReason("disadvantage", message("reason.surprised")));
           }
-          d20 = rollD20({ mode: resolveMode("normal", reasons).mode, rng }).d20;
+          d20 = rollD20({
+            mode: resolveMode("normal", reasons).mode,
+            rng: rollingFor(rng, c.id),
+            purpose: message("roll.initiative"),
+          }).d20;
           if (key !== null) groupRolls.set(key, d20);
         }
         c.initiative = d20 + bonus;
@@ -3616,8 +3699,10 @@ function run(
       if (f.heal && f.target !== "self" && !byHand) {
         const amount = f.heal.pooled
           ? (action.amount as number)
-          : rollDamage([{ dice: f.heal.dice, bonus: f.heal.bonus, type: "healing" }], { rng })
-              .total;
+          : rollDamage([{ dice: f.heal.dice, bonus: f.heal.bonus, type: "healing" }], {
+              rng: rollingFor(rng, c.id),
+              what: f.name,
+            }).total;
         applyTo(t, [{ type: "heal", amount }]);
         notes.push(message("feature.heals", { name: t.name, amount }));
       }
@@ -3645,7 +3730,8 @@ function run(
         const rolled =
           fs.damage && damageType
             ? rollDamage([{ dice: fs.damage.dice, bonus: fs.damage.bonus, type: damageType }], {
-                rng,
+                rng: rollingFor(rng, c.id),
+                what: f.name,
               }).total
             : null;
         const ends: EffectEnd = fs.rounds

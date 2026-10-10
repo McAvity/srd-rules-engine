@@ -3,9 +3,51 @@
  * replays and multiplayer sessions can be deterministic.
  */
 
+import type { Message } from "../models/messages";
+
 export interface Rng {
   /** A uniformly random integer in `[min, max]`, both inclusive. */
   int(min: number, max: number): number;
+  /**
+   * Told before a group of dice is drawn: who rolls them and what for. An encounter uses it to
+   * stop for dice rolled at the table (`dice: "table"`); other sources ignore it.
+   */
+  dice?(request: DiceRequest): void;
+}
+
+/** A group of dice about to be drawn (`Rng.dice`). */
+export interface DiceRequest {
+  /** The combatant id whose roll it is (`null`: nobody's, the engine rolls it). */
+  readonly by: string | null;
+  readonly count: number;
+  readonly sides: number;
+  /** Two d20s for Advantage (`higher`) or Disadvantage (`lower`). */
+  readonly keep: "higher" | "lower" | null;
+  /** What it's for: "Dexterity saving throw", "fire damage for Fireball". */
+  readonly purpose: Message;
+}
+
+/** Announce the next dice to `rng` (a no-op for a plain source). */
+export function announce(
+  rng: Rng,
+  count: number,
+  sides: number,
+  purpose: Message,
+  keep: DiceRequest["keep"] = null,
+): void {
+  if (count > 0) rng.dice?.({ by: null, count, sides, keep, purpose });
+}
+
+/**
+ * `rng` with the rolls made through it belonging to combatant `id`, unless something closer
+ * says otherwise (a target's saving throw inside its caster's spell is the target's).
+ */
+export function rollingFor(rng: Rng, id: string | null | undefined): Rng {
+  if (!id || !rng.dice) return rng;
+  return {
+    int: (min, max) => rng.int(min, max),
+    dice: (request) => rng.dice?.({ ...request, by: request.by ?? id }),
+  };
 }
 
 /** Backed by `Math.random()`. Not seedable; the default when no `Rng` is given. */

@@ -1,7 +1,8 @@
 /**
  * Fight mode: run an encounter in the terminal with saved characters and SRD monsters. Every
  * command becomes an encounter action (`applyEncounterAction`); decisions after a roll (Bardic
- * Inspiration, Legendary Resistance, Uncanny Dodge) are asked as yes/no questions in `ask` mode.
+ * Inspiration, Legendary Resistance, Uncanny Dodge) are asked as yes/no questions in `ask` mode,
+ * and dice rolled at the table (`dice table`) as the numbers rolled.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -62,6 +63,7 @@ Targets are ids, names or numbers from the status table.
   wall [remove] <x1> <y1> <x2> <y2>   a wall between grid corners (corner x,y: square x,y's top left)
   dmg <t> <n> [type] · heal <t> <n> · cond <t> <condition> · cond <t> -<condition>
   ask on|off [<t>]   decisions after a roll: ask, or let the engine decide (auto)
+  dice table|engine [<t>]   roll at the table (the numbers are asked for), or let the engine roll
   options [<who>]    what a combatant can do now, and why not (dimmed)
   next · status · undo (the last action) · end · save · quit`;
 
@@ -543,6 +545,13 @@ export class FightApp {
         if (args[1] && !t) return;
         return this.apply({ type: "set_decisions", id: t?.id, mode });
       }
+      case "dice": {
+        const mode = args[0] === "table" || args[0] === "engine" ? args[0] : null;
+        if (!mode) return this.con.error("Usage: dice table|engine [<target>]");
+        const t = args[1] ? this.find(args[1]) : null;
+        if (args[1] && !t) return;
+        return this.apply({ type: "set_dice", id: t?.id, mode });
+      }
       default:
         this.con.error(`Unknown command '${word}' (try 'help')`);
     }
@@ -811,6 +820,12 @@ export class FightApp {
       } catch (error) {
         if (error instanceof EncounterError) {
           for (const message of error.messages) this.con.error(message);
+          // A wrong number of dice, or a value they can't roll: ask for the roll again.
+          const pending = this.encounter.pending;
+          if (next.type === "enter_roll" && pending?.roll) {
+            next = await this.enterRoll(pending.question);
+            continue;
+          }
           return;
         }
         throw error;
@@ -820,7 +835,9 @@ export class FightApp {
       this.history = recordAction(this.history, next, result);
       this.dirty = true;
       next = null;
-      if (result.pending) {
+      if (result.pending?.roll) {
+        next = await this.enterRoll(result.pending.question);
+      } else if (result.pending) {
         // The default answer is the engine's recommendation.
         const use = await this.con.confirm(result.pending.question, result.pending.recommended);
         next = { type: "decide", use };
@@ -833,6 +850,19 @@ export class FightApp {
       if (enemies.every((c) => c.defeated)) {
         this.con.say(this.con.style("  All enemies are down ('end' ends the fight).", "green"));
       }
+    }
+  }
+
+  /** Ask for dice rolled at the table: the numbers, separated by spaces or commas. */
+  private async enterRoll(question: string): Promise<EncounterAction> {
+    for (;;) {
+      const raw = await this.con.ask(question);
+      const values = raw
+        .split(/[\s,]+/)
+        .filter(Boolean)
+        .map(Number);
+      if (values.length && values.every(Number.isInteger)) return { type: "enter_roll", values };
+      this.con.error("Enter the numbers rolled, e.g. 4 6");
     }
   }
 

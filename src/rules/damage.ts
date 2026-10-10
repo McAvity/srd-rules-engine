@@ -46,12 +46,25 @@ export interface RolledDamage {
  */
 export function rollDamage(
   parts: readonly DamagePart[],
-  { critical = false, rng = mathRng }: { critical?: boolean; rng?: Rng } = {},
+  {
+    critical = false,
+    rng = mathRng,
+    what,
+  }: {
+    critical?: boolean;
+    rng?: Rng;
+    /** What the damage is for (an attack, a spell), for a table rolling it. */
+    what?: string;
+  } = {},
 ): RolledDamage {
   const rolled = parts.map((part): RolledDamagePart => {
     if (part.dice === null) return { ...part, rolls: [], total: Math.max(0, part.bonus) };
     const { count, sides } = parseDiceExpression(part.dice);
-    const result = roll(`${critical ? count * 2 : count}d${sides}`, rng);
+    const kind = part.type === "healing" ? "healing" : "damage";
+    const purpose = what
+      ? message(`roll.${kind}_for`, { type: part.type, what })
+      : message(`roll.${kind}`, { type: part.type });
+    const result = roll(`${critical ? count * 2 : count}d${sides}`, rng, purpose);
     return { ...part, rolls: result.rolls, total: Math.max(0, result.total + part.bonus) };
   });
   return { parts: rolled, total: rolled.reduce((n, p) => n + p.total, 0), critical };

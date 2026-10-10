@@ -793,6 +793,19 @@ missing parameter or a message pasted into a string.
   Recharge), then stops before any outcome. The result is a `DeclaredResult` (actor, action,
   name, slot level, target ids) with a `manual.declared` note; the table applies the outcome with
   `effects`, so Resistance, Concentration saves and HP limits stay the engine's.
+- **Dice rolled at the table.** `Rng.dice(request)` is told before each group of dice is drawn
+  (`DiceRequest`: who rolls, count, sides, `keep` for Advantage or Disadvantage, purpose). The
+  rules announce their dice (`roll`, `rollD20`, `rollDamage` take a purpose) and say whose they
+  are with `rollingFor(rng, id)`; the innermost one wins, so a target's save inside a caster's
+  spell is the target's while the spell's damage is the caster's. An encounter's `attempt` gives
+  the action an `rng` whose `dice` hook throws for a combatant whose `dice` (or the encounter's)
+  is `table`, unless the action's recorded dice already cover the request: the action stops
+  (`pending.kind: "roll"`, `pending.roll`), and `enter_roll` checks the values and replays it with
+  the recorded dice plus the entered ones, the same mechanism as `decide`. Rolls in one action
+  stop one at a time, in the order the rules draw them; a decision after a roll comes after its
+  roll is entered; a reroll (Indomitable) asks again. Entered dice aren't drawn from `rng`, so a
+  result's `rolls` lists only the engine's and undo replays `enter_roll` as an action. A
+  monster's Hit Points rolled when it joins stay the engine's.
 
 ### Previews
 

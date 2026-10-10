@@ -756,6 +756,25 @@ export const MESSAGES_EN = {
   // Manual play.
   "manual.declared":
     "{name} declares {what}{level, plural, =0 {} other { at level #}}{count, plural, =0 {} other { on {targets}}}, by hand.",
+  // Dice rolled at the table (`dice: "table"`): what a roll is for, and the question.
+  "roll.dice": "{dice}",
+  "roll.d20": "a d20 roll",
+  "roll.damage": "{type} damage",
+  "roll.damage_for": "{type} damage for {what}",
+  "roll.healing": "healing",
+  "roll.healing_for": "healing for {what}",
+  "roll.initiative": "Initiative",
+  "roll.inspiration": "the Bardic Inspiration die",
+  "roll.recharge": "{action}'s Recharge",
+  "roll.death_save": "a Death Saving Throw",
+  "roll.hit_die": "a Hit Point Die",
+  "roll.hit_points": "{name}'s Hit Points",
+  "dice.question":
+    "{name}: roll {count}d{sides}{keep, select, higher { and keep the higher} lower { and keep the lower} other {}} for {purpose}.",
+  "refusal.no_roll_to_enter": "There's no roll to enter",
+  "refusal.roll_count": "Enter {count, plural, one {# die} other {# dice}}, not {given}",
+  "refusal.roll_range": "A d{sides} rolls 1 to {sides}, not {value}",
+  "refusal.encounter_dice_mode": "The encounter's dice are engine or table",
 } as const;
 
 export type MessageCode = keyof typeof MESSAGES_EN;

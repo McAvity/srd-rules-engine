@@ -402,6 +402,7 @@ export {
 } from "./rules/messages";
 export { attackOdds, averageDamage, failOdds } from "./rules/odds";
 export {
+  type DiceRequest,
   fixedRng,
   mathRng,
   type Rng,

@@ -36,7 +36,7 @@ import { type Defenses, isBloodied, rollDamage, takeDamage } from "../rules/dama
 import { roll } from "../rules/dice";
 import { spaceForSize } from "../rules/grid";
 import { message, texts, toMessage } from "../rules/messages";
-import { mathRng, type Rng } from "../rules/rng";
+import { announce, mathRng, type Rng } from "../rules/rng";
 import {
   type CarriedItem,
   computeSheet,
@@ -805,6 +805,7 @@ export function applyAction(
     }
     case "death_save": {
       if (current !== 0 || s.stable || s.dead) fail(message("refusal.death_saving_throws_are"));
+      if (action.roll === undefined) announce(rng, 1, 20, message("roll.death_save"));
       const d20 = action.roll ?? rng.int(1, 20);
       if (d20 === 20) {
         s.hp.current = 1;
@@ -847,6 +848,7 @@ export function applyAction(
         const spent = s.hit_dice_spent[String(spend.die)] ?? 0;
         if (!pool || spent >= pool.total)
           fail(message("refusal.no_hit_point_dice", { die: spend.die }));
+        if (spend.roll === undefined) announce(rng, 1, spend.die, message("roll.hit_die"));
         const d = spend.roll ?? rng.int(1, spend.die);
         if (d < 1 || d > spend.die) fail(message("refusal.roll_between", { die: spend.die }));
         const gained = Math.max(1, d + sheet.modifiers.con);
@@ -1177,7 +1179,10 @@ export function applyAction(
         fail(message("refusal.not_consumable", { item: magic?.name ?? item.item }));
       const def = magic as MagicItemDef;
       if (def.heal) {
-        const healed = action.roll ?? roll(def.heal, rng).total;
+        const healed =
+          action.roll ??
+          roll(def.heal, rng, message("roll.healing_for", { type: "healing", what: def.name }))
+            .total;
         if (s.dead) fail(message("refusal.character_dead"));
         s.hp.current = Math.min(p.hp.max, current + healed);
         if (s.hp.current >= p.hp.max) s.hp.current = null;

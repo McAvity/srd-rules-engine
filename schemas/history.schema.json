@@ -370,6 +370,21 @@
                           }
                         ]
                       },
+                      "dice": {
+                        "default": null,
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "engine",
+                              "table"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "position": {
                         "default": null,
                         "anyOf": [
@@ -1729,6 +1744,14 @@
                     "auto"
                   ]
                 },
+                "dice": {
+                  "default": "engine",
+                  "type": "string",
+                  "enum": [
+                    "engine",
+                    "table"
+                  ]
+                },
                 "pending": {
                   "default": null,
                   "anyOf": [
@@ -1764,7 +1787,8 @@
                             "zone_force",
                             "indomitable",
                             "deflect_attacks",
-                            "relentless_rage"
+                            "relentless_rage",
+                            "roll"
                           ]
                         },
                         "question": {
@@ -1776,6 +1800,56 @@
                         "recommended": {
                           "default": true,
                           "type": "boolean"
+                        },
+                        "roll": {
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "dice": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "sides": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "keep": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "higher",
+                                        "lower"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "purpose": {
+                                  "$ref": "#/$defs/Message"
+                                }
+                              },
+                              "required": [
+                                "dice",
+                                "count",
+                                "sides",
+                                "keep",
+                                "purpose"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -2363,6 +2437,13 @@
                 "ask",
                 "auto"
               ]
+            },
+            "dice": {
+              "type": "string",
+              "enum": [
+                "engine",
+                "table"
+              ]
             }
           },
           "required": [
@@ -2396,6 +2477,13 @@
                 "ask",
                 "auto"
               ]
+            },
+            "dice": {
+              "type": "string",
+              "enum": [
+                "engine",
+                "table"
+              ]
             }
           },
           "required": [
@@ -2417,6 +2505,58 @@
           "required": [
             "type",
             "use"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "enter_roll"
+            },
+            "values": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "required": [
+            "type",
+            "values"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "set_dice"
+            },
+            "id": {
+              "type": "string"
+            },
+            "mode": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "engine",
+                    "table"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "mode"
           ]
         },
         {

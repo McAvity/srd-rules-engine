@@ -16,6 +16,7 @@ const PATTERNS: readonly [RegExp, RefusalCode][] = [
   [/no attacks left|no granted attacks left|already made its Cleave attack/, "no_attacks_left"],
   [/has already used .* this turn|can't take .* again until the start/, "once_per_turn"],
   [/Total Cover/, "total_cover"],
+  [/^Enter \d+ di(e|ce), not|^A d\d+ rolls 1 to/, "invalid_roll"],
   [/ isn't on the map$/, "off_map"],
   [/feet away|out of .*(range|reach)|beyond .*range|must start next to/, "out_of_range"],
   [/can't move to|can't reach|is blocked$|is in that space|The path jumps/, "no_path"],

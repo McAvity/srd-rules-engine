@@ -8,6 +8,18 @@ migrated when it's loaded.
 ## [Unreleased]
 
 ### Added
+- Dice rolled at the table: `dice: "engine" | "table"` on the encounter (default `engine`) and on
+  each combatant (`null`: the encounter's; `add_character` / `add_monster` take it), changed with
+  `{ type: "set_dice", id?, mode }`. With `table`, each roll the combatant makes (attack rolls,
+  saves, checks, Initiative, damage and healing dice, Recharge, Death Saving Throws, Hit Point
+  Dice, a Bardic Inspiration die) stops the action: `encounter.pending` has `kind: "roll"` and
+  `roll: { dice, count, sides, keep, purpose }` ("2d20" keeping the higher for Advantage), with a
+  question ("Ilse: roll 8d6 for fire damage for Fireball."). `{ type: "enter_roll", values }`
+  answers it and the action goes on as if the engine had drawn them; a wrong count or a value the
+  die can't roll is refused (code `invalid_roll`). Rolls belong to who makes them: a spell's
+  damage is the caster's, each target's save its own. `Rng` has an optional `dice(request)` hook
+  (`DiceRequest`) told before each group of dice. The fight CLI asks for the numbers
+  (`dice table|engine [<t>]`).
 - Manual play: `manual: true` on `attack`, `unarmed`, `cast`, `feature`, `save_action` and
   `legendary` checks the action and spends its costs (economy, slot, uses, Concentration, daily
   uses, Recharge) without rolling or applying an outcome; the result is a `DeclaredResult` (who,

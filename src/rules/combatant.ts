@@ -39,7 +39,7 @@ import {
 import { abilityModifier } from "./dice";
 import { spaceForSize } from "./grid";
 import { message, plainMessage, RuleError, texts } from "./messages";
-import { mathRng, type Rng } from "./rng";
+import { announce, mathRng, type Rng, rollingFor } from "./rng";
 import type { AttackLine } from "./sheet";
 import { parseRange } from "./weapons";
 
@@ -189,7 +189,10 @@ export function inspire(
   if (!die || total >= target) return null;
   const question = message("decision.inspiration", { name: c.name, what, total, target, die });
   const use = decide(decision("inspiration", c, question, target - total <= die));
-  return use ? rng.int(1, die) : null;
+  if (!use) return null;
+  const roller = rollingFor(rng, c.id);
+  announce(roller, 1, die, message("roll.inspiration"));
+  return roller.int(1, die);
 }
 
 /** A legendary action: an attack it makes, an action it uses, a saving throw effect, or text. */
@@ -425,10 +428,15 @@ export interface D20Roll {
 export function rollD20({
   mode = "normal",
   rng = mathRng,
+  purpose,
 }: {
   mode?: RollMode;
   rng?: Rng;
+  /** What it's for, for a table rolling it (`Rng.dice`). */
+  purpose?: Message;
 } = {}): D20Roll {
+  const keep = mode === "advantage" ? "higher" : mode === "disadvantage" ? "lower" : null;
+  announce(rng, keep ? 2 : 1, 20, purpose ?? message("roll.d20"), keep);
   if (mode === "normal") {
     const d20 = rng.int(1, 20);
     return { rolls: [d20], d20, mode };
@@ -615,7 +623,12 @@ export function makeAttack(
   for (const x of extra_damage) {
     extra.push({ dice: x.dice, bonus: 0, type: x.type === "weapon" ? line.damage_type : x.type });
   }
-  const roll = rollD20({ mode: effective.mode, rng });
+  const roller = rollingFor(rng, attacker.id);
+  const roll = rollD20({
+    mode: effective.mode,
+    rng: roller,
+    purpose: message("roll.attack_with", { attack: line.name }),
+  });
   let total = roll.d20 + line.attack_bonus + bonus;
   const critical_miss = roll.d20 === 1;
   const criticalRoll = !critical_miss && roll.d20 >= Math.min(20, attacker.critical_hit_on);
@@ -655,7 +668,7 @@ export function makeAttack(
   else if (cleave && line.cleave_damage_parts) base_parts = line.cleave_damage_parts;
   else if (two_handed && line.two_handed_damage_parts) base_parts = line.two_handed_damage_parts;
   const parts = [...base_parts, ...extra];
-  const damage = rollDamage(parts, { critical: critical_hit, rng });
+  const damage = rollDamage(parts, { critical: critical_hit, rng: roller, what: line.name });
   const instances = damage.parts.map((p) => ({ amount: p.total, type: p.type }));
   const outcome = takeDamage(
     { hp: target.hp, temp: target.temp_hp, max: target.max_hp },
@@ -736,9 +749,10 @@ export function rollSavingThrow(
     };
   }
   const resolved = resolveMode(mode, saveModes(combatant, ability));
-  let roll = rollD20({ mode: resolved.mode, rng });
-  let total = roll.d20 + bonus;
   const what = message("roll.save", { ability: message(`ability.${ability}`) });
+  const roller = rollingFor(rng, combatant.id);
+  let roll = rollD20({ mode: resolved.mode, rng: roller, purpose: what });
+  let total = roll.d20 + bonus;
   // Indomitable: "If you fail a saving throw, you can reroll it with a bonus equal to your
   // Fighter level. You must use the new roll."
   let indomitable = false;
@@ -753,7 +767,7 @@ export function rollSavingThrow(
     });
     if (decide(decision("indomitable", combatant, question, dc - bonus - reroll <= 20))) {
       indomitable = true;
-      roll = rollD20({ mode: resolved.mode, rng });
+      roll = rollD20({ mode: resolved.mode, rng: roller, purpose: what });
       total = roll.d20 + bonus + reroll;
     }
   }
@@ -899,7 +913,11 @@ export function rollD20Test(
       };
     }
     const resolved = resolveMode(mode, saveModes(combatant, ability));
-    const roll = rollD20({ mode: resolved.mode, rng });
+    const roll = rollD20({
+      mode: resolved.mode,
+      rng: rollingFor(rng, combatant.id),
+      purpose: message("roll.save", { ability: message(`ability.${ability}`) }),
+    });
     return {
       ...base,
       kind: "save",
@@ -923,7 +941,11 @@ export function rollD20Test(
     within_5ft: line.kind === "melee",
     ability: line.ability,
   });
-  const roll = rollD20({ mode: moded.mode, rng });
+  const roll = rollD20({
+    mode: moded.mode,
+    rng: rollingFor(rng, combatant.id),
+    purpose: message("roll.attack_with", { attack: line.name }),
+  });
   const total = roll.d20 + line.attack_bonus;
   const critical_miss = roll.d20 === 1;
   const critical = !critical_miss && roll.d20 >= Math.min(20, combatant.critical_hit_on);
@@ -995,7 +1017,9 @@ export function rollAbilityCheck(
     );
   }
   const resolved = resolveMode(mode, reasons);
-  let roll = rollD20({ mode: resolved.mode, rng });
+  const label = message(skill ? `skill.${skill}` : `ability.${ability}`);
+  const rolled = message("roll.check", { label });
+  let roll = rollD20({ mode: resolved.mode, rng: rollingFor(rng, combatant.id), purpose: rolled });
   // Reliable Talent: "treat a d20 roll of 9 or lower as a 10" with a proficient skill.
   const reliable =
     skill !== null &&
@@ -1008,8 +1032,6 @@ export function rollAbilityCheck(
     resolved.reason_messages.push(why);
   }
   let total = roll.d20 + bonus;
-  const label = message(skill ? `skill.${skill}` : `ability.${ability}`);
-  const rolled = message("roll.check", { label });
   const inspiration = dc === null ? null : inspire(combatant, total, dc, rolled, decide, rng);
   total += inspiration ?? 0;
   return {

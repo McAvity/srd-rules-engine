@@ -32,7 +32,7 @@ import {
 } from "./damage";
 import { parseDiceExpression } from "./dice";
 import { message, RuleError } from "./messages";
-import { mathRng, type Rng } from "./rng";
+import { mathRng, type Rng, rollingFor } from "./rng";
 
 export interface CastOptions {
   /** Damage that rides an attack's Critical Hit: its dice are doubled (Divine Smite). */
@@ -166,7 +166,7 @@ export function castSpell(
     pact = false,
     spellcasting,
     mode = "normal",
-    rng = mathRng,
+    rng: source = mathRng,
     decide = (d) => d.recommended,
     modes = [],
     modesFor,
@@ -176,6 +176,8 @@ export function castSpell(
     critical = false,
   }: CastOptions = {},
 ): SpellCastResult {
+  // The caster's rolls (a target's saving throw is the target's: `rollSavingThrow`).
+  const rng = rollingFor(source, caster.id);
   if (caster.no_spells)
     throw new RuleError(message("rule.cant_cast_spells_right", { name: caster.name }));
   const m = spell.mechanics;
@@ -309,7 +311,8 @@ export function castSpell(
   const results: SpellTargetResult[] = [];
   let shared: RolledDamage | null = null;
   const sharedDamage = () => {
-    shared ??= parts.length && targets.length ? rollDamage(partsFor(true), { rng }) : null;
+    shared ??=
+      parts.length && targets.length ? rollDamage(partsFor(true), { rng, what: spell.name }) : null;
     return shared;
   };
 
@@ -327,11 +330,11 @@ export function castSpell(
         within_5ft: within_5ft?.[index] ?? m.attack === "melee",
         modes: [...(m.attack === "ranged" ? modes : []), ...(modesFor?.(index, shot) ?? [])],
       });
-      const roll = rollD20({ mode: effective.mode, rng });
+      const what = message("roll.spell_attack_with", { spell: spell.name });
+      const roll = rollD20({ mode: effective.mode, rng, purpose: what });
       const critical_miss = roll.d20 === 1;
       let total = roll.d20 + bonus;
       // Bardic Inspiration on a miss (not a natural 1 or 20).
-      const what = message("roll.spell_attack_with", { spell: spell.name });
       const inspiration =
         roll.d20 === 20 || critical_miss
           ? null
@@ -346,7 +349,7 @@ export function castSpell(
       };
       const rolled =
         (hit || potent) && parts.length
-          ? rollDamage(partsFor(beam === 0), { critical: critical_hit, rng })
+          ? rollDamage(partsFor(beam === 0), { critical: critical_hit, rng, what: spell.name })
           : null;
       let instances = rolled ? toInstances(rolled) : [];
       if (!hit) instances = instances.map((d) => ({ ...d, amount: Math.floor(d.amount / 2) }));
@@ -361,13 +364,13 @@ export function castSpell(
       dc: line?.save_dc ?? 0,
       conditions: conditionsOn(m, "failed_save"),
     };
-    const resolved = resolveSave(effect, partsFor(true), targets, rng, decide, potent);
+    const resolved = resolveSave(effect, partsFor(true), targets, rng, decide, potent, spell.name);
     shared = resolved.damage;
     results.push(...resolved.targets);
   } else if (projectiles) {
     // Darts that hit automatically: one roll for all of them, a feature's `one_roll` bonus on
     // the first dart only.
-    shared = parts.length && targets.length ? rollDamage(parts, { rng }) : null;
+    shared = parts.length && targets.length ? rollDamage(parts, { rng, what: spell.name }) : null;
     for (const [dart, index] of aimed.entries()) {
       const add = extra(dart === 0);
       const instances = shared
@@ -377,7 +380,7 @@ export function castSpell(
     }
   } else {
     if (critical && parts.length && targets.length) {
-      shared = rollDamage(partsFor(true), { critical: true, rng });
+      shared = rollDamage(partsFor(true), { critical: true, rng, what: spell.name });
     }
     const rolled = sharedDamage();
     for (const [i, target] of targets.entries()) {
@@ -412,7 +415,15 @@ export function castSpell(
     }
     const dc = line?.save_dc ?? 0;
     const effect = { ...f.save, dc, conditions: [] };
-    const resolved = resolveSave(effect, followParts, [...targets, ...nearby], rng, decide);
+    const resolved = resolveSave(
+      effect,
+      followParts,
+      [...targets, ...nearby],
+      rng,
+      decide,
+      false,
+      spell.name,
+    );
     follow_up = { ability: f.save.ability, dc, damage: resolved.damage, targets: resolved.targets };
   }
 
@@ -424,7 +435,7 @@ export function castSpell(
       const { count, sides } = parseDiceExpression(m.upcast.heal);
       healParts.push({ dice: `${count * above}d${sides}`, bonus: 0, type: "healing" });
     }
-    const healing = rollDamage(healParts, { rng }).total;
+    const healing = rollDamage(healParts, { rng, what: spell.name }).total;
     for (const [i, target] of targets.entries()) {
       const current = results[i] ?? targetResult(i, target, {});
       const actions: PlayAction[] = [...current.actions, { type: "heal", amount: healing }];
@@ -540,9 +551,10 @@ function resolveSave(
   rng: Rng,
   decide: Decide,
   potent = false,
+  what?: string,
 ): { damage: RolledDamage | null; targets: SpellTargetResult[] } {
   const saves = targets.map((t) => rollSavingThrow(t, effect.ability, effect.dc, { rng, decide }));
-  const damage = parts.length && targets.length ? rollDamage(parts, { rng }) : null;
+  const damage = parts.length && targets.length ? rollDamage(parts, { rng, what }) : null;
   const results = targets.map((target, i) => {
     const save = saves[i] as SaveResult;
     let instances = damage ? toInstances(damage) : [];
@@ -563,15 +575,21 @@ function resolveSave(
 
 /**
  * Targets save against an effect, the damage rolled once for all of them (`resolveSave`): a
- * zone's save when creatures enter it or end their turn there.
+ * zone's save when creatures enter it or end their turn there. `by` rolls the damage (the
+ * zone's caster), `what` names it.
  */
 export function saveAgainst(
   effect: SaveEffect,
   parts: readonly DamagePart[],
   targets: readonly Combatant[],
-  { rng = mathRng, decide = (d) => d.recommended }: { rng?: Rng; decide?: Decide } = {},
+  {
+    rng = mathRng,
+    decide = (d) => d.recommended,
+    by,
+    what,
+  }: { rng?: Rng; decide?: Decide; by?: string | null; what?: string } = {},
 ): { damage: RolledDamage | null; targets: SpellTargetResult[] } {
-  return resolveSave(effect, parts, targets, rng, decide);
+  return resolveSave(effect, parts, targets, rollingFor(rng, by), decide, false, what);
 }
 
 export interface SaveActionResult {
@@ -601,7 +619,9 @@ export function useSaveAction(
       message("rule.no_saving_throw_action", { name: user.name, action: name, known }),
     );
   }
-  const resolved = resolveSave(action, action.damage_parts, targets, rng, decide);
+  // The user's damage dice (each target's save is its own).
+  const roller = rollingFor(rng, user.id);
+  const resolved = resolveSave(action, action.damage_parts, targets, roller, decide, false, name);
   return {
     action: action.name,
     ability: action.ability,
