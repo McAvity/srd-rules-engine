@@ -477,10 +477,17 @@ const n = z.int();
  * `effects`.
  */
 const manual = z.boolean().optional();
+/**
+ * `force` on an action taken in turns: the GM overrides a refusal of legality
+ * (`FORCEABLE_REFUSALS`: turn, economy, range, movement, resources); the action applies, a cost
+ * that can't be paid isn't spent, and the log notes each override (`override.applied`).
+ */
+const force = z.boolean().optional();
 export const ECONOMY = ["action", "bonus_action", "reaction"] as const;
 
 const AttackActionSchema = z.object({
   type: z.literal("attack"),
+  force,
   id: z.string(),
   target: z.string(),
   attack: z.string(),
@@ -510,6 +517,7 @@ const AttackActionSchema = z.object({
 
 const UnarmedActionSchema = z.object({
   type: z.literal("unarmed"),
+  force,
   id: z.string(),
   target: z.string(),
   option: z.enum(["grapple", "shove"]),
@@ -521,6 +529,7 @@ const UnarmedActionSchema = z.object({
 
 const CastActionSchema = z.object({
   type: z.literal("cast"),
+  force,
   id: z.string(),
   spell: z.string(),
   via: z.string().optional(),
@@ -564,6 +573,7 @@ const CastActionSchema = z.object({
 
 const MoveActionSchema = z.object({
   type: z.literal("move"),
+  force,
   id: z.string(),
   feet: n.min(0).optional(),
   to: z.object({ x: n, y: n }).optional(),
@@ -575,6 +585,7 @@ const MoveActionSchema = z.object({
 
 const HelpActionSchema = z.object({
   type: z.literal("help"),
+  force,
   id: z.string(),
   target: z.string(),
   skill: z.enum(SKILLS).optional(),
@@ -651,7 +662,7 @@ export const EncounterActionSchema = z
     z.object({ type: z.literal("start") }),
     z.object({ type: z.literal("next_turn") }),
     z.object({ type: z.literal("end") }),
-    z.object({ type: z.literal("use"), id: z.string(), what: z.enum(ECONOMY) }),
+    z.object({ type: z.literal("use"), force, id: z.string(), what: z.enum(ECONOMY) }),
     /**
      * Move `feet`, or to the square `to`, or along `path` (each square next to the one before,
      * ending at the destination). Each square costs 5 feet, 10 if it's Difficult Terrain (the
@@ -723,10 +734,16 @@ export const EncounterActionSchema = z
      * `bonus_action: true` takes it as a Bonus Action instead (a feature that allows it: Cunning
      * Action), as for `disengage` and `dodge`.
      */
-    z.object({ type: z.literal("dash"), id: z.string(), bonus_action: z.boolean().optional() }),
+    z.object({
+      type: z.literal("dash"),
+      force,
+      id: z.string(),
+      bonus_action: z.boolean().optional(),
+    }),
     /** The Disengage action: its movement doesn't provoke Opportunity Attacks this turn. */
     z.object({
       type: z.literal("disengage"),
+      force,
       id: z.string(),
       bonus_action: z.boolean().optional(),
     }),
@@ -735,7 +752,12 @@ export const EncounterActionSchema = z
      * Disadvantage and it makes Dexterity saves with Advantage (not while Incapacitated or at
      * Speed 0).
      */
-    z.object({ type: z.literal("dodge"), id: z.string(), bonus_action: z.boolean().optional() }),
+    z.object({
+      type: z.literal("dodge"),
+      force,
+      id: z.string(),
+      bonus_action: z.boolean().optional(),
+    }),
     /**
      * The Help action: Advantage on an ally's next attack roll against `target` (an enemy), or,
      * with `skill` (one the helper is proficient in), on `target`'s (an ally's) next check with
@@ -755,12 +777,13 @@ export const EncounterActionSchema = z
      */
     z.object({
       type: z.literal("escape"),
+      force,
       id: z.string(),
       skill: z.enum(["athletics", "acrobatics"]).optional(),
       effect: z.string().optional(),
     }),
     /** Right itself from Prone: half its Speed in movement. */
-    z.object({ type: z.literal("stand"), id: z.string() }),
+    z.object({ type: z.literal("stand"), force, id: z.string() }),
     /**
      * The Hide action: a DC 15 Dexterity (Stealth) check; on a success it's hidden (Invisible,
      * `hidden` holds the total). With positions it needs Three-Quarters or Total Cover from every
@@ -770,6 +793,7 @@ export const EncounterActionSchema = z
      */
     z.object({
       type: z.literal("hide"),
+      force,
       id: z.string(),
       bonus_action: z.boolean().optional(),
       obscured: z.boolean().optional(),
@@ -784,6 +808,7 @@ export const EncounterActionSchema = z
      */
     z.object({
       type: z.literal("search"),
+      force,
       id: z.string(),
       skill: z.enum(["perception", "insight", "medicine", "survival"]).optional(),
       target: z.string().optional(),
@@ -792,6 +817,7 @@ export const EncounterActionSchema = z
     /** The Study action: an Intelligence check (Arcana, History, Investigation, Nature, Religion). */
     z.object({
       type: z.literal("study"),
+      force,
       id: z.string(),
       skill: z.enum(["arcana", "history", "investigation", "nature", "religion"]).optional(),
       dc: n.optional(),
@@ -803,13 +829,14 @@ export const EncounterActionSchema = z
      */
     z.object({
       type: z.literal("influence"),
+      force,
       id: z.string(),
       skill: z.enum(["deception", "intimidation", "performance", "persuasion", "animal-handling"]),
       target: z.string().optional(),
       dc: n.optional(),
     }),
     /** The Utilize action: use an object that needs an action (`what`, for the notes). */
-    z.object({ type: z.literal("utilize"), id: z.string(), what: z.string().optional() }),
+    z.object({ type: z.literal("utilize"), force, id: z.string(), what: z.string().optional() }),
     /**
      * The Ready action: `trigger` (the caller watches for it) and the action to take then with the
      * reaction (`action`: an attack, an Unarmed Strike, a spell with a casting time of an action, a
@@ -818,12 +845,13 @@ export const EncounterActionSchema = z
      */
     z.object({
       type: z.literal("ready"),
+      force,
       id: z.string(),
       trigger: z.string(),
       action: ReadiedActionSchema,
     }),
     /** Take the readied action now, with the reaction (the trigger happened). */
-    z.object({ type: z.literal("release"), id: z.string() }),
+    z.object({ type: z.literal("release"), force, id: z.string() }),
     /**
      * Apply play actions to a combatant (what `makeAttack`, `castSpell` and `useSaveAction` return):
      * a character's go to its state; a monster supports damage, heal, set_temp_hp and conditions.
@@ -865,6 +893,7 @@ export const EncounterActionSchema = z
      */
     z.object({
       type: z.literal("feature"),
+      force,
       id: z.string(),
       feature: z.string(),
       target: z.string().optional(),
@@ -878,6 +907,7 @@ export const EncounterActionSchema = z
     /** A saving throw effect (a monster's breath weapon) against targets; uses the action. */
     z.object({
       type: z.literal("save_action"),
+      force,
       id: z.string(),
       ability: z.string(),
       targets: z.array(z.string()).optional(),
@@ -950,6 +980,7 @@ export const EncounterActionSchema = z
      */
     z.object({
       type: z.literal("legendary"),
+      force,
       id: z.string(),
       action: z.string(),
       target: z.string().optional(),

@@ -116,3 +116,19 @@ export const REFUSAL_CODES = [
   "refused",
 ] as const;
 export type RefusalCode = (typeof REFUSAL_CODES)[number];
+/**
+ * The refusals a GM can override with `force: true` on an action: legality (turn, economy, range,
+ * movement, resources). The rest (unknown ids, missing input, a defeated creature, no path) still
+ * refuse.
+ */
+export const FORCEABLE_REFUSALS = [
+  "not_your_turn",
+  "incapacitated",
+  "economy_used",
+  "no_attacks_left",
+  "once_per_turn",
+  "out_of_range",
+  "off_map",
+  "no_movement",
+  "no_resources",
+] as const satisfies readonly RefusalCode[];

@@ -8,6 +8,13 @@ migrated when it's loaded.
 ## [Unreleased]
 
 ### Added
+- GM override: `force: true` on an action taken in turns (`attack`, `cast`, `move`, `feature`,
+  `legendary`…) applies it despite a refusal of legality, one of `FORCEABLE_REFUSALS`
+  (`not_your_turn`, `incapacitated`, `economy_used`, `no_attacks_left`, `once_per_turn`,
+  `out_of_range`, `off_map`, `no_movement`, `no_resources`), each noted as `override.applied`
+  ("GM override: Brakka has no attacks left this turn"). A cost that can't be paid isn't spent (no
+  slot of that level left: the spell is cast without one). Other refusals still refuse.
+  `checkAction` with `force` lists what it would override (`overrides`, `override_codes`).
 - Dice rolled at the table: `dice: "engine" | "table"` on the encounter (default `engine`) and on
   each combatant (`null`: the encounter's; `add_character` / `add_monster` take it), changed with
   `{ type: "set_dice", id?, mode }`. With `table`, each roll the combatant makes (attack rolls,

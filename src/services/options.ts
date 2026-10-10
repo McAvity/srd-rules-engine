@@ -72,7 +72,16 @@ function dryRun(
 ): { check: ActionCheck; result: EncounterResult["result"] } {
   try {
     const r = applyEncounterAction(encounter, action, { ...ctx, rng: middle }, { events: false });
-    const check = { ok: true, reasons: [], codes: [], reason_messages: [] };
+    // `force`: what the GM overrides (each `override.applied` note carries its reason).
+    const overrides = r.messages
+      .filter((m) => m.code === "override.applied")
+      .map((m) => m.params.reason as Message);
+    const forced = "force" in action && action.force === true;
+    const check: ActionCheck = { ok: true, reasons: [], codes: [], reason_messages: [] };
+    if (forced) {
+      check.overrides = overrides;
+      check.override_codes = overrides.map((m) => refusalCode(m.text));
+    }
     return { check, result: r.result };
   } catch (error) {
     if (error instanceof EncounterError) {
@@ -82,6 +91,9 @@ function dryRun(
           reasons: [...error.messages],
           codes: [...error.codes],
           reason_messages: [...error.details],
+          ...("force" in action && action.force === true
+            ? { overrides: [], override_codes: [] }
+            : {}),
         },
         result: null,
       };

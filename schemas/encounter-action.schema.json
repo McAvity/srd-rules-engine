@@ -333,6 +333,9 @@
               "type": "string",
               "const": "use"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -357,6 +360,9 @@
             "type": {
               "type": "string",
               "const": "move"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -831,6 +837,9 @@
               "type": "string",
               "const": "dash"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -849,6 +858,9 @@
             "type": {
               "type": "string",
               "const": "disengage"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -869,6 +881,9 @@
               "type": "string",
               "const": "dodge"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -887,6 +902,9 @@
             "type": {
               "type": "string",
               "const": "help"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -930,6 +948,9 @@
             "type": {
               "type": "string",
               "const": "unarmed"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -979,6 +1000,9 @@
               "type": "string",
               "const": "escape"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -1005,6 +1029,9 @@
               "type": "string",
               "const": "stand"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             }
@@ -1020,6 +1047,9 @@
             "type": {
               "type": "string",
               "const": "hide"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -1059,6 +1089,9 @@
               "type": "string",
               "const": "search"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -1092,6 +1125,9 @@
               "type": "string",
               "const": "study"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -1122,6 +1158,9 @@
             "type": {
               "type": "string",
               "const": "influence"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -1158,6 +1197,9 @@
               "type": "string",
               "const": "utilize"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -1177,6 +1219,9 @@
               "type": "string",
               "const": "ready"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -1191,6 +1236,9 @@
                     "type": {
                       "type": "string",
                       "const": "attack"
+                    },
+                    "force": {
+                      "type": "boolean"
                     },
                     "id": {
                       "type": "string"
@@ -1305,6 +1353,9 @@
                       "type": "string",
                       "const": "unarmed"
                     },
+                    "force": {
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -1352,6 +1403,9 @@
                     "type": {
                       "type": "string",
                       "const": "cast"
+                    },
+                    "force": {
+                      "type": "boolean"
                     },
                     "id": {
                       "type": "string"
@@ -1542,6 +1596,9 @@
                       "type": "string",
                       "const": "move"
                     },
+                    "force": {
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -1605,6 +1662,9 @@
                       "type": "string",
                       "const": "help"
                     },
+                    "force": {
+                      "type": "boolean"
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -1657,6 +1717,9 @@
             "type": {
               "type": "string",
               "const": "release"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -1749,6 +1812,9 @@
             "type": {
               "type": "string",
               "const": "attack"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -1863,6 +1929,9 @@
               "type": "string",
               "const": "feature"
             },
+            "force": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
@@ -1917,6 +1986,9 @@
             "type": {
               "type": "string",
               "const": "save_action"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -2003,6 +2075,9 @@
             "type": {
               "type": "string",
               "const": "cast"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"
@@ -2372,6 +2447,9 @@
             "type": {
               "type": "string",
               "const": "legendary"
+            },
+            "force": {
+              "type": "boolean"
             },
             "id": {
               "type": "string"

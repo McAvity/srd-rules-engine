@@ -772,6 +772,8 @@ export const MESSAGES_EN = {
   "dice.question":
     "{name}: roll {count}d{sides}{keep, select, higher { and keep the higher} lower { and keep the lower} other {}} for {purpose}.",
   "refusal.no_roll_to_enter": "There's no roll to enter",
+  // `force: true`: a refusal the GM overrode.
+  "override.applied": "GM override: {reason}",
   "refusal.roll_count": "Enter {count, plural, one {# die} other {# dice}}, not {given}",
   "refusal.roll_range": "A d{sides} rolls 1 to {sides}, not {value}",
   "refusal.encounter_dice_mode": "The encounter's dice are engine or table",

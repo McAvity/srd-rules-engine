@@ -34,7 +34,7 @@ import {
   type SpellMark,
   type Zone,
 } from "../models/encounter";
-import type { EncounterEvent, RefusalCode } from "../models/events";
+import { type EncounterEvent, FORCEABLE_REFUSALS, type RefusalCode } from "../models/events";
 import type { Message } from "../models/messages";
 import type { CharacterState, PlayAction } from "../models/state";
 import {
@@ -478,6 +478,15 @@ function run(
   // What happened, as messages; sentences from play and damage have code `text` for now.
   const notes: Message[] = [];
   const states: Record<string, CharacterState> = {};
+  // `force`: the GM overrides a refusal of legality (`FORCEABLE_REFUSALS`), noted in the log.
+  const forcing = "force" in action && action.force === true;
+  const forceable = (reason: Message) =>
+    forcing && (FORCEABLE_REFUSALS as readonly string[]).includes(refusalCode(reason.text));
+  /** A refusal the GM can override: with `force`, a note instead, and the action goes on. */
+  const refuse = (reason: Message): void => {
+    if (!forceable(reason)) fail(reason);
+    notes.push(message("override.applied", { reason }));
+  };
   // `release`: the readied action, taken with the reaction (checked here, spent at the end).
   let releasing: { id: string; held: boolean } | null = null;
   if (action.type === "release") {
@@ -486,7 +495,7 @@ function run(
       e.combatants.find((x) => x.id === id) ??
       fail(message("refusal.no_combatant_encounter", { id }));
     const readied = c.readied ?? fail(message("refusal.nothing_readied", { name: c.name }));
-    if (c.used.reaction) fail(message("refusal.already_used_reaction", { name: c.name }));
+    if (c.used.reaction) refuse(message("refusal.already_used_reaction", { name: c.name }));
     releasing = { id: c.id, held: readied.held };
     notes.push(message("readied.taken", { name: c.name, trigger: readied.trigger }));
     action = readied.action as EncounterAction;
@@ -541,6 +550,11 @@ function run(
     try {
       r = applyAction(ref.build, ref.state, ctx.catalog, a, { rng: rollingFor(rng, c.id) });
     } catch (error) {
+      // Forced, a cost the character can't pay (a slot, a feature's use) isn't spent.
+      if (error instanceof PlayError && error.details.every(forceable)) {
+        notes.push(...error.details.map((reason) => message("override.applied", { reason })));
+        return;
+      }
       if (error instanceof PlayError) {
         throw new EncounterError(
           error.details.map((reason) => message("refusal.character", { name: c.name, reason })),
@@ -1256,7 +1270,7 @@ function run(
   /** With `positions: required` and anyone on the map, a creature off it is refused. */
   const offMap = (...who: EncounterCombatant[]): void => {
     if (e.positions !== "required" || !e.combatants.some((x) => x.position)) return;
-    for (const x of who) if (!x.position) fail(message("refusal.off_map", { name: x.name }));
+    for (const x of who) if (!x.position) refuse(message("refusal.off_map", { name: x.name }));
   };
   const enemiesNear = (c: EncounterCombatant): EncounterCombatant[] => enemiesWithin5(e, ctx, c);
   /**
@@ -1292,7 +1306,7 @@ function run(
       // An Opportunity Attack happens just before the target leaves the reach.
       const reach = line.reach ?? 5;
       if (!options.opportunity && distance > reach) {
-        fail(
+        refuse(
           message("refusal.feet_away_out_reach", {
             target: t.name,
             distance,
@@ -1304,7 +1318,7 @@ function run(
     } else {
       const range = line.range;
       if (range && distance > range.long) {
-        fail(
+        refuse(
           message("refusal.feet_away_beyond_range", {
             target: t.name,
             distance,
@@ -1396,7 +1410,7 @@ function run(
     for (const id of given ?? []) {
       const d = checkedFeet(c, find(id));
       if (line.range && d !== null && d > line.range) {
-        fail(
+        refuse(
           message("refusal.out_of_range_ft", {
             target: find(id).name,
             d,
@@ -1435,7 +1449,7 @@ function run(
     if (!point || !c.position || reach === null) return;
     const d = gridDistance(point, 1, c.position, spaceOf(ctx, c));
     if (d > reach)
-      fail(message("refusal.point_feet_away_out", { d, spell: spell.name, range: spell.range }));
+      refuse(message("refusal.point_feet_away_out", { d, spell: spell.name, range: spell.range }));
   };
   /** A target out of a positioned caster's spell range is refused ("60 feet", "Touch"). */
   const checkSpellRange = (
@@ -1448,7 +1462,7 @@ function run(
     for (const t of targets) {
       const d = checkedFeet(c, t);
       if (d !== null && d > limit) {
-        fail(
+        refuse(
           message("refusal.feet_away_out_range", {
             target: t.name,
             d,
@@ -1517,7 +1531,7 @@ function run(
       return rider?.once_per_turn ? [rider.id] : [];
     });
     const again = onceIds.find((id) => c.riders_used.includes(id));
-    if (again) fail(message("refusal.already_used_turn", { name: c.name, again }));
+    if (again) refuse(message("refusal.already_used_turn", { name: c.name, again }));
     for (const r of riders) {
       const rider = line?.riders.find((x) => x.id === r.rider || x.name === r.rider);
       if (rider?.own_turn && current()?.id !== c.id) {
@@ -1945,7 +1959,7 @@ function run(
       for (const p of [at.from, at.to]) {
         const d = distanceToPoint(me, p);
         if (range !== null && d > range)
-          fail(message("refusal.point_feet_away_out_2", { d, spell: spell.name }));
+          refuse(message("refusal.point_feet_away_out_2", { d, spell: spell.name }));
       }
       return {
         squares: [],
@@ -1967,7 +1981,7 @@ function run(
     for (const p of [at.from, at.to]) {
       const d = gridDistance(p, 1, me.position, me.size);
       if (range !== null && d > range)
-        fail(message("refusal.feet_away_out_range_2", { x: p.x, y: p.y, d, spell: spell.name }));
+        refuse(message("refusal.feet_away_out_range_2", { x: p.x, y: p.y, d, spell: spell.name }));
     }
     const keys = new Set(line.map(squareKey));
     const zone = [...line];
@@ -2471,25 +2485,26 @@ function run(
   const onTurn = (c: EncounterCombatant, what: string) => {
     if (e.round === 0) fail(message("refusal.fight_hasnt_started"));
     if (releasing?.id === c.id) return; // a readied action, with the reaction
-    if (current()?.id !== c.id) fail(message("refusal.isnt_turn_reaction", { name: c.name, what }));
+    if (current()?.id !== c.id)
+      refuse(message("refusal.isnt_turn_reaction", { name: c.name, what }));
   };
   const canAct = (c: EncounterCombatant) => {
     if (c.defeated) fail(message("refusal.defeated", { name: c.name }));
     if (conditionsOf(ctx, c).has("incapacitated"))
-      fail(message("refusal.incapacitated", { name: c.name }));
+      refuse(message("refusal.incapacitated", { name: c.name }));
   };
   /** One attack's place in the economy: the Attack action (and its extra attacks) or a reaction. */
   const spendAttack = (c: EncounterCombatant, reaction: boolean | undefined): void => {
     if (releasing?.id === c.id) return; // the reaction, spent at the end
     if (reaction) {
       if (e.round === 0) fail(message("refusal.fight_hasnt_started"));
-      if (c.used.reaction) fail(message("refusal.already_used_reaction", { name: c.name }));
+      if (c.used.reaction) refuse(message("refusal.already_used_reaction", { name: c.name }));
       c.used.reaction = true;
       return;
     }
     onTurn(c, "attack");
     if (c.attacks_left > 0) c.attacks_left -= 1;
-    else if (c.used.action) fail(message("refusal.no_attacks_left_turn", { name: c.name }));
+    else if (c.used.action) refuse(message("refusal.no_attacks_left_turn", { name: c.name }));
     else {
       // The Attack action: Extra Attack or Multiattack give more attacks with it.
       c.used.action = true;
@@ -2502,7 +2517,7 @@ function run(
     canAct(c);
     if (releasing?.id === c.id) return; // the reaction, spent at the end
     const what = bonus ? "bonus_action" : "action";
-    if (c.used[what]) fail(message("refusal.economy_used_turn", { name: c.name, what }));
+    if (c.used[what]) refuse(message("refusal.economy_used_turn", { name: c.name, what }));
     c.used[what] = true;
     if (bonus) c.extended = true; // a Bonus Action extends Rage
   };
@@ -2756,7 +2771,7 @@ function run(
           fail(message("refusal.everyone_waits", { name: by?.name ?? message("word.someone") }));
         }
         const speed = speedOf(ctx, c, e);
-        if (speed === 0) fail(message("refusal.cant_move_speed", { name: c.name }));
+        if (speed === 0) refuse(message("refusal.cant_move_speed", { name: c.name }));
         if (!action.to && !action.path) {
           notes.push(
             exploreNote(c, action.feet ?? fail(message("refusal.give_feet_moved_square")), speed),
@@ -2802,7 +2817,7 @@ function run(
         action.feet ??
         (path ? steps.reduce((a, b) => a + b, 0) : fail(message("refusal.give_feet_moved_square")));
       if (spent + feet > budget) {
-        fail(message("refusal.move_more_feet_turn", { name: c.name, left }));
+        refuse(message("refusal.move_more_feet_turn", { name: c.name, left }));
       }
       if (!path) {
         if (!released) c.moved += feet;
@@ -3004,7 +3019,7 @@ function run(
         // "You momentarily distract an enemy within 5 feet of you."
         const d = checkedFeet(c, t);
         if (d !== null && d > 5)
-          fail(message("refusal.feet_away_help_distracts", { target: t.name, d }));
+          refuse(message("refusal.feet_away_help_distracts", { target: t.name, d }));
       }
       takeAction(c, "Help");
       e.helps.push({ by: c.id, on: t.id, skill: action.skill ?? null });
@@ -3035,7 +3050,7 @@ function run(
       }
       const d = checkedFeet(c, t);
       if (d !== null && d > 5)
-        fail(message("refusal.feet_away_unarmed_strike", { target: t.name, d }));
+        refuse(message("refusal.feet_away_unarmed_strike", { target: t.name, d }));
       spendAttack(c, action.reaction);
       c.extended = true; // forcing a saving throw extends Rage
       if (action.manual) {
@@ -3134,12 +3149,12 @@ function run(
       const own = c.monster !== null ? c.conditions : characterRef(ctx, c).state.conditions;
       if (!own.includes("prone")) fail(message("refusal.isnt_prone", { name: c.name }));
       const speed = speedOf(ctx, c, e);
-      if (speed === 0) fail(message("refusal.cant_right_itself_speed", { name: c.name }));
+      if (speed === 0) refuse(message("refusal.cant_right_itself_speed", { name: c.name }));
       // "spend an amount of movement equal to half your Speed (round down)"
       const cost = Math.floor(speed / 2);
       const budget = speed + c.extra_movement;
       if (c.moved + cost > budget)
-        fail(message("refusal.needs_feet_movement_stand", { name: c.name, cost }));
+        refuse(message("refusal.needs_feet_movement_stand", { name: c.name, cost }));
       c.moved += cost;
       applyTo(c, [{ type: "remove_condition", condition: "prone" }]);
       notes.push(message("action.stand_up", { name: c.name, feet: cost }));
@@ -3423,15 +3438,15 @@ function run(
         onTurn(c, "attack");
         const granted = c.granted_attacks;
         if (!granted || granted.count === 0)
-          fail(message("refusal.no_granted_attacks_left", { name: c.name }));
-        if (granted.attack !== action.attack)
+          refuse(message("refusal.no_granted_attacks_left", { name: c.name }));
+        if (granted && granted.attack !== action.attack)
           fail(message("refusal.granted_attacks_are", { attack: granted.attack }));
-        granted.count -= 1;
+        if (granted && granted.count > 0) granted.count -= 1;
       } else if (action.cleave) {
         // SRD "Cleave": after a melee hit with this weapon, an attack against a second creature
         // within 5 feet of the first, once per turn; it isn't one of the Attack action's attacks.
         onTurn(c, "attack");
-        if (c.cleave_used) fail(message("refusal.already_made_cleave_attack", { name: c.name }));
+        if (c.cleave_used) refuse(message("refusal.already_made_cleave_attack", { name: c.name }));
         const from =
           c.cleave ?? fail(message("refusal.hasnt_hit_creature_cleave", { name: c.name }));
         if (from.attack !== action.attack)
@@ -3457,7 +3472,7 @@ function run(
           notes.push(message("mastery.nick", { name: c.name }));
         } else {
           if (c.used.bonus_action)
-            fail(message("refusal.already_used_bonus_action", { name: c.name }));
+            refuse(message("refusal.already_used_bonus_action", { name: c.name }));
           c.used.bonus_action = true;
         }
       } else {
@@ -3484,8 +3499,8 @@ function run(
       onTurn(c, "act");
       canAct(c);
       if (c.expended.includes(action.ability))
-        fail(message("refusal.hasnt_recharged", { name: c.name, ability: action.ability }));
-      if (c.used.action) fail(message("refusal.already_used_action_turn", { name: c.name }));
+        refuse(message("refusal.hasnt_recharged", { name: c.name, ability: action.ability }));
+      if (c.used.action) refuse(message("refusal.already_used_action_turn", { name: c.name }));
       const user = encounterCombatant(e, c.id, ctx);
       const line = user.save_actions.find((a) => a.name === action.ability);
       if (c.monster !== null)
@@ -3504,7 +3519,7 @@ function run(
       if (c.monster === null) fail(message("refusal.no_legendary_actions", { name: c.name }));
       if (e.round === 0) fail(message("refusal.fight_hasnt_started"));
       if (current()?.id === c.id) {
-        fail(message("refusal.takes_legendary_actions_after", { name: c.name }));
+        refuse(message("refusal.takes_legendary_actions_after", { name: c.name }));
       }
       canAct(c);
       const def = monsterDef(ctx, c);
@@ -3514,7 +3529,7 @@ function run(
           : def.legendary_uses.uses
         : 0;
       if (c.legendary_used >= perRound) {
-        fail(message("refusal.no_legendary_action_uses", { name: c.name }));
+        refuse(message("refusal.no_legendary_action_uses", { name: c.name }));
       }
       const user = encounterCombatant(e, c.id, ctx);
       const line =
@@ -3527,9 +3542,9 @@ function run(
           }),
         );
       if (line.once_per_round && c.legendary_taken.includes(line.name)) {
-        fail(message("refusal.cant_take_again_until", { name: c.name, attack: line.name }));
+        refuse(message("refusal.cant_take_again_until", { name: c.name, attack: line.name }));
       }
-      c.legendary_used += 1;
+      if (c.legendary_used < perRound) c.legendary_used += 1; // forced: nothing more to spend
       if (line.once_per_round) c.legendary_taken.push(line.name);
       notes.push(
         message("legendary.action", {
@@ -3632,7 +3647,7 @@ function run(
           fail(message("refusal.doesnt_affect", { feature: f.name, name: c.name }));
         const d = f.range === null ? null : checkedFeet(c, x);
         if (f.range !== null && d !== null && d > f.range) {
-          fail(
+          refuse(
             message("refusal.feet_away_out_range_3", {
               other: x.name,
               d,
@@ -3671,14 +3686,14 @@ function run(
       if (f.economy === "reaction") {
         if (e.round === 0) fail(message("refusal.fight_hasnt_started"));
         canAct(c);
-        if (c.used.reaction) fail(message("refusal.already_used_reaction", { name: c.name }));
+        if (c.used.reaction) refuse(message("refusal.already_used_reaction", { name: c.name }));
         c.used.reaction = true;
       } else if (f.economy === "free") {
         onTurn(c, `use ${f.name}`);
         canAct(c);
       } else takeAction(c, f.name, f.economy === "bonus_action");
       if (f.once_per_turn && c.features_used.includes(f.key)) {
-        fail(message("refusal.already_used_turn_2", { name: c.name, feature: f.name }));
+        refuse(message("refusal.already_used_turn_2", { name: c.name, feature: f.name }));
       }
       if (f.after_hit && !c.hits.includes(t.id))
         fail(message("refusal.hasnt_hit_turn", { name: c.name, target: t.name }));
@@ -3880,7 +3895,7 @@ function run(
         slot_level = fixed;
         spellcasting = line.action;
         if (line.recharge && c.expended.includes(line.action)) {
-          fail(message("refusal.hasnt_recharged_2", { name: c.name, action: line.action }));
+          refuse(message("refusal.hasnt_recharged_2", { name: c.name, action: line.action }));
         }
       }
       const released = releasing?.id === c.id;

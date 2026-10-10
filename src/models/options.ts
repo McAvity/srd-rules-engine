@@ -175,5 +175,11 @@ export const ActionCheckSchema = z.object({
   codes: z.array(z.enum(REFUSAL_CODES)),
   /** `reasons` as messages (for translation). */
   reason_messages: z.array(MessageSchema).default([]),
+  /**
+   * Only with `force: true`: the refusals the GM would override (`ok` is then true), as messages,
+   * and their codes (`FORCEABLE_REFUSALS`).
+   */
+  overrides: z.array(MessageSchema).optional(),
+  override_codes: z.array(z.enum(REFUSAL_CODES)).optional(),
 });
 export type ActionCheck = z.infer<typeof ActionCheckSchema>;

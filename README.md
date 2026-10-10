@@ -295,7 +295,8 @@ conditions ending with it, and Rage ending when it isn't extended. A table that 
 dice declares an action by hand (`manual: true`): the engine checks it and spends its costs, and
 the outcome is applied with `effects`. Or it rolls its own dice and lets the engine resolve them:
 with `dice: "table"` (the encounter's or a combatant's) each roll stops the action and asks for
-the numbers (`enter_roll`).
+the numbers (`enter_roll`). A GM can rule that something happens anyway: `force: true` applies an
+action refused for its legality (turn, economy, range, movement, resources), noting the override.
 
 What a combatant can do now, for a UI's buttons: `combatantOptions(encounter, id, ctx)` lists
 every attack, spell, feature, monster ability, legendary action and standard action as an

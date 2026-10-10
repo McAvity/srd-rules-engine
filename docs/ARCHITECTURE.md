@@ -793,6 +793,16 @@ missing parameter or a message pasted into a string.
   Recharge), then stops before any outcome. The result is a `DeclaredResult` (actor, action,
   name, slot level, target ids) with a `manual.declared` note; the table applies the outcome with
   `effects`, so Resistance, Concentration saves and HP limits stay the engine's.
+- **GM override.** `force: true` on an action taken in turns turns a refusal of legality into a
+  note: `run` checks those with `refuse(reason)` instead of `fail`, which throws unless the action
+  is forced and the reason's refusal code is in `FORCEABLE_REFUSALS` (turn, Incapacitated,
+  economy, attacks left, once per turn, range and reach, off the map, movement, resources); then
+  it notes `override.applied` with the reason and the action goes on. A forced cost spends what
+  it can: a character's `PlayError` with only forceable reasons (no slot of that level left, no
+  uses of a feature) skips that play action, legendary uses stop at the round's maximum, an
+  economy flag already spent stays spent. Unknown ids, missing input, defeated creatures, paths,
+  Total Cover and refusals from the rules functions (`RuleError`) aren't forceable.
+  `checkAction` reports the overrides it would make.
 - **Dice rolled at the table.** `Rng.dice(request)` is told before each group of dice is drawn
   (`DiceRequest`: who rolls, count, sides, `keep` for Advantage or Disadvantage, purpose). The
   rules announce their dice (`roll`, `rollD20`, `rollDamage` take a purpose) and say whose they
