@@ -1,14 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-  applyDamage,
-  applyHealing,
-  type Character,
-  CharacterSchema,
-  fixedRng,
-  isAlive,
-  passivePerception,
-  savingThrow,
-} from "../src/index";
+import { type Character, CharacterSchema, fixedRng } from "../src/index";
+// Behind the HTTP routes `/v1/characters/{name}/alive`, `/passive-perception` and
+// `/v1/combat/saving-throw`; not exported.
+import { savingThrow } from "../src/rules/combat";
+import { isAlive, passivePerception } from "../src/services/combat";
 
 function makeCharacter(overrides: Partial<Character> = {}): Character {
   return CharacterSchema.parse({
@@ -51,13 +46,6 @@ describe("saving throws", () => {
 });
 
 describe("hit points", () => {
-  it("damage clamps to zero", () => {
-    expect(applyDamage(makeCharacter({ current_hit_points: 5 }), 100).current_hit_points).toBe(0);
-  });
-  it("healing clamps to max", () => {
-    const char = makeCharacter({ current_hit_points: 10, max_hit_points: 44 });
-    expect(applyHealing(char, 100).current_hit_points).toBe(44);
-  });
   it("is alive above 0 HP", () => {
     expect(isAlive(makeCharacter({ current_hit_points: 1 }))).toBe(true);
     expect(isAlive(makeCharacter({ current_hit_points: 0 }))).toBe(false);

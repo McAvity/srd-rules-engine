@@ -9,15 +9,13 @@
 
 import { type Catalog, lookup } from "../content/catalog";
 import type { CharacterBuild } from "../models/build";
-import {
-  ABILITY_NAMES,
-  type Ability,
-  type DamageType,
-  type MonsterDef,
-  type Skill,
-  type SpellArea,
-  type SpellDef,
-  skillName,
+import type {
+  Ability,
+  DamageType,
+  MonsterDef,
+  Skill,
+  SpellArea,
+  SpellDef,
 } from "../models/content";
 import {
   type EffectEnd,
@@ -2867,7 +2865,6 @@ function run(
         if (e.round === 0) fail(message("refusal.fight_hasnt_started"));
       } else onTurn(c, "act");
       canAct(c);
-      const label = action.what.replace("_", " ");
       if (c.used[action.what]) {
         fail(
           action.what === "reaction"

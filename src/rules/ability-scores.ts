@@ -1,16 +1,9 @@
 /** Ability score generation and validation (SRD 5.2.1, Character Creation step 3). */
 
 import type { AbilityMap, AbilityMethod } from "../models/build";
-import {
-  ABILITIES,
-  ABILITY_NAMES,
-  type Ability,
-  type CreationRules,
-  type PointBuyRules,
-} from "../models/content";
+import { ABILITIES, type Ability, type CreationRules, type PointBuyRules } from "../models/content";
 import type { Message } from "../models/messages";
-import { abilityModifier, signed } from "./dice";
-import { message, RuleError, texts } from "./messages";
+import { message, RuleError } from "./messages";
 import { mathRng, type Rng } from "./rng";
 
 export interface AbilityRoll {
@@ -96,17 +89,7 @@ export function pointBuyStatus(scores: AbilityMap, rules: PointBuyRules): PointB
 
 // --- Validation ---------------------------------------------------------------------------
 
-/** Errors in the base (pre-background) scores. Missing abilities are not errors. */
-export function baseScoreErrors(
-  method: AbilityMethod,
-  scores: AbilityMap,
-  rules: CreationRules,
-  rolledPool: readonly number[] = [],
-): string[] {
-  return texts(baseScoreMessages(method, scores, rules, rolledPool));
-}
-
-/** `baseScoreErrors` as messages. */
+/** Errors in the base (pre-background) scores, as messages. Missing abilities are not errors. */
 export function baseScoreMessages(
   method: AbilityMethod,
   scores: AbilityMap,
@@ -158,16 +141,7 @@ export function unassignedValues(
   return descending(multisetDifference(source, assigned));
 }
 
-export function backgroundBonusErrors(
-  bonus: AbilityMap,
-  allowed: readonly Ability[],
-  baseScores: AbilityMap,
-  cap: number,
-): string[] {
-  return texts(backgroundBonusMessages(bonus, allowed, baseScores, cap));
-}
-
-/** `backgroundBonusErrors` as messages. */
+/** Errors in the background's ability score increases, as messages. */
 export function backgroundBonusMessages(
   bonus: AbilityMap,
   allowed: readonly Ability[],
@@ -206,10 +180,6 @@ export function finalScores(baseScores: AbilityMap, bonus: AbilityMap): AbilityM
     if (base !== undefined) out[a] = base + (bonus[a] ?? 0);
   }
   return out;
-}
-
-export function formatModifier(score: number): string {
-  return signed(abilityModifier(score));
 }
 
 // --- helpers ------------------------------------------------------------------------------

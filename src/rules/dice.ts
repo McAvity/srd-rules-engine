@@ -31,11 +31,6 @@ export function parseDiceExpression(expression: string): DiceExpression {
   return { count, sides, modifier };
 }
 
-export function formatDiceExpression({ count, sides, modifier }: DiceExpression): string {
-  const base = `${count}d${sides}`;
-  return modifier === 0 ? base : `${base}${signed(modifier)}`;
-}
-
 /** Roll a dice expression (`purpose`: what it's for, when a table may roll it: `Rng.dice`). */
 export function roll(expression: string, rng: Rng = mathRng, purpose?: Message): RollResult {
   const { count, sides, modifier } = parseDiceExpression(expression);

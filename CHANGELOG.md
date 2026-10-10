@@ -226,6 +226,15 @@ migrated when it's loaded.
 ### Fixed
 - An encounter action of an unknown type did nothing; it's refused ("Unknown action").
 
+### Removed
+- **Breaking:** public exports nothing used: `baseScoreErrors`, `backgroundBonusErrors` and
+  `multiclassBlockers` (English-only twins of the builder's messages); `applyDamage`,
+  `applyHealing` (use the play actions `damage` / `heal`, or `takeDamage`); `isAlive`,
+  `passivePerception`, `savingThrow` and `AbilityFullNameSchema` (still behind the HTTP routes
+  `/v1/characters/{name}/alive`, `/passive-perception` and `/v1/combat/saving-throw`);
+  `formatDiceExpression`; the types `LevelUp`, `CharacterClass`, `AbilityScores` and `PatchOp`
+  (their schemas and constants stay).
+
 ## [0.1.0] - 2026-10-05
 
 ### Changed

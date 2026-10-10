@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   type Ability,
   type AbilityMap,
-  backgroundBonusErrors,
-  baseScoreErrors,
   pointBuyStatus,
   rollAbilityScore,
   rollAbilityScores,
@@ -11,7 +9,13 @@ import {
   seededRng,
   unassignedValues,
 } from "../src/index";
+import { backgroundBonusMessages, baseScoreMessages } from "../src/rules/ability-scores";
 import { catalog } from "./helpers";
+
+const baseScoreErrors = (...args: Parameters<typeof baseScoreMessages>) =>
+  baseScoreMessages(...args).map((m) => m.text);
+const backgroundBonusErrors = (...args: Parameters<typeof backgroundBonusMessages>) =>
+  backgroundBonusMessages(...args).map((m) => m.text);
 
 const all = (score: number): AbilityMap => ({
   str: score,

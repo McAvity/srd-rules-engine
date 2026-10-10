@@ -17,7 +17,7 @@ import {
   characterLevel,
   updateBuild,
 } from "../models/build";
-import { ABILITIES, ABILITY_NAMES, STEPS, type Step } from "../models/content";
+import { ABILITIES, STEPS, type Step } from "../models/content";
 import type { Message } from "../models/messages";
 import {
   backgroundBonusMessages,

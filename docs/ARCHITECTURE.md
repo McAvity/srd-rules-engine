@@ -761,8 +761,8 @@ rule refusing a roll throws `RuleError`, a `RangeError` whose `detail` the encou
 
 The builder's validation (`Issue.detail`), option reasons (`OptionView.unavailable_message`),
 repairs and setter notes (`BuildResult.messages`), the play sheet's state issues and the
-encounter options' labels and notes are messages as well; the string-returning helpers
-(`baseScoreErrors`, `multiclassBlockers`, `replaceErrors`) wrap message versions.
+encounter options' labels and notes are messages as well (`baseScoreMessages`,
+`multiclassBlockerMessages`, `replaceErrorMessages`; their English-only twins are gone).
 
 Code `text` (`params.text`) is left only for a reason an app passes as a plain string. Content
 (names, choice labels, descriptions) and the sheet's number breakdowns ("AC 17 = 16 Chain Mail +

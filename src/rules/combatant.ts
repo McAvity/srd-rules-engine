@@ -1074,12 +1074,6 @@ export function rollAbilityCheck(
   };
 }
 
-/** Advantage and Disadvantage cancel; several of either count once (SRD "Advantage"). */
-export function combineModes(mode: RollMode, advantage: boolean): RollMode {
-  if (!advantage) return mode;
-  return mode === "disadvantage" ? "normal" : "advantage";
-}
-
 const FULL_NAMES = {
   str: "strength",
   dex: "dexterity",

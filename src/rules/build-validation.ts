@@ -6,7 +6,7 @@ import { ABILITIES, type Step } from "../models/content";
 import type { Message } from "../models/messages";
 import { backgroundBonusMessages, baseScoreMessages, definedEntries } from "./ability-scores";
 import { type ActiveChoice, type Resolution, resolve } from "./build-resolution";
-import { message, texts } from "./messages";
+import { message } from "./messages";
 
 export const SEVERITIES = [
   "error", // an illegal choice that must be changed
@@ -226,20 +226,10 @@ function checkLevels(res: Resolution, catalog: Catalog): Issue[] {
 }
 
 /**
- * Why a character with these classes can't take a new class at `level`: every class needs a
- * score of at least 13 (by default) in its primary ability (any of them, or all of them for
- * classes such as the Monk).
+ * Why a character with these classes can't take a new class at `level`, as messages: every class
+ * needs a score of at least 13 (by default) in its primary ability (any of them, or all of them
+ * for classes such as the Monk).
  */
-export function multiclassBlockers(
-  res: Resolution,
-  catalog: Catalog,
-  classIds: readonly string[],
-  level: number,
-): string[] {
-  return texts(multiclassBlockerMessages(res, catalog, classIds, level));
-}
-
-/** `multiclassBlockers` as messages. */
 export function multiclassBlockerMessages(
   res: Resolution,
   catalog: Catalog,
@@ -271,16 +261,7 @@ export function multiclassBlockerMessages(
   return out;
 }
 
-/** Problems with a replacement's `[old, new]` answer (empty means no replacement). */
-export function replaceErrors(
-  res: Resolution,
-  choice: ActiveChoice,
-  picked: readonly string[] = res.selected(choice),
-): string[] {
-  return texts(replaceErrorMessages(res, choice, picked));
-}
-
-/** `replaceErrors` as messages. */
+/** Problems with a replacement's `[old, new]` answer, as messages (empty: no replacement). */
 export function replaceErrorMessages(
   res: Resolution,
   choice: ActiveChoice,

@@ -599,7 +599,6 @@ export const ReadiedActionSchema = z.discriminatedUnion("type", [
   MoveActionSchema,
   HelpActionSchema,
 ]);
-export type ReadiedAction = z.infer<typeof ReadiedActionSchema>;
 
 /** Everything that can happen in an encounter, as plain JSON. */
 export const EncounterActionSchema = z

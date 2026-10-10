@@ -14,7 +14,6 @@ export const CHARACTER_CLASSES = [
   "warlock",
   "wizard",
 ] as const;
-export type CharacterClass = (typeof CHARACTER_CLASSES)[number];
 
 export const ABILITY_FULL_NAMES = [
   "strength",
@@ -42,7 +41,6 @@ export const AbilityScoresSchema = z.object({
   wisdom: score,
   charisma: score,
 });
-export type AbilityScores = z.infer<typeof AbilityScoresSchema>;
 
 /** A combat-ready character snapshot, as used by the combat and spell rules. */
 export const CharacterSchema = z.object({

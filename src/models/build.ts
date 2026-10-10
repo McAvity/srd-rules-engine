@@ -27,7 +27,6 @@ export const LevelUpSchema = z.object({
   class_id: z.string(),
   hp: z.int().min(1).nullable().default(null),
 });
-export type LevelUp = z.infer<typeof LevelUpSchema>;
 
 /**
  * A (possibly incomplete) character build. Immutable: setters return a new build.

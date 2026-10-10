@@ -45,7 +45,6 @@ export {
   CharacterBuildSchema,
   characterLevel,
   createBuild,
-  type LevelUp,
   LevelUpSchema,
   parseBuild,
   updateBuild,
@@ -53,12 +52,9 @@ export {
 export {
   ABILITY_FULL_NAMES,
   type AbilityFullName,
-  AbilityFullNameSchema,
-  type AbilityScores,
   AbilityScoresSchema,
   CHARACTER_CLASSES,
   type Character,
-  type CharacterClass,
   CharacterSchema,
 } from "./models/character";
 export type {
@@ -231,7 +227,6 @@ export {
   PackManifestSchema,
   type Patch,
   PatchError,
-  type PatchOp,
   PatchSchema,
 } from "./models/pack";
 export {
@@ -258,8 +253,6 @@ export { DOCUMENT_VERSION, DocumentVersionSchema } from "./models/version";
 // Rules
 export {
   type AbilityRoll,
-  backgroundBonusErrors,
-  baseScoreErrors,
   finalScores,
   type PointBuyAbility,
   type PointBuyStatus,
@@ -291,7 +284,6 @@ export {
   type Issue,
   issuesForLevel,
   issuesForStep,
-  multiclassBlockers,
   reportErrors,
   SEVERITIES,
   type Severity,
@@ -309,7 +301,6 @@ export {
   type SpellTargetResult,
   useSaveAction,
 } from "./rules/casting";
-export { savingThrow } from "./rules/combat";
 export {
   type AttackModeOptions,
   type AttackOptions,
@@ -373,7 +364,6 @@ export {
 export {
   abilityModifier,
   type DiceExpression,
-  formatDiceExpression,
   MAX_DICE,
   MAX_SIDES,
   parseDiceExpression,
@@ -442,12 +432,6 @@ export {
   evaluate,
   STEP_TITLES,
 } from "./services/builder";
-export {
-  applyDamage,
-  applyHealing,
-  isAlive,
-  passivePerception,
-} from "./services/combat";
 export {
   applyEncounterAction,
   type CharacterRef,

@@ -27,7 +27,6 @@ export const PackManifestSchema = z
 export type PackManifest = z.infer<typeof PackManifestSchema>;
 
 export const PATCH_OPS = ["set", "append", "remove"] as const;
-export type PatchOp = (typeof PATCH_OPS)[number];
 
 /**
  * A change to one entity: `target` is `<table>/<id>` (`spells/fireball`), `path` a dotted path

@@ -1,8 +1,8 @@
 /**
  * Damage: rolling it and taking it (SRD 5.2.1 "Playing the Game" > "Damage and Healing").
  *
- * Pure functions shared by play (`applyAction` → `damage`) and combat (`applyDamage`), so the
- * rules for Resistance, Temporary Hit Points, dropping to 0 and death live in one place.
+ * Pure functions shared by play (`applyAction` → `damage`) and encounters, so the rules for
+ * Resistance, Temporary Hit Points, dropping to 0 and death live in one place.
  */
 
 import type { Message } from "../models/messages";

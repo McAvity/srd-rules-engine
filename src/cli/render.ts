@@ -21,10 +21,6 @@ import type { Console } from "./console";
 export const pad = (value: string | number, width: number) => String(value).padEnd(width);
 export const padLeft = (value: string | number, width: number) => String(value).padStart(width);
 
-export function prettyId(itemId: string): string {
-  return titleCase(itemId.replaceAll("-", " "));
-}
-
 /** First sentence of `text`, cut at a word boundary with an ellipsis if too long. */
 export function shorten(text: string, width = 60): string {
   const first = (text.replace(/\s+/g, " ").split(". ")[0] ?? "").replace(/\.+$/, "");
