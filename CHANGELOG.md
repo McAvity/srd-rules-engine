@@ -8,6 +8,11 @@ migrated when it's loaded.
 ## [Unreleased]
 
 ### Added
+- The play sheet's spells say which slots each can be cast with now (`PlaySheet.spells`:
+  `PlaySpellLine`): `slot_levels` (levels with a slot left; empty for a cantrip), `pact_slot`
+  (the Pact Magic slot's level while one is left), and `slots` (`SpellSlotChoice`: every level it
+  could use, those with none left included, with `left`, `available` and a `reason` in the
+  `OptionReason` shape). `spellSlots(level, play)` computes them; encounter options use it too.
 - Saving throws on demand: the `check` action takes `save: Ability` (a `D20TestResult`, note
   `save.result`), with the combatant's conditions, a DC or none, nothing applied.
 - Messages for any language: `renderMessage(message, catalog, { locale })` (and `formatMessage`'s

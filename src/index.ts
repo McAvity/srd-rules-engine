@@ -484,9 +484,12 @@ export {
   magicItemBases,
   PlayError,
   type PlaySheet,
+  type PlaySpellLine,
   playBuild,
   reconcileState,
   rollCheck,
+  type SpellSlotChoice,
+  spellSlots,
   startingEquipment,
   validateState,
 } from "./services/play";

@@ -605,3 +605,40 @@ describe("random actions keep the state valid (seeded)", () => {
     expect(accepted).toBeGreaterThan(150);
   });
 });
+
+describe("spells on the play sheet: the slots each can be cast with", () => {
+  const spend = (b: CharacterBuild, s: CharacterState, action: PlayAction) =>
+    applyAction(b, s, catalog, action).state;
+
+  it("a Wizard 3: a level 1 spell with levels 1 and 2, a cantrip with none", () => {
+    const b = levelUpIn(autocomplete(classBuild("wizard")), "wizard", 2);
+    let s = createState(b, catalog);
+    const first = () => computePlaySheet(b, s, catalog).spells.find((x) => x.level === 1);
+    expect(first()).toMatchObject({ slot_levels: [1, 2], pact_slot: null });
+    const cantrip = computePlaySheet(b, s, catalog).spells.find((x) => x.level === 0);
+    expect(cantrip).toMatchObject({ slot_levels: [], pact_slot: null, slots: [] });
+    const firsts = computePlaySheet(b, s, catalog).play.spell_slots[0]?.total ?? 0;
+    for (let i = 0; i < firsts; i++) s = spend(b, s, { type: "spend_slot", level: 1 });
+    expect(first()?.slot_levels).toEqual([2]);
+    expect(first()?.slots[0]).toMatchObject({
+      level: 1,
+      pact: false,
+      left: 0,
+      available: false,
+      reason: { code: "no_resources", category: "resource", text: "No level 1 spell slots left" },
+    });
+  });
+
+  it("a Warlock 3: the Pact Magic slot at level 2, then none", () => {
+    const b = levelUpIn(autocomplete(classBuild("warlock")), "warlock", 2);
+    let s = createState(b, catalog);
+    const first = () => computePlaySheet(b, s, catalog).spells.find((x) => x.level === 1);
+    expect(first()).toMatchObject({ slot_levels: [], pact_slot: 2 });
+    const pact = computePlaySheet(b, s, catalog).play.pact_magic?.slots ?? 0;
+    for (let i = 0; i < pact; i++) s = spend(b, s, { type: "spend_pact_slot" });
+    expect(first()?.pact_slot).toBeNull();
+    expect(first()?.slots).toEqual([
+      expect.objectContaining({ level: 2, pact: true, left: 0, available: false }),
+    ]);
+  });
+});

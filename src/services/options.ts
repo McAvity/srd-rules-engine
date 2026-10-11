@@ -52,7 +52,7 @@ import {
   spellRangeFeet,
   spellTargetRange,
 } from "./encounter";
-import { computePlaySheet } from "./play";
+import { computePlaySheet, spellSlots } from "./play";
 import { refusalCode } from "./refusals";
 
 /** Dice that always land in the middle: a dry run checks legality, not outcomes. */
@@ -512,16 +512,7 @@ export function combatantOptions(
       const spell = lookup(ctx.catalog.spells, known.id);
       if (!spell) continue;
       const cantrip = spell.level === 0;
-      const slot_levels = cantrip
-        ? []
-        : play.spell_slots
-            .filter((s) => s.level >= spell.level && s.spent < s.total)
-            .map((s) => s.level);
-      const pact = play.pact_magic;
-      const pact_slot =
-        !cantrip && pact && pact.slot_level >= spell.level && pact.spent < pact.slots
-          ? pact.slot_level
-          : null;
+      const { slot_levels, pact_slot } = spellSlots(spell.level, play);
       const targets = spellTargets(spell);
       const slot = cantrip
         ? {}
@@ -536,7 +527,7 @@ export function combatantOptions(
           spellLabel(spell),
           spellCost(spell),
           targets,
-          { slot_levels, pact_slot, ...noted(spellNote(spell)) },
+          { slot_levels: [...slot_levels], pact_slot, ...noted(spellNote(spell)) },
         ),
       );
     }

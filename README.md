@@ -154,6 +154,7 @@ let state = createState(build, catalog);        // full HP, starting gear (armor
 ({ state } = applyAction(build, state, catalog, { type: "add_item", item: "weapon-1", base: "longsword" }));
 const { notes } = applyAction(build, state, catalog, { type: "short_rest", hit_dice: [{ die: 10 }] });
 computePlaySheet(build, state, catalog).play;   // hp, hit dice, slots, uses, conditions, inventory…
+computePlaySheet(build, state, catalog).spells; // each with the slot levels it can be cast with now
 ```
 
 Actions cover damage (resistances, temporary HP, dropping to 0, death saves, massive damage,

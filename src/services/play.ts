@@ -11,7 +11,9 @@
 import { type Catalog, lookup } from "../content/catalog";
 import type { CharacterBuild } from "../models/build";
 import type { ConditionDef, MagicItemDef } from "../models/content";
+import { REFUSAL_CATEGORIES } from "../models/events";
 import type { Message } from "../models/messages";
+import type { OptionReason } from "../models/options";
 import {
   type CharacterState,
   CURRENCIES,
@@ -42,8 +44,10 @@ import {
   computeSheet,
   type DerivedSheet,
   type PlayContext,
+  type SpellLine,
 } from "../rules/sheet";
 import { BuildError, setChoice } from "./builder";
+import { refusalCode } from "./refusals";
 
 export class PlayError extends Error {
   override name = "PlayError";
@@ -70,6 +74,8 @@ export interface PlayResult {
 // --- the sheet in play --------------------------------------------------------------------
 
 export interface PlaySheet extends DerivedSheet {
+  /** The spells it can cast, with the slots each can be cast with now. */
+  readonly spells: readonly PlaySpellLine[];
   readonly play: {
     readonly hp: {
       readonly current: number;
@@ -267,47 +273,100 @@ export function computePlaySheet(
       weight: weightOf(carried.base),
     };
   });
+  const play: PlaySheet["play"] = {
+    hp: { current, max, temp: state.hp.temp, bloodied: isBloodied(current, max) },
+    dying: current === 0 && !state.stable && !state.dead,
+    stable: state.stable,
+    dead: state.dead,
+    death_saves: { ...state.death_saves },
+    hit_dice: Object.entries(sheet.hit_dice).map(([die, total]) => ({
+      die: Number(die),
+      total,
+      spent: state.hit_dice_spent[die] ?? 0,
+    })),
+    exhaustion: state.exhaustion,
+    conditions: [...conditions].map(([id, implied]) => {
+      const def = lookup(catalog.conditions, id) as ConditionDef | undefined;
+      return { id, name: def?.name ?? id, description: def?.description ?? "", implied };
+    }),
+    concentration: state.concentration,
+    heroic_inspiration: state.heroic_inspiration,
+    spell_slots: sheet.spell_slots.map((total, i) => ({
+      level: i + 1,
+      total,
+      spent: state.spell_slots_spent[i] ?? 0,
+    })),
+    pact_magic: sheet.pact_magic ? { ...sheet.pact_magic, spent: state.pact_slots_spent } : null,
+    uses: sheet.limited_uses.map((u) => ({
+      key: u.key,
+      name: u.name,
+      max: u.max,
+      spent: state.uses_spent[u.key] ?? 0,
+      recharge: u.recharge,
+    })),
+    inventory,
+    attuned: state.inventory.filter((i) => i.attuned).length,
+    currency: { ...state.currency },
+    carried_weight: inventory.reduce((sum, i) => sum + (i.weight ?? 0) * i.qty, 0),
+    carrying_capacity: sheet.scores.str * 15,
+    rest_choices: Object.keys(state.choices).filter((k) => restChoiceKeys(res).has(k)),
+    starting_equipment_taken: startingEquipmentTaken(state),
+  };
+  const spells = sheet.spells.map((line) => ({ ...line, ...spellSlots(line.level, play) }));
+  return { ...sheet, spells, play };
+}
+
+/** A slot a spell could be cast with: spell slots of a level, or the Pact Magic slot. */
+export interface SpellSlotChoice {
+  readonly level: number;
+  /** The Pact Magic slot (cast with `pact: true`). */
+  readonly pact: boolean;
+  /** Slots of this kind left. */
+  readonly left: number;
+  readonly available: boolean;
+  /** Why not (none left), with its code and category; `null` when available. */
+  readonly reason: OptionReason | null;
+}
+
+/** A spell on the play sheet, with the slots it can be cast with now. */
+export interface PlaySpellLine extends SpellLine {
+  /** Slot levels it can be cast with now (a slot left); empty for a cantrip. */
+  readonly slot_levels: readonly number[];
+  /** The Pact Magic slot's level when it can use one now, else `null`. */
+  readonly pact_slot: number | null;
+  /** Every slot it could use (its level or higher), those with none left included. */
+  readonly slots: readonly SpellSlotChoice[];
+}
+
+/** The slots a spell of `level` can be cast with, from the play sheet's slots (SRD "Spell Slots"). */
+export function spellSlots(
+  level: number,
+  play: Pick<PlaySheet["play"], "spell_slots" | "pact_magic">,
+): Pick<PlaySpellLine, "slot_levels" | "pact_slot" | "slots"> {
+  if (level === 0) return { slot_levels: [], pact_slot: null, slots: [] };
+  const none = (m: Message): OptionReason => {
+    const code = refusalCode(m.text);
+    return { code, category: REFUSAL_CATEGORIES[code], text: m.text, message: m };
+  };
+  const slots: SpellSlotChoice[] = play.spell_slots
+    .filter((s) => s.total > 0 && s.level >= level)
+    .map((s) => {
+      const left = Math.max(0, s.total - s.spent);
+      const reason = left
+        ? null
+        : none(message("refusal.no_level_spell_slots", { level: s.level }));
+      return { level: s.level, pact: false, left, available: left > 0, reason };
+    });
+  const pact = play.pact_magic;
+  if (pact && pact.slots > 0 && pact.slot_level >= level) {
+    const left = Math.max(0, pact.slots - pact.spent);
+    const reason = left ? null : none(message("refusal.no_pact_magic_slots"));
+    slots.push({ level: pact.slot_level, pact: true, left, available: left > 0, reason });
+  }
   return {
-    ...sheet,
-    play: {
-      hp: { current, max, temp: state.hp.temp, bloodied: isBloodied(current, max) },
-      dying: current === 0 && !state.stable && !state.dead,
-      stable: state.stable,
-      dead: state.dead,
-      death_saves: { ...state.death_saves },
-      hit_dice: Object.entries(sheet.hit_dice).map(([die, total]) => ({
-        die: Number(die),
-        total,
-        spent: state.hit_dice_spent[die] ?? 0,
-      })),
-      exhaustion: state.exhaustion,
-      conditions: [...conditions].map(([id, implied]) => {
-        const def = lookup(catalog.conditions, id) as ConditionDef | undefined;
-        return { id, name: def?.name ?? id, description: def?.description ?? "", implied };
-      }),
-      concentration: state.concentration,
-      heroic_inspiration: state.heroic_inspiration,
-      spell_slots: sheet.spell_slots.map((total, i) => ({
-        level: i + 1,
-        total,
-        spent: state.spell_slots_spent[i] ?? 0,
-      })),
-      pact_magic: sheet.pact_magic ? { ...sheet.pact_magic, spent: state.pact_slots_spent } : null,
-      uses: sheet.limited_uses.map((u) => ({
-        key: u.key,
-        name: u.name,
-        max: u.max,
-        spent: state.uses_spent[u.key] ?? 0,
-        recharge: u.recharge,
-      })),
-      inventory,
-      attuned: state.inventory.filter((i) => i.attuned).length,
-      currency: { ...state.currency },
-      carried_weight: inventory.reduce((sum, i) => sum + (i.weight ?? 0) * i.qty, 0),
-      carrying_capacity: sheet.scores.str * 15,
-      rest_choices: Object.keys(state.choices).filter((k) => restChoiceKeys(res).has(k)),
-      starting_equipment_taken: startingEquipmentTaken(state),
-    },
+    slot_levels: slots.filter((s) => !s.pact && s.available).map((s) => s.level),
+    pact_slot: slots.find((s) => s.pact && s.available)?.level ?? null,
+    slots,
   };
 }
 

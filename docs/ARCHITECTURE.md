@@ -274,7 +274,8 @@ marked `rest_change` (prepared spells, Weapon Mastery…). The state stores only
 - **The played build.** `playBuild` overlays `state.choices` on the build (only for
   `rest_change` choices); `computePlaySheet` computes the sheet from it with a `PlayContext`
   (carried items, active conditions, Exhaustion, active toggles), then adds the live `play`
-  block. A rest-change pick is validated by running the builder's `setChoice` on the played
+  block and, on each spell, the slots it can be cast with now (`spellSlots`, shared with the
+  encounter's options: every level it could use, those with none left included with a reason). A rest-change pick is validated by running the builder's `setChoice` on the played
   build, so it follows exactly the same rules as a build pick; a UI lists those choices' options
   by resolving the played build (`playBuild` is public), so they match what `set_choice` accepts.
 - **Starting equipment.** `createState` puts the build's starting equipment (the armor and
