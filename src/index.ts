@@ -192,6 +192,8 @@ export {
   type PointOfInterest,
   PointOfInterestSchema,
   parseEncounter,
+  type RollWhat,
+  RollWhatSchema,
   type SpellMark,
   SpellMarkSchema,
   type Zone,
@@ -201,7 +203,10 @@ export {
   type EncounterEvent,
   EncounterEventSchema,
   FORCEABLE_REFUSALS,
+  REFUSAL_CATEGORIES,
+  REFUSAL_CATEGORY_NAMES,
   REFUSAL_CODES,
+  type RefusalCategory,
   type RefusalCode,
 } from "./models/events";
 export { type EncounterHistory, EncounterHistorySchema } from "./models/history";
@@ -215,6 +220,8 @@ export {
   type OptionCost,
   type OptionEntry,
   OptionEntrySchema,
+  type OptionReason,
+  OptionReasonSchema,
   type StrikeOption,
   StrikeOptionSchema,
   type TargetSpec,
@@ -435,6 +442,13 @@ export {
   STEP_TITLES,
 } from "./services/builder";
 export {
+  type ByHandOptions,
+  type ByHandRoll,
+  type DeclaredRolls,
+  type RollCost,
+  rollByHand,
+} from "./services/by-hand";
+export {
   applyEncounterAction,
   type CharacterRef,
   type Cover,
@@ -442,7 +456,6 @@ export {
   createEncounter,
   currentCombatant,
   type DeclaredResult,
-  type DeclaredRolls,
   type EncounterContext,
   EncounterError,
   type EncounterResult,

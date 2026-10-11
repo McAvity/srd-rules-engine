@@ -12,7 +12,7 @@ import { type Catalog, lookup, TABLE_NAMES, type TableName } from "../content/ca
 import { srdCatalog } from "../content/srd";
 import { parseBuild } from "../models/build";
 import { AbilityFullNameSchema, CharacterSchema } from "../models/character";
-import { EncounterActionSchema, EncounterSchema } from "../models/encounter";
+import { EncounterActionSchema, EncounterSchema, RollWhatSchema } from "../models/encounter";
 import type { Message } from "../models/messages";
 import { type CharacterState, CharacterStateSchema, PlayActionSchema } from "../models/state";
 import { castSpell } from "../rules/casting";
@@ -33,6 +33,7 @@ import {
   setLevelClass,
   setLevelHp,
 } from "../services/builder";
+import { rollByHand } from "../services/by-hand";
 import { isAlive, passivePerception } from "../services/combat";
 import { applyEncounterAction, type CharacterRef, EncounterError } from "../services/encounter";
 import { checkAction, combatantOptions } from "../services/options";
@@ -105,6 +106,11 @@ const StateCastRequest = z.object({
   pact: z.boolean().default(false),
   spellcasting: z.string().optional(),
   mode: z.enum(ROLL_MODES).default("normal"),
+});
+const StateRollRequest = StateRequest.extend({
+  what: RollWhatSchema,
+  /** Roll anyway when a cost can't be paid (it isn't spent). */
+  force: z.boolean().default(false),
 });
 const EncounterRequest = z.object({
   encounter: EncounterSchema,
@@ -478,6 +484,39 @@ export function createHandler(options: HandlerOptions = {}): FetchHandler {
         }
         const notes = texts(messages);
         return { result, caster_state: casterState, target_states: targetStates, notes, messages };
+      },
+    },
+    {
+      method: "POST",
+      pattern: /^\/v1\/state\/roll$/,
+      handle: ({ body }) => {
+        // Roll by hand on the sheet: the character's dice, then its costs spent on its state.
+        const req = StateRollRequest.parse(body);
+        const catalog = getCatalog();
+        const build = parseBuild(req.build);
+        let roll: ReturnType<typeof rollByHand>;
+        try {
+          const combatant = combatantFromCharacter(build, req.state, catalog);
+          const character = { build, state: req.state };
+          roll = rollByHand(combatant, req.what, { catalog, character, rng });
+        } catch (e) {
+          if (e instanceof RangeError) throw new PlayError([ruleReason(e)]);
+          throw e;
+        }
+        const messages = [...roll.messages];
+        let state = req.state;
+        for (const cost of roll.costs) {
+          if (cost.type !== "play") continue;
+          try {
+            const applied = applyAction(build, state, catalog, cost.action, { rng });
+            state = applied.state;
+            messages.push(...applied.messages);
+          } catch (e) {
+            if (!(e instanceof PlayError) || !req.force) throw e;
+            messages.push(...e.details.map((reason) => message("override.applied", { reason })));
+          }
+        }
+        return { roll, state, notes: texts(messages), messages };
       },
     },
     {

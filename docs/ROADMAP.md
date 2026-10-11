@@ -75,6 +75,19 @@ Grouped by area, roughly in order of value for a VTT. Sizes are rough: S (a day 
 few days), L (a week or more). "Flagged" items are interpretations listed in
 [ARCHITECTURE.md](ARCHITECTURE.md#interpretations-flagged-not-invented) that a rule could replace.
 
+### Architecture
+
+- **Two layers (M).** Pure rules over plain inputs for clients with their own data (a bot, another
+  tabletop): a `Combatant` and what the rules need to know (a slot left, a use spent) in;
+  rolls, costs and reasons out (`makeAttack`, `takeDamage`, `castSpell`, `rollByHand` already
+  work this way). The documents (`CharacterState`, `Encounter`) and their reducers as an optional
+  state manager on top. Make the boundary explicit: what each layer exports, which rules still
+  need a document to run, and a separate entry point for the first layer if it helps.
+- **Table settings out of the encounter (M).** Some `Encounter` fields are a table's policy,
+  not state the rules read: `positions`, `decisions`, `auto_death_saves`, `notice_stops`. Audit
+  every field, move the policy ones to per-call options (`EncounterContext`), and migrate saved
+  encounters through `DOCUMENT_VERSION`.
+
 ### Combat rules
 
 - **Walls, what's left (M).** Ringed walls, domes and globes, breaking a wall's sections, Wall of

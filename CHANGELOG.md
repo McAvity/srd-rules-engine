@@ -26,20 +26,31 @@ migrated when it's loaded.
   ("GM override: Brakka has no attacks left this turn"). A cost that can't be paid isn't spent (no
   slot of that level left: the spell is cast without one). Other refusals still refuse.
   `checkAction` with `force` lists what it would override (`overrides`, `override_codes`).
-- Manual play, a dice roller: `manual: true` on `attack`, `unarmed`, `cast`, `feature`,
-  `save_action` and `legendary` rolls the actor's dice with no target (`target`, `targets` and
-  `area` are optional and ignored) and no action economy (Action, Bonus Action, Reaction, attacks
-  of the Attack action, the round's legendary actions, turn, once-per-turn riders), and applies
-  nothing. Resources are checked and spent: spell and Pact Magic slots, feature uses, a monster's
-  daily uses and Recharge, Concentration. The result is a `DeclaredResult` (who, what, slot
-  level, `rolls`: `DeclaredRolls` with `attacks` (one `AttackDice` per attack roll, each beam or
-  ray: the d20, mode and reasons from the actor's own state, bonus, total, `critical_hit`,
-  `critical_miss`, the damage rolled whatever the d20 with crit dice doubled, riders asked for),
-  `damage` rolled once, `healing`, and a forced save's `ability` and `dc`), with notes
-  (`manual.declared`, `manual.attack`, `manual.damage`, `manual.healing`, `manual.save`).
-  `rollAttack(attacker, attack, options)` rolls one attack without a target; `castSpell` takes
-  `by_hand` (its result's `by_hand`: `SpellDice`); `use_feature` takes `manual` to spend a
-  feature's uses without its healing.
+- Rolling by hand, a dice roller: `rollByHand(combatant, what, { catalog, monster?, character?,
+  rng })` rolls an attack, a Grapple or Shove, a spell, a feature, a saving throw effect or a
+  legendary action (`RollWhat`) with no target, no turn and no action economy, and applies
+  nothing: a pure function over plain inputs (a `Combatant`; the monster's stat block for its
+  spell lines and daily uses; the character's build and state for features, known spells and
+  Cunning or Brutal Strike). Its `ByHandRoll` has `rolls` (`DeclaredRolls`: `attacks`, one
+  `AttackDice` per attack roll, each beam or ray, with the d20, the mode and reasons from the
+  actor's own state, bonus, total, `critical_hit`, `critical_miss` and the damage, crit dice
+  doubled; `damage` rolled once; `healing`; a forced save's `ability` and `dc`) and `costs`
+  (`RollCost`, not spent: a play action for the character's state, such as a spell slot,
+  Concentration or a feature's uses; a monster's daily use; a monster's ability to recharge).
+  In an encounter, `{ type: "roll", id, what, force? }` rolls and spends the costs: refused only
+  when a cost can't be paid or the actor can't act, `force` rolling anyway with an unpayable cost
+  unspent; its result is a `DeclaredResult`, with notes (`manual.declared`, `manual.attack`,
+  `manual.damage`, `manual.healing`, `manual.save`). On a sheet, `POST /v1/state/roll` rolls and
+  applies the character's costs. `rollAttack(attacker, attack, options)` rolls one attack without a
+  target; `castSpell` takes `by_hand` (its result's `by_hand`: `SpellDice`); `use_feature` takes
+  `manual` to spend a feature's uses without its healing.
+- Every refusal reason, with a category: options (`OptionEntry`, `StrikeOption`) list `reasons`
+  (`OptionReason`: `code`, `category`, `text`, `message`), every reason the engine would refuse
+  the option now, not only the first, and `rollable` (the `roll` action takes it). Each refusal
+  code has a category (`REFUSAL_CATEGORIES`: `economy`, `turn`, `target`, `movement`, `resource`,
+  `state`, `input`, `other`), so a client chooses which ones to enforce. New refusal code
+  `no_target` (no creature to aim an option at). `checkAction` with `force` also lists what it
+  overrode when something else stops the action (`EncounterError.overridden`).
 - `encounter.positions` (`optional` by default, or `required`), set by the GM with
   `{ type: "set_positions", mode }`: when required and anyone is on the map, an attack, spell,
   save effect, Help, Grapple, Shove or feature that checks reach or range is refused if the actor

@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyAction,
   applyEncounterAction,
   builder,
   type CharacterBuild,
   type CharacterState,
+  type CombatantOptions,
   checkAction,
+  combatantFromCharacter,
+  combatantFromMonster,
+  combatantOptions,
   computePlaySheet,
   createEncounter,
   createHistory,
@@ -15,14 +20,19 @@ import {
   type EncounterAction,
   EncounterActionSchema,
   EncounterError,
+  lookup,
+  type MonsterDef,
+  type OptionEntry,
   parseEncounter,
+  type RollWhat,
   recordAction,
+  rollByHand,
   scriptedRng,
   undoAction,
 } from "../src/index";
 import { autocomplete, catalog, classBuild, fighterBuild, levelUpIn } from "./helpers";
 
-// Manual play is a dice roller (`manual: true`): no target, no action economy, no outcome; the
+// Rolling by hand is a dice roller (`roll`): no target, no action economy, no outcome; the
 // actor's resources are checked and spent (slots, uses, daily uses, Recharge, Concentration) and
 // its dice rolled. The table applies what happens.
 
@@ -76,16 +86,13 @@ function session(key: string, build: CharacterBuild, monsters: string[]) {
 }
 
 const declared = (r: { result: unknown }) => r.result as DeclaredResult;
-const greatsword: EncounterAction = {
-  type: "attack",
-  id: "brakka",
-  attack: "Greatsword",
-  manual: true,
-};
+/** The `roll` action: `what` rolled by hand for combatant `id`. */
+const roll = (id: string, what: RollWhat): EncounterAction => ({ type: "roll", id, what });
+const greatsword = roll("brakka", { type: "attack", attack: "Greatsword" });
 const slots = (s: ReturnType<typeof session>, level: number) =>
   s.sheet().play.spell_slots.find((x) => x.level === level)?.spent;
 
-describe("manual play: a dice roller", () => {
+describe("rolling by hand: a dice roller", () => {
   it("an attack without a target rolls the d20 and the damage, as often as it's asked", () => {
     const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
     const before = s.encounter();
@@ -153,13 +160,7 @@ describe("manual play: a dice roller", () => {
 
   it("Scorching Ray at level 3: four rays, each with 2d6 fire; the slot is spent", () => {
     const s = session("ilse", wizard(), ["goblin-warrior"]);
-    const ray: EncounterAction = {
-      type: "cast",
-      id: "ilse",
-      spell: "scorching-ray",
-      slot_level: 3,
-      manual: true,
-    };
+    const ray = roll("ilse", { type: "cast", spell: "scorching-ray", slot_level: 3 });
     const dice = [10, 1, 2, 11, 3, 4, 12, 5, 6, 13, 1, 1];
     const r = declared(s.act(dice, ray));
     expect(r.slot_level).toBe(3);
@@ -182,7 +183,7 @@ describe("manual play: a dice roller", () => {
       expect(error.codes).toEqual(["no_resources"]);
     }
     // The GM can still force it: cast, no slot spent.
-    const forced = declared(s.act(dice, { ...ray, force: true }));
+    const forced = declared(s.act(dice, { ...ray, force: true } as EncounterAction));
     expect(forced.rolls.attacks).toHaveLength(4);
     expect(slots(s, 3)).toBe(2);
   });
@@ -190,7 +191,7 @@ describe("manual play: a dice roller", () => {
   it("Fireball rolls 8d6 once and shows the DC; no saves, no area, no HP changed", () => {
     const s = session("ilse", wizard(), ["goblin-warrior"]);
     const eight = [1, 2, 3, 4, 5, 6, 1, 2];
-    const r = s.act(eight, { type: "cast", id: "ilse", spell: "fireball", manual: true });
+    const r = s.act(eight, roll("ilse", { type: "cast", spell: "fireball" }));
     expect(r.rolls).toEqual(eight);
     const { rolls } = declared(r);
     expect(rolls.save).toEqual({ ability: "dex", dc: s.sheet().spellcasting[0]?.save_dc });
@@ -208,20 +209,15 @@ describe("manual play: a dice roller", () => {
 
   it("a Concentration spell starts Concentration and replaces the previous one", () => {
     const s = session("ilse", wizard(), ["goblin-warrior"]);
-    s.act([], { type: "cast", id: "ilse", spell: "fly", manual: true });
+    s.act([], roll("ilse", { type: "cast", spell: "fly" }));
     expect(s.state().concentration).toBe("Fly");
-    s.act([], { type: "cast", id: "ilse", spell: "haste", manual: true });
+    s.act([], roll("ilse", { type: "cast", spell: "haste" }));
     expect(s.state().concentration).toBe("Haste");
   });
 
   it("Second Wind rolls its healing and spends a use; out of uses, it's refused", () => {
     const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
-    const wind: EncounterAction = {
-      type: "feature",
-      id: "brakka",
-      feature: "Second Wind",
-      manual: true,
-    };
+    const wind = roll("brakka", { type: "feature", feature: "Second Wind" });
     const uses = s.sheet().play.uses.find((u) => u.key.endsWith(":second-wind"))?.max ?? 0;
     expect(uses).toBeGreaterThan(0);
     for (let i = 0; i < uses; i++) {
@@ -236,12 +232,7 @@ describe("manual play: a dice roller", () => {
 
   it("a monster's 1/Day spell and its Recharge breath: spent, rolled, refused when gone", () => {
     const s = session("brakka", fighterBuild(), ["adult-black-dragon", "adult-red-dragon"]);
-    const sphere: EncounterAction = {
-      type: "cast",
-      id: "adult-black-dragon",
-      spell: "vitriolic-sphere",
-      manual: true,
-    };
+    const sphere = roll("adult-black-dragon", { type: "cast", spell: "vitriolic-sphere" });
     // Its effects are text in the SRD data: nothing to roll, the daily use spent.
     const r = s.act([], sphere);
     expect(declared(r).rolls).toEqual({ attacks: [], damage: null, healing: null, save: null });
@@ -250,12 +241,7 @@ describe("manual play: a dice roller", () => {
       "Spellcasting#vitriolic-sphere": 1,
     });
     expect(() => s.act([], sphere)).toThrow("1 time today");
-    const breath: EncounterAction = {
-      type: "save_action",
-      id: "adult-red-dragon",
-      ability: "Fire Breath",
-      manual: true,
-    };
+    const breath = roll("adult-red-dragon", { type: "save_action", ability: "Fire Breath" });
     const fire = declared(s.act(Array<number>(17).fill(2), breath));
     expect(fire.rolls.save).toEqual({ ability: "dex", dc: 21 });
     expect(fire.rolls.damage?.parts[0]).toMatchObject({ dice: "17d6", total: 34 });
@@ -265,16 +251,9 @@ describe("manual play: a dice roller", () => {
 
   it("Grapple by hand shows the DC; a legendary attack rolls without spending uses", () => {
     const s = session("brakka", fighterBuild(), ["adult-blue-dragon"]);
-    const grapple = declared(
-      s.act([], { type: "unarmed", id: "brakka", option: "grapple", manual: true }),
-    );
+    const grapple = declared(s.act([], roll("brakka", { type: "unarmed", option: "grapple" })));
     expect(grapple.rolls.save).toEqual({ ability: null, dc: 13 });
-    const tail: EncounterAction = {
-      type: "legendary",
-      id: "adult-blue-dragon",
-      action: "Tail Swipe",
-      manual: true,
-    };
+    const tail = roll("adult-blue-dragon", { type: "legendary", action: "Tail Swipe" });
     for (let i = 0; i < 4; i++) {
       const [rend] = declared(s.act(Array<number>(9).fill(1), tail)).rolls.attacks;
       expect(rend?.attack).toBe("Rend");
@@ -284,12 +263,170 @@ describe("manual play: a dice roller", () => {
 
   it("checkAction agrees; undo gives the slot back", () => {
     const s = session("ilse", wizard(), ["goblin-warrior"]);
-    const fireball: EncounterAction = { type: "cast", id: "ilse", spell: "fireball", manual: true };
+    const fireball = roll("ilse", { type: "cast", spell: "fireball" });
     expect(checkAction(s.encounter(), fireball, s.ctx()).ok).toBe(true);
     s.act(Array<number>(8).fill(1), fireball);
     expect(slots(s, 3)).toBe(1);
     const undone = undoAction(s.history(), s.ctx());
     expect(undone.states.ilse?.spell_slots_spent ?? []).toEqual([]);
+  });
+});
+
+describe("options: every reason, with its category, and rollable", () => {
+  const every = (o: CombatantOptions): OptionEntry[] => [
+    ...o.attacks,
+    ...o.spells,
+    ...o.features,
+    ...o.save_actions,
+    ...o.legendary,
+    ...o.standard,
+    ...o.zones,
+  ];
+  const options = (s: ReturnType<typeof session>, id: string) =>
+    combatantOptions(s.encounter(), id, s.ctx());
+
+  it("the Attack action spent: refused for economy, still rollable, and the roll is taken", () => {
+    const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
+    s.act([2, 1, 1], {
+      type: "attack",
+      id: "brakka",
+      target: "goblin-warrior",
+      attack: "Greatsword",
+    });
+    const sword = options(s, "brakka").attacks.find(
+      (x) => x.action.type === "attack" && x.action.attack === "Greatsword" && !x.action.granted,
+    );
+    expect(sword?.available).toBe(false);
+    expect(sword?.rollable).toBe(true);
+    expect(sword?.reasons.map((r) => r.category)).toEqual(["economy"]);
+    expect(sword?.reasons[0]?.message.text).toBe(sword?.reasons[0]?.text);
+    expect(declared(s.act([15, 3, 4], greatsword)).rolls.attacks).toHaveLength(1);
+  });
+
+  it("Fireball with no level 3 slot and the action spent: both reasons, each categorized", () => {
+    const s = session("ilse", wizard(), ["goblin-warrior"]);
+    const fireball = roll("ilse", { type: "cast", spell: "fireball" });
+    s.act(Array<number>(8).fill(1), fireball);
+    s.act(Array<number>(8).fill(1), fireball);
+    s.act([], { type: "dash", id: "ilse" });
+    const entries = options(s, "ilse").spells.filter(
+      (x) => x.action.type === "cast" && x.action.spell === "fireball",
+    );
+    expect(entries.length).toBeGreaterThan(0);
+    const third = entries.find((x) => x.action.type === "cast" && !x.action.slot_level);
+    const option = third ?? (entries[0] as OptionEntry);
+    expect(option.available).toBe(false);
+    expect(option.rollable).toBe(true);
+    const reasons = option.reasons.map((r) => [r.code, r.category]);
+    expect(reasons).toContainEqual(["economy_used", "economy"]);
+    expect(reasons).toContainEqual(["no_resources", "resource"]);
+    // By hand, the slot stops it (unless forced).
+    expect(() => s.act(Array<number>(8).fill(1), fireball)).toThrow("No level 3 spell slots");
+  });
+
+  it("an Incapacitated actor: every rollable option has the `state` reason", () => {
+    const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
+    s.act([], {
+      type: "effects",
+      id: "brakka",
+      actions: [{ type: "add_condition", condition: "incapacitated" }],
+    });
+    const rollable = every(options(s, "brakka")).filter((x) => x.rollable);
+    expect(rollable.length).toBeGreaterThan(0);
+    for (const x of rollable) {
+      expect(x.reasons).toContainEqual(
+        expect.objectContaining({ code: "incapacitated", category: "state" }),
+      );
+    }
+  });
+
+  it("Dash isn't rollable; an attack and a feature are", () => {
+    const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
+    const o = options(s, "brakka");
+    expect(o.standard.find((x) => x.action.type === "dash")?.rollable).toBe(false);
+    expect(o.attacks.every((x) => x.rollable)).toBe(true);
+    expect(o.features.find((x) => x.label.startsWith("Second Wind"))?.rollable).toBe(true);
+  });
+
+  it("checkAction with force lists what it overrode before what stopped it", () => {
+    const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
+    const far = {
+      type: "attack",
+      id: "goblin-warrior",
+      target: "brakka",
+      attack: "Scimitar",
+      force: true,
+    } as EncounterAction;
+    s.act([], {
+      type: "effects",
+      id: "goblin-warrior",
+      actions: [{ type: "add_condition", condition: "incapacitated" }],
+    });
+    const check = checkAction(s.encounter(), far, s.ctx());
+    expect(check.ok).toBe(true);
+    expect(check.override_codes).toEqual(
+      expect.arrayContaining(["not_your_turn", "incapacitated"]),
+    );
+  });
+});
+
+describe("rollByHand: no encounter needed", () => {
+  it("a character's Fireball on the sheet: the dice, and its slot as a cost to apply", () => {
+    const build = wizard();
+    let state = createState(build, catalog);
+    const ilse = combatantFromCharacter(build, state, catalog);
+    const eight = [1, 2, 3, 4, 5, 6, 1, 2];
+    const r = rollByHand(
+      ilse,
+      { type: "cast", spell: "fireball" },
+      { catalog, character: { build, state }, rng: scriptedRng(eight) },
+    );
+    expect(r).toMatchObject({ action: "cast", name: "Fireball", slot_level: 3 });
+    expect(r.rolls.damage?.total).toBe(24);
+    expect(r.rolls.save?.ability).toBe("dex");
+    expect(r.costs).toEqual([{ type: "play", action: { type: "spend_slot", level: 3 } }]);
+    for (const cost of r.costs) {
+      if (cost.type === "play") state = applyAction(build, state, catalog, cost.action).state;
+    }
+    expect(computePlaySheet(build, state, catalog).play.spell_slots[2]?.spent).toBe(1);
+  });
+
+  it("a feature needs the character's build and state; a monster's costs come from its stat block", () => {
+    const build = fighterBuild();
+    const state = createState(build, catalog);
+    const brakka = combatantFromCharacter(build, state, catalog);
+    const wind = { type: "feature", feature: "Second Wind" } as const;
+    expect(() => rollByHand(brakka, wind, { catalog })).toThrow("has no class features");
+    const r = rollByHand(brakka, wind, {
+      catalog,
+      character: { build, state },
+      rng: scriptedRng([7]),
+    });
+    expect(r.rolls.healing).toBe(8);
+    expect(r.costs).toEqual([
+      {
+        type: "play",
+        action: { type: "use_feature", key: expect.stringMatching(/second-wind$/), manual: true },
+      },
+    ]);
+    // A monster from its stat block alone: the breath's Recharge, the 1/Day spell's daily use.
+    const red = lookup(catalog.monsters, "adult-red-dragon") as MonsterDef;
+    const breath = rollByHand(
+      combatantFromMonster(red),
+      { type: "save_action", ability: "Fire Breath" },
+      { catalog, monster: red, rng: scriptedRng(Array<number>(17).fill(2)) },
+    );
+    expect(breath.rolls.save).toEqual({ ability: "dex", dc: 21 });
+    expect(breath.costs).toEqual([{ type: "recharge", name: "Fire Breath" }]);
+    const black = lookup(catalog.monsters, "adult-black-dragon") as MonsterDef;
+    const sphere = rollByHand(
+      combatantFromMonster(black),
+      { type: "cast", spell: "vitriolic-sphere" },
+      { catalog, monster: black },
+    );
+    expect(sphere.costs).toEqual([
+      { type: "daily", key: "Spellcasting#vitriolic-sphere", per_day: 1, name: "Vitriolic Sphere" },
+    ]);
   });
 });
 

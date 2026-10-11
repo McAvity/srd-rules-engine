@@ -44,7 +44,6 @@ import {
   inArea,
 } from "../rules/areas";
 import {
-  type CastOptions,
   castSpell,
   type SaveActionResult,
   type SpellCastResult,
@@ -53,8 +52,6 @@ import {
   useSaveAction,
 } from "../rules/casting";
 import {
-  type AttackDice,
-  type AttackOptions,
   type AttackResult,
   type CheckResult,
   type Combatant,
@@ -70,7 +67,6 @@ import {
   type RollMode,
   resolveMode,
   rollAbilityCheck,
-  rollAttack,
   rollD20,
   rollD20Test,
   rollSavingThrow,
@@ -99,6 +95,13 @@ import {
 import { message, plainMessage, ruleReason, texts, toMessage } from "../rules/messages";
 import { mathRng, type Rng } from "../rules/rng";
 import type { AttackLine } from "../rules/sheet";
+import {
+  type ByHandRoll,
+  type DeclaredRolls,
+  monsterCastLine,
+  rollWith,
+  strikeDice,
+} from "./by-hand";
 import { encounterEvents } from "./events";
 import { applyAction, combatantFromCharacter, computePlaySheet, PlayError } from "./play";
 import { refusalCode } from "./refusals";
@@ -110,6 +113,8 @@ export class EncounterError extends Error {
   readonly codes: readonly RefusalCode[];
   /** The same as `messages`, as data to translate: a code, its parameters and the English text. */
   readonly details: readonly Message[];
+  /** With `force`: the refusals overridden before the one that stopped the action. */
+  overridden: readonly Message[] = [];
   constructor(messages: readonly (Message | string)[]) {
     const details = messages.map(toMessage);
     super(texts(details).join("; "));
@@ -131,24 +136,10 @@ export interface EncounterContext {
   readonly rng?: Rng;
 }
 
-/** The dice rolled for an action played by hand (`DeclaredResult.rolls`). */
-export interface DeclaredRolls {
-  /** One per attack roll (an attack, each beam or ray of a spell), with its damage. */
-  readonly attacks: readonly AttackDice[];
-  /** Damage rolled once (a saving throw effect or spell, darts, a smite). */
-  readonly damage: RolledDamage | null;
-  readonly healing: number | null;
-  /**
-   * The saving throw it forces: the ability (`null`: the target's choice, Strength or Dexterity
-   * for a Grapple or Shove) and the actor's DC. No save is rolled (`check` with `save` rolls one).
-   */
-  readonly save: { readonly ability: Ability | null; readonly dc: number } | null;
-}
-
 /**
- * An action played by hand (`manual: true`), a dice roller: the actor's dice rolled and its
- * resources spent (slots, uses, Recharge), with no target, no action economy and no outcome.
- * The table applies what happens (`effects`).
+ * An action rolled by hand (`roll`), a dice roller: the actor's dice rolled and its resources
+ * spent (slots, uses, Recharge), with no target, no action economy and no outcome. The table
+ * applies what happens (`effects`).
  */
 export interface DeclaredResult {
   readonly manual: true;
@@ -399,9 +390,11 @@ function attempt(
       return value;
     },
   };
+  const overridden: Message[] = [];
   try {
-    return run(encounter, action, { ...outer, rng }, answers);
+    return run(encounter, action, { ...outer, rng }, answers, overridden);
   } catch (error) {
+    if (error instanceof EncounterError) error.overridden = overridden;
     if (!(error instanceof PendingDecision)) throw error;
     const stopped = {
       action,
@@ -429,6 +422,7 @@ function run(
   action: EncounterAction,
   outer: EncounterContext,
   answers: readonly boolean[],
+  overridden: Message[],
 ): Omit<EncounterResult, "events" | "rolls"> {
   const e = structuredClone(encounter) as Encounter;
   // What happened, as messages; sentences from play and damage have code `text` for now.
@@ -441,6 +435,7 @@ function run(
   /** A refusal the GM can override: with `force`, a note instead, and the action goes on. */
   const refuse = (reason: Message): void => {
     if (!forceable(reason)) fail(reason);
+    overridden.push(reason);
     notes.push(message("override.applied", { reason }));
   };
   // `release`: the readied action, taken with the reaction (checked here, spent at the end).
@@ -499,49 +494,6 @@ function run(
     }
     return { manual: true, by: c.id, action: kind, name, slot_level: slot, rolls };
   };
-  /** A saving throw effect by hand: its DC, and its damage rolled once. */
-  const saveByHand = (
-    c: EncounterCombatant,
-    kind: DeclaredResult["action"],
-    line: SaveActionLine,
-  ): DeclaredResult =>
-    byHand(c, kind, line.name, null, {
-      save: { ability: line.ability, dc: line.dc },
-      damage: line.damage_parts.length ? rollDamage(line.damage_parts, { rng }) : null,
-    });
-  /** One attack's dice by hand (`rollAttack`). */
-  const attackDice = (c: EncounterCombatant, name: string, options: AttackOptions): AttackDice => {
-    try {
-      return rollAttack(encounterCombatant(e, c.id, ctx), name, { ...options, rng });
-    } catch (error) {
-      if (error instanceof RangeError) fail(ruleReason(error));
-      throw error;
-    }
-  };
-  /** A spell by hand: its dice (`castSpell` with `by_hand`), its slot and Concentration spent. */
-  const castByHand = (
-    c: EncounterCombatant,
-    spell: SpellDef,
-    kind: DeclaredResult["action"],
-    name: string,
-    options: Pick<CastOptions, "slot_level" | "pact" | "spellcasting" | "mode" | "damage_type">,
-  ): DeclaredResult => {
-    let r: SpellCastResult;
-    try {
-      r = castSpell(encounterCombatant(e, c.id, ctx), spell, [], {
-        ...options,
-        rng,
-        by_hand: true,
-      });
-    } catch (error) {
-      if (error instanceof RangeError) fail(ruleReason(error));
-      throw error;
-    }
-    applyTo(c, r.caster_actions);
-    const done = byHand(c, kind, name, r.slot_level, r.by_hand ?? {});
-    notes.push(...r.messages); // a spell without mechanics: its effects are text
-    return done;
-  };
   // Decisions after a roll: `auto` takes the recommendation; `ask` uses the next answer given,
   // or stops the action for one.
   let answered = 0;
@@ -559,6 +511,7 @@ function run(
     } catch (error) {
       // Forced, a cost the character can't pay (a slot, a feature's use) isn't spent.
       if (error instanceof PlayError && error.details.every(forceable)) {
+        overridden.push(...error.details);
         notes.push(...error.details.map((reason) => message("override.applied", { reason })));
         return;
       }
@@ -1694,65 +1647,23 @@ function run(
       cunning?: readonly string[];
       brutal?: readonly string[];
       opportunity?: boolean;
-      manual?: boolean;
     },
   ) => {
-    const cunning = options.cunning ?? [];
-    const brutal = options.brutal ?? [];
-    const out = {
-      forgo: [] as { rider: string; dice: number }[],
-      extra_damage: [] as { dice: string; type: string }[],
-      forgo_advantage: false,
-    };
-    if (!cunning.length && !brutal.length) return out;
-    if (c.character === null) fail(message("refusal.no_class_features", { name: c.name }));
-    const ref = characterRef(ctx, c);
-    const sheet = computePlaySheet(ref.build, ref.state, ctx.catalog);
-    const levelIn = (id: string) => sheet.classes.find((x) => x.class_id === id)?.level ?? 0;
-    if (new Set(cunning).size < cunning.length || new Set(brutal).size < brutal.length) {
-      fail(message("refusal.each_effect_used_once"));
+    if (!options.cunning?.length && !options.brutal?.length) {
+      return { forgo: [], extra_damage: [], forgo_advantage: false };
     }
-    if (cunning.length) {
-      if (!sheet.rules.includes("cunning_strike"))
-        fail(message("refusal.doesnt_cunning_strike", { name: c.name }));
-      const most = sheet.rules.includes("improved_cunning_strike") ? 2 : 1;
-      if (cunning.length > most)
-        fail(message("refusal.cunning_strike_count", { name: c.name, most }));
-      if (
-        !(options.riders ?? []).some(
-          (r) => r.rider === "sneak-attack" || r.rider === "Sneak Attack",
-        )
-      ) {
-        fail(message("refusal.cunning_strike_used_when"));
-      }
-      if (
-        cunning.includes("poison") &&
-        !ref.state.inventory.some((i) => i.item === "poisoners-kit")
-      ) {
-        fail(message("refusal.cunning_strike_poison_needs", { name: c.name }));
-      }
-      out.forgo.push({ rider: "sneak-attack", dice: cunning.length });
+    const ref = c.character !== null ? characterRef(ctx, c) : null;
+    const character = ref
+      ? { sheet: computePlaySheet(ref.build, ref.state, ctx.catalog), state: ref.state }
+      : null;
+    // "Brutal Strike": on your turn, not with an Opportunity Attack.
+    const turn = options.opportunity || current()?.id !== c.id ? false : undefined;
+    try {
+      return strikeDice(attacker, attackName, options, character, { turn });
+    } catch (error) {
+      if (error instanceof RangeError) fail(ruleReason(error));
+      throw error;
     }
-    if (brutal.length) {
-      if (!sheet.rules.includes("brutal_strike"))
-        fail(message("refusal.doesnt_brutal_strike", { name: c.name }));
-      const reckless = sheet.toggles.some((x) => x.active && x.key.endsWith(":reckless-attack"));
-      if (!reckless) fail(message("refusal.brutal_strike_needs_reckless"));
-      if (!options.manual && (options.opportunity || current()?.id !== c.id))
-        fail(message("refusal.brutal_strike_used_your"));
-      const line = attacker.attacks.find((a) => a.name === attackName);
-      if (line?.ability !== "str") fail(message("refusal.brutal_strike_strength_based"));
-      const improved = sheet.rules.includes("improved_brutal_strike");
-      if (!improved && brutal.some((x) => x === "staggering" || x === "sundering")) {
-        fail(message("refusal.staggering_blow_sundering_blow"));
-      }
-      const most = levelIn("barbarian") >= 17 ? 2 : 1;
-      if (brutal.length > most)
-        fail(message("refusal.brutal_strike_count", { name: c.name, most }));
-      out.forgo_advantage = true;
-      out.extra_damage.push({ dice: levelIn("barbarian") >= 17 ? "2d10" : "1d10", type: "weapon" });
-    }
-    return out;
   };
   /** The Cunning Strike and Brutal Strike effects of a hit (SRD "Cunning Strike", "Brutal Strike"). */
   const applyStrikes = (
@@ -2992,17 +2903,7 @@ function run(
     case "unarmed": {
       const c = find(action.id);
       canAct(c);
-      if (action.manual) {
-        // By hand: the DC to show; the target (the table's) picks Strength or Dexterity.
-        const user = encounterCombatant(e, c.id, ctx);
-        const dc = 8 + user.modifiers.str + user.proficiency_bonus;
-        const save = { ability: action.save ?? null, dc };
-        result = byHand(c, "unarmed", action.option, null, { save });
-        break;
-      }
-      const t = find(
-        action.target ?? fail(message("refusal.needs_target", { attack: action.option })),
-      );
+      const t = find(action.target);
       if (action.option === "shove" && !action.shove)
         fail(message("refusal.shove_pushes_knocks_prone"));
       const user = encounterCombatant(e, c.id, ctx);
@@ -3413,33 +3314,7 @@ function run(
     case "attack": {
       const c = find(action.id);
       canAct(c);
-      if (action.manual) {
-        // By hand: the attack's dice, whenever it's asked; a monster's daily uses are spent.
-        const attacker = encounterCombatant(e, c.id, ctx);
-        if (c.monster !== null)
-          spendDaily(c, action.attack, dailyUses(ctx, c, action.attack), action.attack);
-        const strikes = strikeOptions(c, attacker, action.attack, action);
-        let dice: AttackDice;
-        try {
-          dice = rollAttack(attacker, action.attack, {
-            rng,
-            mode: action.mode,
-            two_handed: action.two_handed,
-            riders: action.riders,
-            light_extra: action.light_extra,
-            cleave: action.cleave,
-            ...strikes,
-          });
-        } catch (error) {
-          if (error instanceof RangeError) fail(ruleReason(error));
-          throw error;
-        }
-        result = byHand(c, "attack", action.attack, null, { attacks: [dice] });
-        break;
-      }
-      const t = find(
-        action.target ?? fail(message("refusal.needs_target", { attack: action.attack })),
-      );
+      const t = find(action.target);
       const attacker = encounterCombatant(e, c.id, ctx);
       const line = attacker.attacks.find((a) => a.name === action.attack);
       const light = line?.properties.includes("light") ?? false;
@@ -3506,29 +3381,12 @@ function run(
     }
     case "save_action": {
       const c = find(action.id);
-      if (!action.manual) onTurn(c, "act");
+      onTurn(c, "act");
       canAct(c);
       if (c.expended.includes(action.ability))
         refuse(message("refusal.hasnt_recharged", { name: c.name, ability: action.ability }));
       const user = encounterCombatant(e, c.id, ctx);
       const line = user.save_actions.find((a) => a.name === action.ability);
-      if (action.manual) {
-        // By hand: its Recharge and daily uses spent, its damage rolled, its DC shown.
-        const effect =
-          line ??
-          fail(
-            message("rule.no_saving_throw_action", {
-              name: c.name,
-              action: action.ability,
-              known: user.save_actions.map((a) => a.name).join(", "),
-            }),
-          );
-        if (c.monster !== null)
-          spendDaily(c, action.ability, dailyUses(ctx, c, action.ability), action.ability);
-        if (effect.recharge) c.expended.push(action.ability);
-        result = saveByHand(c, "save_action", effect);
-        break;
-      }
       if (c.used.action) refuse(message("refusal.already_used_action_turn", { name: c.name }));
       if (c.monster !== null)
         spendDaily(c, action.ability, dailyUses(ctx, c, action.ability), action.ability);
@@ -3540,15 +3398,52 @@ function run(
       if (line?.recharge) c.expended.push(action.ability);
       break;
     }
+    case "roll": {
+      // By hand: the actor's dice (`rollByHand`), its costs spent, nothing else checked.
+      const c = find(action.id);
+      const w = action.what;
+      if (w.type === "legendary" && c.monster === null) {
+        fail(message("refusal.no_legendary_actions", { name: c.name }));
+      }
+      if (w.type === "feature" && c.character === null) {
+        fail(message("refusal.no_class_features", { name: c.name }));
+      }
+      canAct(c);
+      // An expended saving throw effect isn't in the monster's view until it recharges.
+      if (w.type === "save_action" && c.expended.includes(w.ability)) {
+        refuse(message("refusal.hasnt_recharged", { name: c.name, ability: w.ability }));
+      }
+      const ref = c.character !== null ? characterRef(ctx, c) : null;
+      let r: ByHandRoll;
+      try {
+        r = rollWith(encounterCombatant(e, c.id, ctx), w, {
+          catalog: ctx.catalog,
+          rng,
+          ...(c.monster !== null ? { monster: monsterDef(ctx, c) } : {}),
+          ...(ref ? { character: { build: ref.build, state: ref.state } } : {}),
+        });
+      } catch (error) {
+        if (error instanceof RangeError) fail(ruleReason(error));
+        throw error;
+      }
+      for (const cost of r.costs) {
+        if (cost.type === "play") applyTo(c, [cost.action]);
+        else if (cost.type === "daily") spendDaily(c, cost.key, cost.per_day, cost.name);
+        else if (!c.expended.includes(cost.name)) c.expended.push(cost.name);
+        else if (w.type !== "save_action") {
+          refuse(message("refusal.hasnt_recharged_2", { name: c.name, action: cost.name }));
+        }
+      }
+      result = byHand(c, r.action, r.name, r.slot_level, r.rolls);
+      notes.push(...r.messages); // a spell or legendary action whose effects are text
+      break;
+    }
     case "legendary": {
       const c = find(action.id);
       if (c.monster === null) fail(message("refusal.no_legendary_actions", { name: c.name }));
-      const manual = action.manual === true;
-      if (!manual) {
-        if (e.round === 0) fail(message("refusal.fight_hasnt_started"));
-        if (current()?.id === c.id) {
-          refuse(message("refusal.takes_legendary_actions_after", { name: c.name }));
-        }
+      if (e.round === 0) fail(message("refusal.fight_hasnt_started"));
+      if (current()?.id === c.id) {
+        refuse(message("refusal.takes_legendary_actions_after", { name: c.name }));
       }
       canAct(c);
       const def = monsterDef(ctx, c);
@@ -3557,7 +3452,7 @@ function run(
           ? def.legendary_uses.in_lair
           : def.legendary_uses.uses
         : 0;
-      if (!manual && c.legendary_used >= perRound) {
+      if (c.legendary_used >= perRound) {
         refuse(message("refusal.no_legendary_action_uses", { name: c.name }));
       }
       const user = encounterCombatant(e, c.id, ctx);
@@ -3570,31 +3465,22 @@ function run(
             known: user.legendary_actions.map((a) => a.name),
           }),
         );
-      // By hand, the round's legendary actions are neither checked nor spent.
-      if (!manual) {
-        if (line.once_per_round && c.legendary_taken.includes(line.name)) {
-          refuse(message("refusal.cant_take_again_until", { name: c.name, attack: line.name }));
-        }
-        if (c.legendary_used < perRound) c.legendary_used += 1; // forced: nothing more to spend
-        if (line.once_per_round) c.legendary_taken.push(line.name);
-        notes.push(
-          message("legendary.action", {
-            name: c.name,
-            action: line.name,
-            left: perRound - c.legendary_used,
-          }),
-        );
+      if (line.once_per_round && c.legendary_taken.includes(line.name)) {
+        refuse(message("refusal.cant_take_again_until", { name: c.name, attack: line.name }));
       }
+      if (c.legendary_used < perRound) c.legendary_used += 1; // forced: nothing more to spend
+      if (line.once_per_round) c.legendary_taken.push(line.name);
+      notes.push(
+        message("legendary.action", {
+          name: c.name,
+          action: line.name,
+          left: perRound - c.legendary_used,
+        }),
+      );
       const needTarget = () =>
         find(action.target ?? fail(message("refusal.needs_target", { attack: line.name })));
       const attackable = (name: string) => user.attacks.some((a) => a.name === name);
-      /** The attack it makes: rolled by hand, or made against its target. */
-      const attackWith = (name: string) =>
-        manual
-          ? byHand(c, "legendary", line.name, null, {
-              attacks: [attackDice(c, name, { mode: action.mode })],
-            })
-          : attackOn(c, needTarget(), name, action);
+      const attackWith = (name: string) => attackOn(c, needTarget(), name, action);
       if (line.attacks.length) {
         const attack =
           action.attack ??
@@ -3616,16 +3502,14 @@ function run(
         result = attackWith(line.uses);
       } else if (line.uses && user.save_actions.some((a) => a.name === line.uses)) {
         const used = user.save_actions.find((a) => a.name === line.uses) as SaveActionLine;
-        result = manual
-          ? saveByHand(c, "legendary", used)
-          : saveEffectOn(
-              c,
-              user,
-              line.uses,
-              saveTargets(c, used, action.area, action.targets),
-              undefined,
-              !!action.area,
-            );
+        result = saveEffectOn(
+          c,
+          user,
+          line.uses,
+          saveTargets(c, used, action.area, action.targets),
+          undefined,
+          !!action.area,
+        );
       } else if (def.legendary_actions.find((a) => a.name === line.name)?.casts) {
         // "uses Spellcasting to cast Fear": the spell, at its listed level, through this action.
         const cast = monsterSpells(def).find(
@@ -3635,11 +3519,6 @@ function run(
           lookup(ctx.catalog.spells, cast.spell) ??
           fail(message("refusal.unknown_spell", { spell: cast.spell }));
         const slot_level = spell.level === 0 ? undefined : (cast.level ?? spell.level);
-        if (manual) {
-          const options = { slot_level, mode: action.mode, spellcasting: line.name };
-          result = castByHand(c, spell, "legendary", line.name, options);
-          break;
-        }
         const area = action.area ? spellArea(c, spell, action.area) : null;
         const targets = area ?? action.targets ?? (action.target ? [action.target] : []);
         result = castBy(c, spell, targets, {
@@ -3649,19 +3528,16 @@ function run(
           area: area !== null,
         });
       } else if (line.save) {
-        result = manual
-          ? saveByHand(c, "legendary", line.save)
-          : saveEffectOn(
-              c,
-              { ...user, save_actions: [line.save] },
-              line.name,
-              saveTargets(c, line.save, action.area, action.targets),
-              undefined,
-              !!action.area,
-            );
+        result = saveEffectOn(
+          c,
+          { ...user, save_actions: [line.save] },
+          line.name,
+          saveTargets(c, line.save, action.area, action.targets),
+          undefined,
+          !!action.area,
+        );
       } else {
         notes.push(message("legendary.text_only", { action: line.name }));
-        if (manual) result = byHand(c, "legendary", line.name, null, {});
       }
       break;
     }
@@ -3689,28 +3565,6 @@ function run(
               )));
       if (damageType && f.save?.damage && !f.save.damage.types.includes(damageType)) {
         fail(message("refusal.damage_types", { feature: f.name, types: f.save.damage.types }));
-      }
-      if (action.manual) {
-        // By hand: its uses spent, no action economy and no target; its healing (a pool's
-        // amount as given) and a save's damage rolled, the save's DC shown.
-        canAct(c);
-        play(c, { type: "use_feature", key: f.key, amount: action.amount, manual: true });
-        const healing = !f.heal
-          ? null
-          : f.heal.pooled
-            ? (action.amount ?? null)
-            : rollDamage([{ dice: f.heal.dice, bonus: f.heal.bonus, type: "healing" }], { rng })
-                .total;
-        const damage =
-          f.save?.damage && damageType
-            ? rollDamage(
-                [{ dice: f.save.damage.dice, bonus: f.save.damage.bonus, type: damageType }],
-                { rng },
-              )
-            : null;
-        const save = f.save ? { ability: f.save.ability, dc: f.save.dc } : null;
-        result = byHand(c, "feature", f.name, null, { healing, damage, save });
-        break;
       }
       const t = action.target ? find(action.target) : c;
       if (f.target === "self" && t !== c)
@@ -3904,39 +3758,11 @@ function run(
         what = castingEconomy(spell);
       } else {
         // A monster casts it through an action that lists it (legendary ones: `legendary`).
-        const lines = monsterSpells(monsterDef(ctx, c)).filter(
-          (x) =>
-            x.spell === spell.id &&
-            x.section !== "legendary_actions" &&
-            (action.via === undefined || x.action === action.via),
-        );
-        if (!lines.length) {
-          fail(
-            message("refusal.cant_cast_via", {
-              name: c.name,
-              spell: spell.name,
-              via: action.via ?? "",
-              given: action.via !== undefined,
-            }),
-          );
-        }
-        if (lines.length > 1) {
-          fail(
-            message("refusal.give_via", {
-              name: c.name,
-              spell: spell.name,
-              actions: lines.map((x) => x.action),
-            }),
-          );
-        }
-        line = lines[0] as (typeof lines)[number];
-        if (!/^(Action|Bonus Action|Reaction)\b/.test(spell.casting_time)) {
-          fail(
-            message("refusal.takes_monster_casts_magic", {
-              spell: spell.name,
-              casting_time: spell.casting_time,
-            }),
-          );
+        try {
+          line = monsterCastLine(monsterDef(ctx, c), c.name, spell, action.via);
+        } catch (error) {
+          if (error instanceof RangeError) fail(ruleReason(error));
+          throw error;
         }
         what =
           line.section === "bonus_actions"
@@ -3956,23 +3782,6 @@ function run(
         if (line.recharge && c.expended.includes(line.action)) {
           refuse(message("refusal.hasnt_recharged_2", { name: c.name, action: line.action }));
         }
-      }
-      if (action.manual) {
-        // By hand: no target, area or action economy; a monster's daily uses and Recharge, the
-        // slot and Concentration spent; the caster's dice rolled.
-        if (line) {
-          spendDaily(c, line.action, line.action_per_day, line.action);
-          spendDaily(c, `${line.action}#${line.spell}`, line.per_day, spell.name);
-          if (line.recharge) c.expended.push(line.action);
-        }
-        result = castByHand(c, spell, "cast", spell.name, {
-          slot_level,
-          pact: action.pact,
-          spellcasting,
-          mode: action.mode,
-          damage_type: action.damage_type,
-        });
-        break;
       }
       const released = releasing?.id === c.id;
       if (what === "reaction") {

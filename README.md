@@ -291,10 +291,10 @@ so the player or GM can choose (`decide`), with `"auto"` the engine uses them on
 change the outcome (`cast`), once-per-turn riders (Sneak Attack), recharges (a
 breath weapon on 5–6), conditions with durations (`effects` with `{ rounds: 10 }` or
 `{ until: { at: "end" } }`), Concentration saves when damaged, a Concentration spell's
-conditions ending with it, and Rage ending when it isn't extended. Played by hand
-(`manual: true`), an action is a dice roller, like a virtual tabletop's: the engine rolls its
-dice and spends its resources, with no target and no action economy, and the table applies the
-outcome with `effects`. A GM can rule that something happens anyway: `force: true` applies an
+conditions ending with it, and Rage ending when it isn't extended. Rolled by hand
+(`{ type: "roll", id, what }`), an action is a dice roller, like a virtual tabletop's: the engine
+rolls its dice and spends its resources, with no target and no action economy, and the table
+applies the outcome with `effects`; `rollByHand` does the same without an encounter. A GM can rule that something happens anyway: `force: true` applies an
 action refused for its legality (turn, economy, range, movement, resources), noting the override.
 
 What a combatant can do now, for a UI's buttons: `combatantOptions(encounter, id, ctx)` lists
@@ -415,6 +415,7 @@ export default { fetch: handler };                // Cloudflare Workers
 | `POST /v1/state/apply` | `{ build, state, action }` (one action or a list, all or nothing) → `{ state, notes, messages }` |
 | `POST /v1/state/sheet` · `/v1/state/reconcile` | Play sheet and state issues · fit a state to a changed build |
 | `POST /v1/state/attack` | `{ attacker: {build, state}, target: {build, state}, attack, mode?, two_handed?, riders?, ally_adjacent? }` → the attack, and the target's state after the damage |
+| `POST /v1/state/roll` | `{ build, state, what, force? }` → an attack, spell or feature rolled by hand (`rollByHand`): the dice, and the state with its costs spent (slot, Concentration, uses) |
 | `POST /v1/state/cast` | `{ caster: {build, state}, spell, targets: [{build, state}], slot_level?, pact? }` → the spell's results, the caster's state (slot spent, Concentration) and the targets' states |
 | `POST /v1/encounters/apply` | `{ encounter, characters: { key: {build, state} }, action }` (one or a list, all or nothing) → `{ encounter, states, notes, messages, events, log, pending, applied }` (`log`: each action with the dice it drew): Initiative, turns, attacks, spells, effects on monsters and characters; a list stops at a decision to make (`pending`), answered with `{ type: "decide", use }` |
 | `POST /v1/encounters/options` | `{ encounter, characters, id }` → what that combatant can do now (`combatantOptions`; schema in `schemas/options.schema.json`) |

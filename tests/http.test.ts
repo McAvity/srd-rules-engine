@@ -242,6 +242,40 @@ describe("HTTP play state", () => {
     expect(bad.status).toBe(422);
   });
 
+  it("rolls by hand on the sheet: the dice, and the costs spent on the state", async () => {
+    const api = client(
+      createHandler({ rng: scriptedRng([15, 3, 4, ...Array<number>(10).fill(7)]) }),
+    );
+    const build = fighterBuild();
+    const state = (await api.post("/v1/state/new", { build })).body;
+    const sword = await api.post("/v1/state/roll", {
+      build,
+      state,
+      what: { type: "attack", attack: "Greatsword" },
+    });
+    expect(sword.status).toBe(200);
+    expect(sword.body.roll.rolls.attacks[0]).toMatchObject({ total: 20, damage: { total: 10 } });
+    expect(sword.body.state).toEqual(state);
+    const wind = { type: "feature", feature: "Second Wind" };
+    let current = state;
+    let refused = null;
+    for (let i = 0; i < 5 && !refused; i++) {
+      const res = await api.post("/v1/state/roll", { build, state: current, what: wind });
+      if (res.status !== 200) refused = res;
+      else current = res.body.state;
+    }
+    expect(refused?.status).toBe(400);
+    const forced = await api.post("/v1/state/roll", {
+      build,
+      state: current,
+      what: wind,
+      force: true,
+    });
+    expect(forced.status).toBe(200);
+    expect(forced.body.state).toEqual(current);
+    expect(forced.body.messages.map((m: { code: string }) => m.code)).toContain("override.applied");
+  });
+
   it("resolves an attack between two characters and damages the target's state", async () => {
     const api = client(createHandler({ rng: scriptedRng([15, 4, 5]) }));
     const build = fighterBuild();

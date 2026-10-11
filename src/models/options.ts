@@ -7,8 +7,34 @@
 import { z } from "zod";
 import { SpellAreaSchema } from "./content";
 import { EncounterActionSchema } from "./encounter";
-import { REFUSAL_CODES } from "./events";
+import { REFUSAL_CATEGORY_NAMES, REFUSAL_CODES } from "./events";
 import { MessageSchema } from "./messages";
+
+/**
+ * One reason the engine would refuse an option now, with its category (`REFUSAL_CATEGORIES`), so
+ * the client decides which ones it enforces (play by hand ignores `economy`, `turn`, `target`).
+ */
+export const OptionReasonSchema = z.object({
+  code: z.enum(REFUSAL_CODES),
+  category: z.enum(REFUSAL_CATEGORY_NAMES),
+  text: z.string(),
+  /** `text` as a message (for translation). */
+  message: MessageSchema,
+});
+export type OptionReason = z.infer<typeof OptionReasonSchema>;
+
+const reasonsField = {
+  /**
+   * Every reason the engine would refuse it now, not only the first (`[]` when available): each
+   * refusal the GM could override, then the one that stops it, if any.
+   */
+  reasons: z.array(OptionReasonSchema).default([]),
+  /**
+   * It can be rolled by hand: `{ type: "roll", id, what }` takes it, its `resource` and `state`
+   * reasons aside (Dash, a check or a zone can't).
+   */
+  rollable: z.boolean().default(false),
+};
 
 /**
  * What an option spends: an action, a Bonus Action or a reaction; `attack`, one of the Attack
@@ -70,6 +96,7 @@ export const StrikeOptionSchema = z.object({
   code: z.enum(REFUSAL_CODES).nullable().default(null),
   /** `reason` as a message (for translation). */
   reason_message: MessageSchema.nullable().default(null),
+  ...reasonsField,
 });
 export type StrikeOption = z.infer<typeof StrikeOptionSchema>;
 
@@ -92,6 +119,7 @@ export const OptionEntrySchema = z.object({
   code: z.enum(REFUSAL_CODES).nullable().default(null),
   /** Why not, as a message (for translation); `null` when available. */
   reason_message: MessageSchema.nullable().default(null),
+  ...reasonsField,
   targets: TargetSpecSchema.nullable(),
   /** A spell: the slot levels it can be cast with now (empty for a cantrip). */
   slot_levels: z.array(z.int()).default([]),

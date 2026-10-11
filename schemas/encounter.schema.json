@@ -510,14 +510,12 @@
                                 "sundering"
                               ]
                             }
-                          },
-                          "manual": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
                           "type",
                           "id",
+                          "target",
                           "attack"
                         ]
                       },
@@ -560,14 +558,12 @@
                           },
                           "reaction": {
                             "type": "boolean"
-                          },
-                          "manual": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
                           "type",
                           "id",
+                          "target",
                           "option"
                         ]
                       },
@@ -752,9 +748,6 @@
                             "items": {
                               "type": "string"
                             }
-                          },
-                          "manual": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -2933,14 +2926,12 @@
             },
             "reaction": {
               "type": "boolean"
-            },
-            "manual": {
-              "type": "boolean"
             }
           },
           "required": [
             "type",
             "id",
+            "target",
             "option"
           ]
         },
@@ -3285,14 +3276,12 @@
                           "sundering"
                         ]
                       }
-                    },
-                    "manual": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
                     "type",
                     "id",
+                    "target",
                     "attack"
                   ]
                 },
@@ -3335,14 +3324,12 @@
                     },
                     "reaction": {
                       "type": "boolean"
-                    },
-                    "manual": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
                     "type",
                     "id",
+                    "target",
                     "option"
                   ]
                 },
@@ -3527,9 +3514,6 @@
                       "items": {
                         "type": "string"
                       }
-                    },
-                    "manual": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -3859,14 +3843,12 @@
                   "sundering"
                 ]
               }
-            },
-            "manual": {
-              "type": "boolean"
             }
           },
           "required": [
             "type",
             "id",
+            "target",
             "attack"
           ]
         },
@@ -3917,9 +3899,6 @@
                 "slashing",
                 "thunder"
               ]
-            },
-            "manual": {
-              "type": "boolean"
             }
           },
           "required": [
@@ -4006,9 +3985,6 @@
                   "total"
                 ]
               }
-            },
-            "manual": {
-              "type": "boolean"
             }
           },
           "required": [
@@ -4198,9 +4174,6 @@
               "items": {
                 "type": "string"
               }
-            },
-            "manual": {
-              "type": "boolean"
             }
           },
           "required": [
@@ -4405,6 +4378,29 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "roll"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "what": {
+              "$ref": "#/$defs/RollWhat"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "what"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "legendary"
             },
             "force": {
@@ -4480,9 +4476,6 @@
               ]
             },
             "within_5ft": {
-              "type": "boolean"
-            },
-            "manual": {
               "type": "boolean"
             }
           },
@@ -5180,6 +5173,245 @@
           "required": [
             "type",
             "changes"
+          ]
+        }
+      ]
+    },
+    "RollWhat": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "attack"
+            },
+            "attack": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "normal",
+                "advantage",
+                "disadvantage"
+              ]
+            },
+            "two_handed": {
+              "type": "boolean"
+            },
+            "riders": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "rider": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rider"
+                ]
+              }
+            },
+            "light_extra": {
+              "type": "boolean"
+            },
+            "cleave": {
+              "type": "boolean"
+            },
+            "cunning": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "poison",
+                  "trip",
+                  "withdraw"
+                ]
+              }
+            },
+            "brutal": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "forceful",
+                  "hamstring",
+                  "staggering",
+                  "sundering"
+                ]
+              }
+            }
+          },
+          "required": [
+            "type",
+            "attack"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "unarmed"
+            },
+            "option": {
+              "type": "string",
+              "enum": [
+                "grapple",
+                "shove"
+              ]
+            },
+            "save": {
+              "type": "string",
+              "enum": [
+                "str",
+                "dex"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "option"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cast"
+            },
+            "spell": {
+              "type": "string"
+            },
+            "via": {
+              "type": "string"
+            },
+            "slot_level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9
+            },
+            "pact": {
+              "type": "boolean"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "normal",
+                "advantage",
+                "disadvantage"
+              ]
+            },
+            "damage_type": {
+              "type": "string",
+              "enum": [
+                "acid",
+                "bludgeoning",
+                "cold",
+                "fire",
+                "force",
+                "lightning",
+                "necrotic",
+                "piercing",
+                "poison",
+                "psychic",
+                "radiant",
+                "slashing",
+                "thunder"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "spell"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "feature"
+            },
+            "feature": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "damage_type": {
+              "type": "string",
+              "enum": [
+                "acid",
+                "bludgeoning",
+                "cold",
+                "fire",
+                "force",
+                "lightning",
+                "necrotic",
+                "piercing",
+                "poison",
+                "psychic",
+                "radiant",
+                "slashing",
+                "thunder"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "feature"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "save_action"
+            },
+            "ability": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ability"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "legendary"
+            },
+            "action": {
+              "type": "string"
+            },
+            "attack": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "normal",
+                "advantage",
+                "disadvantage"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "action"
           ]
         }
       ]

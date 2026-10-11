@@ -454,13 +454,6 @@ export function parseEncounter(input: unknown): Encounter {
 
 const n = z.int();
 /**
- * `manual` on an action that rolls: played by hand, a dice roller. No target (targets and areas
- * are ignored) and no action economy; its resources are checked and spent (slots, uses, daily
- * uses, Recharge, Concentration); the actor's dice are rolled and nothing is applied. The result
- * is a `DeclaredResult`; the table applies the outcome (`effects`).
- */
-const manual = z.boolean().optional();
-/**
  * `force` on an action taken in turns: the GM overrides a refusal of legality
  * (`FORCEABLE_REFUSALS`: turn, economy, range, movement, resources); the action applies, a cost
  * that can't be paid isn't spent, and the log notes each override (`override.applied`).
@@ -468,12 +461,67 @@ const manual = z.boolean().optional();
 const force = z.boolean().optional();
 export const ECONOMY = ["action", "bonus_action", "reaction"] as const;
 
+const mode = z.enum(["normal", "advantage", "disadvantage"]).optional();
+/**
+ * What's rolled by hand (`rollByHand`, the encounter's `roll` action): an attack, a Grapple or
+ * Shove, a spell, a feature, a saving throw effect or a legendary action, with the fields of the
+ * action that would take it, less its target, area and economy.
+ */
+export const RollWhatSchema = z
+  .discriminatedUnion("type", [
+    z.object({
+      type: z.literal("attack"),
+      attack: z.string(),
+      mode,
+      two_handed: z.boolean().optional(),
+      riders: z.array(z.object({ rider: z.string(), type: z.string().optional() })).optional(),
+      light_extra: z.boolean().optional(),
+      cleave: z.boolean().optional(),
+      /** Cunning Strike effects, paid with Sneak Attack dice (needs the `sneak-attack` rider). */
+      cunning: z.array(z.enum(["poison", "trip", "withdraw"])).optional(),
+      /** Brutal Strike effects: Advantage forgone while Reckless, for 1d10 and an effect. */
+      brutal: z.array(z.enum(["forceful", "hamstring", "staggering", "sundering"])).optional(),
+    }),
+    /** The DC only: the target picks Strength or Dexterity, unless `save` gives it. */
+    z.object({
+      type: z.literal("unarmed"),
+      option: z.enum(["grapple", "shove"]),
+      save: z.enum(["str", "dex"]).optional(),
+    }),
+    z.object({
+      type: z.literal("cast"),
+      spell: z.string(),
+      /** A monster's action that casts it, when several do. */
+      via: z.string().optional(),
+      slot_level: n.min(1).max(9).optional(),
+      pact: z.boolean().optional(),
+      mode,
+      damage_type: z.enum(DAMAGE_TYPES).optional(),
+    }),
+    /** A character's feature (`sheet.actions`, by key or name); `amount` for a pool. */
+    z.object({
+      type: z.literal("feature"),
+      feature: z.string(),
+      amount: n.min(1).optional(),
+      damage_type: z.enum(DAMAGE_TYPES).optional(),
+    }),
+    /** A saving throw effect (a breath weapon), by name. */
+    z.object({ type: z.literal("save_action"), ability: z.string() }),
+    z.object({
+      type: z.literal("legendary"),
+      action: z.string(),
+      attack: z.string().optional(),
+      mode,
+    }),
+  ])
+  .meta({ id: "RollWhat" });
+export type RollWhat = z.infer<typeof RollWhatSchema>;
+
 const AttackActionSchema = z.object({
   type: z.literal("attack"),
   force,
   id: z.string(),
-  /** Required, except played by hand (`manual`). */
-  target: z.string().optional(),
+  target: z.string(),
   attack: z.string(),
   mode: z.enum(["normal", "advantage", "disadvantage"]).optional(),
   two_handed: z.boolean().optional(),
@@ -496,20 +544,17 @@ const AttackActionSchema = z.object({
   cunning: z.array(z.enum(["poison", "trip", "withdraw"])).optional(),
   /** Brutal Strike effects: Advantage forgone while Reckless, for 1d10 and an effect. */
   brutal: z.array(z.enum(["forceful", "hamstring", "staggering", "sundering"])).optional(),
-  manual,
 });
 
 const UnarmedActionSchema = z.object({
   type: z.literal("unarmed"),
   force,
   id: z.string(),
-  /** Required, except played by hand (`manual`). */
-  target: z.string().optional(),
+  target: z.string(),
   option: z.enum(["grapple", "shove"]),
   shove: z.enum(["push", "prone"]).optional(),
   save: z.enum(["str", "dex"]).optional(),
   reaction: z.boolean().optional(),
-  manual,
 });
 
 const CastActionSchema = z.object({
@@ -553,7 +598,6 @@ const CastActionSchema = z.object({
   damage_type: z.enum(DAMAGE_TYPES).optional(),
   /** Creatures a zone doesn't affect, for a spell whose caster designates them. */
   unaffected: z.array(z.string()).optional(),
-  manual,
 });
 
 const MoveActionSchema = z.object({
@@ -876,7 +920,6 @@ export const EncounterActionSchema = z
       amount: n.min(1).optional(),
       /** The damage type, for a feature that offers a choice (Divine Spark). */
       damage_type: z.enum(DAMAGE_TYPES).optional(),
-      manual,
     }),
     /** A saving throw effect (a monster's breath weapon) against targets; uses the action. */
     z.object({
@@ -895,7 +938,6 @@ export const EncounterActionSchema = z
         .optional(),
       /** Targets' cover, by id: +2 or +5 to Dexterity saves; Total Cover can't be targeted. */
       cover: z.record(z.string(), z.enum(["half", "three_quarters", "total"])).optional(),
-      manual,
     }),
     /**
      * Cast a catalog spell (`castSpell`): uses the action, Bonus Action or reaction its casting
@@ -952,6 +994,14 @@ export const EncounterActionSchema = z
     /** Extend Rage this turn some other way (forcing a saving throw). */
     z.object({ type: z.literal("extend"), id: z.string() }),
     /**
+     * Roll by hand (`rollByHand`): the actor's dice for `what`, its costs spent (slots, feature
+     * uses, daily uses, Recharge, Concentration), and nothing else: no target, no action economy,
+     * no turn, no outcome (the table applies it with `effects`). Refused only when a cost can't
+     * be paid or the actor can't act (`force` rolls anyway, an unpayable cost not spent). The
+     * result is a `DeclaredResult`.
+     */
+    z.object({ type: z.literal("roll"), force, id: z.string(), what: RollWhatSchema }),
+    /**
      * A legendary action, taken right after another creature's turn: an attack (`target`, and
      * `attack` when it offers a choice), a saving throw effect (`targets`), another action it uses,
      * or text. Uses per round come back at the start of the monster's turn.
@@ -974,7 +1024,6 @@ export const EncounterActionSchema = z
       attack: z.string().optional(),
       mode: z.enum(["normal", "advantage", "disadvantage"]).optional(),
       within_5ft: z.boolean().optional(),
-      manual,
     }),
   ])
   .meta({ id: "EncounterAction" });

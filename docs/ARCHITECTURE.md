@@ -796,17 +796,30 @@ missing parameter or a message pasted into a string.
   same encounter and states (`replayHistory`); `undoAction` replays all but the last action, so
   undoing a `decide` brings its question back. `POST /v1/encounters/apply` returns the steps in
   `log`. The fight CLI keeps one for `undo`.
-- **Manual play, a dice roller.** `manual: true` on `attack`, `unarmed`, `cast`, `feature`,
-  `save_action` or `legendary` is handled at the top of its case in `run`, before any target,
-  range or economy check: the actor's resources are checked and spent (slots through the play
-  actions, so `force` can still override `no_resources`; feature uses; a monster's daily uses and
-  Recharge; Concentration), its dice rolled without a target, and `byHand` builds the
-  `DeclaredResult` and its notes. Attacks go through `rollAttack` (shares `prepareAttack` with
-  `makeAttack`: the mode comes from `attackMode` with no target, so only the actor's own state and
-  the `mode` asked count; riders' target requirements are the table's to judge; damage is rolled
-  whatever the d20). Spells go through `castSpell` with `by_hand`: an attack roll per beam or
-  ray with its damage, else the damage rolled once, a save's (or follow-up save's) DC, healing.
-  Nothing else changes in the documents; undo replays the dice like any action's.
+- **Rolling by hand, a dice roller.** `rollByHand` (`src/services/by-hand.ts`) is a pure
+  function over plain inputs: a `Combatant`, and the monster's stat block (`monster`: its spell
+  lines, daily uses and the spells its legendary actions cast) or the character's build and state
+  (`character`: its features, known spells, Cunning and Brutal Strike) when the roll needs them.
+  It rolls the actor's dice without a target and returns what it costs as data (`RollCost`), never
+  checking or spending it: a play action for the character (slot, Pact slot, Concentration, a
+  feature's uses with `manual`), a monster's daily use, a monster's ability to recharge. Attacks go
+  through `rollAttack` (shares `prepareAttack` with `makeAttack`: the mode comes from `attackMode`
+  with no target, so only the actor's own state and the `mode` asked count; damage is rolled
+  whatever the d20); spells through `castSpell` with `by_hand` (an attack roll per beam or ray
+  with its damage, else the damage rolled once, a save's DC, healing). The encounter's `roll`
+  action calls it (`rollWith`, which adds Brutal Strike's turn check for automatic attacks) and
+  spends the costs: play actions through `applyTo` (so `force` can override `no_resources`), daily
+  uses through `spendDaily`, Recharge into `expended` (an expended saving throw effect is refused
+  before rolling, since the monster's view drops it). `byHand` builds the `DeclaredResult` and its
+  notes. Nothing else changes in the documents; undo replays the dice like any action's.
+- **Every reason, with a category.** `REFUSAL_CATEGORIES` maps each refusal code to what it's
+  about (`economy`, `turn`, `target`, `movement`, `resource`, `state`, `input`, `other`), so a
+  client picks what to enforce: the engine informs, the caller decides. An option the plain dry
+  run refuses gets a second dry run with `force: true`: each refusal the GM could override becomes
+  a note and the run goes on, so `reasons` lists all of them, then the one that stops it
+  (`EncounterError.overridden` keeps the overridden ones when the run fails). An option of a
+  rollable kind (`RollWhatSchema` parses it) is also judged as a forced `roll`: rollable unless it
+  stops for something other than a `resource` or `state` reason, whose reasons are merged in.
 - **GM override.** `force: true` on an action taken in turns turns a refusal of legality into a
   note: `run` checks those with `refuse(reason)` instead of `fail`, which throws unless the action
   is forced and the reason's refusal code is in `FORCEABLE_REFUSALS` (turn, Incapacitated,
@@ -1064,7 +1077,7 @@ Where the SRD is silent or ambiguous, the engine picks a reading and lists it he
 
 **Encounters**
 
-- **What an action played by hand (manual) spends.** Resources only, never the action economy
+- **What an action rolled by hand spends.** Resources only, never the action economy
   or the turn: the same attack can be rolled any number of times. It changes nothing else: no
   Rage extension, hiding, Help, Vex, Sap or marks used, no Action Surge action or granted attacks,
   no Bardic Inspiration die given. A Grapple or Shove shows its DC with the target's choice of

@@ -106,6 +106,8 @@ export const REFUSAL_CODES = [
   /** With `positions: required`, the actor or a target isn't on a map in use. */
   "off_map",
   "total_cover",
+  /** No creature to aim it at (an option with no candidate, or none within its range). */
+  "no_target",
   "no_path",
   "no_movement",
   "no_resources",
@@ -114,6 +116,47 @@ export const REFUSAL_CODES = [
   "refused",
 ] as const;
 export type RefusalCode = (typeof REFUSAL_CODES)[number];
+
+/**
+ * What a refusal is about, so a client can choose which ones to enforce (play by hand ignores
+ * `economy`, `turn` and `target`): the action economy; whose turn it is and the fight's flow; the
+ * target, its range, cover and the map; movement; resources (slots, uses, Recharge); the actor's
+ * own state (Incapacitated, defeated); missing or unknown input; anything else.
+ */
+export const REFUSAL_CATEGORY_NAMES = [
+  "economy",
+  "turn",
+  "target",
+  "movement",
+  "resource",
+  "state",
+  "input",
+  "other",
+] as const;
+export type RefusalCategory = (typeof REFUSAL_CATEGORY_NAMES)[number];
+
+/** Each refusal code's category. */
+export const REFUSAL_CATEGORIES: Readonly<Record<RefusalCode, RefusalCategory>> = {
+  pending_decision: "turn",
+  halted: "turn",
+  not_started: "turn",
+  not_your_turn: "turn",
+  incapacitated: "state",
+  defeated: "state",
+  economy_used: "economy",
+  no_attacks_left: "economy",
+  once_per_turn: "economy",
+  out_of_range: "target",
+  off_map: "target",
+  total_cover: "target",
+  no_target: "target",
+  no_path: "movement",
+  no_movement: "movement",
+  no_resources: "resource",
+  unknown: "input",
+  incomplete: "input",
+  refused: "other",
+};
 /**
  * The refusals a GM can override with `force: true` on an action: legality (turn, economy, range,
  * movement, resources). The rest (unknown ids, missing input, a defeated creature, no path) still

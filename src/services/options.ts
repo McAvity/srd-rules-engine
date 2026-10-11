@@ -7,14 +7,21 @@
 
 import { lookup } from "../content/catalog";
 import type { SpellDef } from "../models/content";
-import type { Encounter, EncounterAction, EncounterCombatant } from "../models/encounter";
-import type { RefusalCode } from "../models/events";
+import {
+  type Encounter,
+  type EncounterAction,
+  EncounterActionSchema,
+  type EncounterCombatant,
+  RollWhatSchema,
+} from "../models/encounter";
+import { REFUSAL_CATEGORIES, type RefusalCategory, type RefusalCode } from "../models/events";
 import type { Message } from "../models/messages";
 import type {
   ActionCheck,
   CombatantOptions,
   OptionCost,
   OptionEntry,
+  OptionReason,
   StrikeOption,
   TargetSpec,
 } from "../models/options";
@@ -92,7 +99,10 @@ function dryRun(
           codes: [...error.codes],
           reason_messages: [...error.details],
           ...("force" in action && action.force === true
-            ? { overrides: [], override_codes: [] }
+            ? {
+                overrides: [...error.overridden],
+                override_codes: error.overridden.map((m) => refusalCode(m.text)),
+              }
             : {}),
         },
         result: null,
@@ -100,6 +110,93 @@ function dryRun(
     }
     throw error;
   }
+}
+
+/** Action types that take `force` (the GM's override). */
+const FORCE_TYPES: ReadonlySet<string> = new Set(
+  EncounterActionSchema.options
+    .map((o) => o.shape as { type: { value: string }; force?: unknown })
+    .filter((shape) => "force" in shape)
+    .map((shape) => shape.type.value),
+);
+
+/**
+ * Every reason the engine refuses `action`: a dry run with `force` lists each refusal the GM could
+ * override, then the one that stops it; `first` (the plain dry run's) for an action without `force`.
+ */
+function everyReason(
+  e: Encounter,
+  action: EncounterAction,
+  ctx: EncounterContext,
+  first: readonly Message[],
+): Message[] {
+  if (!FORCE_TYPES.has(action.type)) return [...first];
+  const run = dryRun(e, { ...action, force: true } as EncounterAction, ctx).check;
+  const all = [...(run.overrides ?? []), ...run.reason_messages];
+  return all.length ? all : [...first];
+}
+
+/** The `roll` action that rolls `action` by hand (`RollWhat`), or `null` when none does. */
+function rollFor(action: EncounterAction): Extract<EncounterAction, { type: "roll" }> | null {
+  if (action.type === "roll") return null;
+  const what = RollWhatSchema.safeParse(action);
+  const id = "id" in action ? action.id : undefined;
+  return what.success && id ? { type: "roll", id, what: what.data } : null;
+}
+
+/** Categories that don't stop a roll by hand from being rollable (they can be forced). */
+const ROLL_KEEPS: readonly RefusalCategory[] = ["resource", "state"];
+
+/**
+ * Judge `roll` with `force`: rollable unless it stops for something other than a cost or the
+ * actor's state; its reasons (what would be overridden, then what stops it).
+ */
+function judgeRoll(
+  e: Encounter,
+  roll: EncounterAction,
+  ctx: EncounterContext,
+): { rollable: boolean; reasons: Message[] } {
+  const run = dryRun(e, { ...roll, force: true } as EncounterAction, ctx).check;
+  const rollable = run.reason_messages.every((m) => ROLL_KEEPS.includes(categoryOf(m)));
+  return { rollable, reasons: [...(run.overrides ?? []), ...run.reason_messages] };
+}
+
+const categoryOf = (m: Message): RefusalCategory => REFUSAL_CATEGORIES[refusalCode(m.text)];
+
+/** Reasons as `OptionReason`s, each text once (a `refusal.all` split into its parts). */
+function optionReasons(messages: readonly Message[]): OptionReason[] {
+  const seen = new Set<string>();
+  const out: OptionReason[] = [];
+  for (const m of messages.flatMap((x) =>
+    x.code === "refusal.all" ? (x.params.reasons as Message[]) : [x],
+  )) {
+    if (seen.has(m.text)) continue;
+    seen.add(m.text);
+    const code = refusalCode(m.text);
+    out.push({ code, category: REFUSAL_CATEGORIES[code], text: m.text, message: m });
+  }
+  return out;
+}
+
+/**
+ * An option's `reasons` and `rollable`: every reason it's refused (`found` when it isn't
+ * available), the by-hand roll's own merged in when it can be rolled.
+ */
+function reasonsAndRoll(
+  e: Encounter,
+  action: EncounterAction,
+  ctx: EncounterContext,
+  found: readonly Message[],
+  check: boolean,
+): { reasons: OptionReason[]; rollable: boolean } {
+  const roll = rollFor(action);
+  if (!check || !found.length) return { reasons: [], rollable: roll !== null };
+  if (!roll) return { reasons: optionReasons(found), rollable: false };
+  const judged = judgeRoll(e, roll, ctx);
+  return {
+    reasons: optionReasons(judged.rollable ? [...found, ...judged.reasons] : found),
+    rollable: judged.rollable,
+  };
 }
 
 /** SRD Rogue "Cunning Strike" (each costs 1d6 of Sneak Attack). */
@@ -150,6 +247,8 @@ export function combatantOptions(
   ): OptionEntry => {
     let reason = why;
     let odds: OptionEntry["odds"] = null;
+    // Every reason, not only the first (`reasons`).
+    const found: Message[] = why ? [why] : [];
     if (reason === null && check) {
       // No candidate: judge it against the nearest creature (or one behind Total Cover), for the
       // engine's reason ("out of reach", "has Total Cover").
@@ -160,11 +259,14 @@ export function combatantOptions(
         "target" in action && action.target === "" && fallback
           ? ({ ...action, target: fallback } as EncounterAction)
           : action;
-      if ("target" in probe && probe.target === "") reason = message("refusal.no_creature_target");
-      else {
+      if ("target" in probe && probe.target === "") {
+        reason = message("refusal.no_creature_target");
+        found.push(reason);
+      } else {
         const run = dryRun(e, probe, ctx);
         reason = run.check.ok ? null : joined(run.check.reason_messages);
         if (run.check.ok && probe === action) odds = oddsOf(e, ctx, c, action, run.result);
+        if (!run.check.ok) found.push(...everyReason(e, probe, ctx, run.check.reason_messages));
       }
     }
     // Allowed, but there's no one in range to aim it at.
@@ -173,6 +275,7 @@ export function combatantOptions(
         targets.range === null
           ? message("refusal.no_creature_target")
           : message("refusal.no_creature_within", { feet: targets.range });
+      found.push(reason);
     }
     return {
       action,
@@ -183,6 +286,7 @@ export function combatantOptions(
       reason: reason?.text ?? null,
       code: reason === null ? null : firstCode(reason),
       reason_message: reason,
+      ...reasonsAndRoll(e, action, ctx, reason === null ? [] : found, check),
       targets,
       slot_levels: [],
       pact_slot: null,
@@ -341,10 +445,17 @@ export function combatantOptions(
               ? { ...a, riders: [...(a.riders ?? []), { rider: "sneak-attack" }], cunning: [d.id] }
               : { ...a, brutal: [d.id] };
           let reason: Message | null = null;
+          const found: Message[] = [];
           if (check && a.target !== "") {
             const run = dryRun(e, action, ctx).check;
             reason = run.ok ? null : joined(run.reason_messages);
-          } else if (check) reason = option.reason_message ?? message("refusal.no_creature_target");
+            if (!run.ok) found.push(...everyReason(e, action, ctx, run.reason_messages));
+          } else if (check) {
+            reason = option.reason_message ?? message("refusal.no_creature_target");
+            found.push(
+              ...(option.reasons.length ? option.reasons.map((r) => r.message) : [reason]),
+            );
+          }
           return {
             send: d.send,
             id: d.id,
@@ -357,6 +468,7 @@ export function combatantOptions(
             reason: reason?.text ?? null,
             code: reason === null ? null : firstCode(reason),
             reason_message: reason,
+            ...reasonsAndRoll(e, action, ctx, reason === null ? [] : found, check),
           };
         });
     }
@@ -807,7 +919,7 @@ function oddsOf(
   action: EncounterAction,
   result: EncounterResult["result"],
 ): OptionEntry["odds"] {
-  if (!result || "manual" in result) return null;
+  if (!result || "manual" in result) return null; // rolled by hand: no target
   const target =
     "target" in action && action.target
       ? action.target
