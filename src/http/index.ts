@@ -33,7 +33,7 @@ import {
   setLevelClass,
   setLevelHp,
 } from "../services/builder";
-import { rollByHand } from "../services/by-hand";
+import { checkCosts, rollByHand } from "../services/by-hand";
 import { isAlive, passivePerception } from "../services/combat";
 import { applyEncounterAction, type CharacterRef, EncounterError } from "../services/encounter";
 import { checkAction, combatantOptions } from "../services/options";
@@ -107,11 +107,7 @@ const StateCastRequest = z.object({
   spellcasting: z.string().optional(),
   mode: z.enum(ROLL_MODES).default("normal"),
 });
-const StateRollRequest = StateRequest.extend({
-  what: RollWhatSchema,
-  /** Roll anyway when a cost can't be paid (it isn't spent). */
-  force: z.boolean().default(false),
-});
+const StateRollRequest = StateRequest.extend({ what: RollWhatSchema });
 const EncounterRequest = z.object({
   encounter: EncounterSchema,
   /** Characters by key (`add_character`'s `character`): their build and play state. */
@@ -490,33 +486,22 @@ export function createHandler(options: HandlerOptions = {}): FetchHandler {
       method: "POST",
       pattern: /^\/v1\/state\/roll$/,
       handle: ({ body }) => {
-        // Roll by hand on the sheet: the character's dice, then its costs spent on its state.
+        // A free roll on the sheet: the character's dice and what they cost, nothing spent (pay
+        // with /v1/state/apply).
         const req = StateRollRequest.parse(body);
         const catalog = getCatalog();
         const build = parseBuild(req.build);
-        let roll: ReturnType<typeof rollByHand>;
+        const character = { build, state: req.state };
         try {
           const combatant = combatantFromCharacter(build, req.state, catalog);
-          const character = { build, state: req.state };
-          roll = rollByHand(combatant, req.what, { catalog, character, rng });
+          const roll = rollByHand(combatant, req.what, { catalog, character, rng });
+          const name = build.name || combatant.name;
+          const costs = checkCosts(roll.costs, { catalog, name, character });
+          return { roll, costs, notes: texts(roll.messages), messages: roll.messages };
         } catch (e) {
           if (e instanceof RangeError) throw new PlayError([ruleReason(e)]);
           throw e;
         }
-        const messages = [...roll.messages];
-        let state = req.state;
-        for (const cost of roll.costs) {
-          if (cost.type !== "play") continue;
-          try {
-            const applied = applyAction(build, state, catalog, cost.action, { rng });
-            state = applied.state;
-            messages.push(...applied.messages);
-          } catch (e) {
-            if (!(e instanceof PlayError) || !req.force) throw e;
-            messages.push(...e.details.map((reason) => message("override.applied", { reason })));
-          }
-        }
-        return { roll, state, notes: texts(messages), messages };
       },
     },
     {

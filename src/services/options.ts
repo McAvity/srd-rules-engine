@@ -14,7 +14,7 @@ import {
   type EncounterCombatant,
   RollWhatSchema,
 } from "../models/encounter";
-import { REFUSAL_CATEGORIES, type RefusalCategory, type RefusalCode } from "../models/events";
+import type { RefusalCode } from "../models/events";
 import type { Message } from "../models/messages";
 import type {
   ActionCheck,
@@ -53,7 +53,7 @@ import {
   spellTargetRange,
 } from "./encounter";
 import { computePlaySheet, spellSlots } from "./play";
-import { refusalCode } from "./refusals";
+import { optionReason, refusalCode } from "./refusals";
 
 /** Dice that always land in the middle: a dry run checks legality, not outcomes. */
 const middle: Rng = { int: (min, max) => Math.floor((min + max) / 2) };
@@ -144,24 +144,20 @@ function rollFor(action: EncounterAction): Extract<EncounterAction, { type: "rol
   return what.success && id ? { type: "roll", id, what: what.data } : null;
 }
 
-/** Categories that don't stop a roll by hand from being rollable (they can be forced). */
-const ROLL_KEEPS: readonly RefusalCategory[] = ["resource", "state"];
-
 /**
- * Judge `roll` with `force`: rollable unless it stops for something other than a cost or the
- * actor's state; its reasons (what would be overridden, then what stops it).
+ * Judge `roll`: rollable when the engine takes it; its reasons are the costs it couldn't pay now
+ * (a roll by hand spends nothing, so they don't stop it).
  */
 function judgeRoll(
   e: Encounter,
   roll: EncounterAction,
   ctx: EncounterContext,
 ): { rollable: boolean; reasons: Message[] } {
-  const run = dryRun(e, { ...roll, force: true } as EncounterAction, ctx).check;
-  const rollable = run.reason_messages.every((m) => ROLL_KEEPS.includes(categoryOf(m)));
-  return { rollable, reasons: [...(run.overrides ?? []), ...run.reason_messages] };
+  const run = dryRun(e, roll, ctx);
+  const costs = run.result && "costs" in run.result ? run.result.costs : [];
+  const reasons = costs.flatMap((cost) => (cost.reason ? [cost.reason.message] : []));
+  return { rollable: run.check.ok, reasons };
 }
-
-const categoryOf = (m: Message): RefusalCategory => REFUSAL_CATEGORIES[refusalCode(m.text)];
 
 /** Reasons as `OptionReason`s, each text once (a `refusal.all` split into its parts). */
 function optionReasons(messages: readonly Message[]): OptionReason[] {
@@ -172,8 +168,7 @@ function optionReasons(messages: readonly Message[]): OptionReason[] {
   )) {
     if (seen.has(m.text)) continue;
     seen.add(m.text);
-    const code = refusalCode(m.text);
-    out.push({ code, category: REFUSAL_CATEGORIES[code], text: m.text, message: m });
+    out.push(optionReason(m));
   }
   return out;
 }

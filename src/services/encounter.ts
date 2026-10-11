@@ -97,6 +97,8 @@ import { mathRng, type Rng } from "../rules/rng";
 import type { AttackLine } from "../rules/sheet";
 import {
   type ByHandRoll,
+  type CheckedCost,
+  checkCosts,
   type DeclaredRolls,
   monsterCastLine,
   rollWith,
@@ -137,9 +139,9 @@ export interface EncounterContext {
 }
 
 /**
- * An action rolled by hand (`roll`), a dice roller: the actor's dice rolled and its resources
- * spent (slots, uses, Recharge), with no target, no action economy and no outcome. The table
- * applies what happens (`effects`).
+ * An action rolled by hand (`roll`), a free roll: the actor's dice, with no target, no action
+ * economy, nothing spent and no outcome. The table applies what happens (`effects`) and pays
+ * its costs (`spend`) if it wants to.
  */
 export interface DeclaredResult {
   readonly manual: true;
@@ -151,6 +153,11 @@ export interface DeclaredResult {
   /** A spell's slot level (`null` for a cantrip or anything else). */
   readonly slot_level: number | null;
   readonly rolls: DeclaredRolls;
+  /**
+   * What it costs, nothing spent: each cost and whether it can be paid now, with the reason when
+   * it can't (`spend` pays them).
+   */
+  readonly costs: readonly CheckedCost[];
 }
 
 export interface EncounterResult {
@@ -463,6 +470,7 @@ function run(
     name: string,
     slot: number | null,
     rolled: Partial<DeclaredRolls>,
+    costs: readonly CheckedCost[],
   ): DeclaredResult => {
     const rolls = { attacks: [], damage: null, healing: null, save: null, ...rolled };
     notes.push(message("manual.declared", { name: c.name, what: name, level: slot ?? 0 }));
@@ -492,7 +500,7 @@ function run(
     if (rolls.healing !== null) {
       notes.push(message("manual.healing", { what: name, amount: rolls.healing }));
     }
-    return { manual: true, by: c.id, action: kind, name, slot_level: slot, rolls };
+    return { manual: true, by: c.id, action: kind, name, slot_level: slot, rolls, costs };
   };
   // Decisions after a roll: `auto` takes the recommendation; `ask` uses the next answer given,
   // or stops the action for one.
@@ -3399,7 +3407,7 @@ function run(
       break;
     }
     case "roll": {
-      // By hand: the actor's dice (`rollByHand`), its costs spent, nothing else checked.
+      // A free roll: the actor's dice (`rollByHand`) and what they cost; nothing spent or checked.
       const c = find(action.id);
       const w = action.what;
       if (w.type === "legendary" && c.monster === null) {
@@ -3408,34 +3416,53 @@ function run(
       if (w.type === "feature" && c.character === null) {
         fail(message("refusal.no_class_features", { name: c.name }));
       }
-      canAct(c);
-      // An expended saving throw effect isn't in the monster's view until it recharges.
-      if (w.type === "save_action" && c.expended.includes(w.ability)) {
-        refuse(message("refusal.hasnt_recharged", { name: c.name, ability: w.ability }));
-      }
       const ref = c.character !== null ? characterRef(ctx, c) : null;
+      const character = ref ? { build: ref.build, state: ref.state } : undefined;
+      // Its full stat block: an ability waiting to recharge can still be rolled (its Recharge is
+      // a cost that can't be paid now).
+      const whole = {
+        ...e,
+        combatants: e.combatants.map((x) => (x === c ? { ...x, expended: [] } : x)),
+      };
       let r: ByHandRoll;
       try {
-        r = rollWith(encounterCombatant(e, c.id, ctx), w, {
+        r = rollWith(encounterCombatant(whole, c.id, ctx), w, {
           catalog: ctx.catalog,
           rng,
           ...(c.monster !== null ? { monster: monsterDef(ctx, c) } : {}),
-          ...(ref ? { character: { build: ref.build, state: ref.state } } : {}),
+          ...(character ? { character } : {}),
         });
       } catch (error) {
         if (error instanceof RangeError) fail(ruleReason(error));
         throw error;
       }
-      for (const cost of r.costs) {
-        if (cost.type === "play") applyTo(c, [cost.action]);
-        else if (cost.type === "daily") spendDaily(c, cost.key, cost.per_day, cost.name);
-        else if (!c.expended.includes(cost.name)) c.expended.push(cost.name);
-        else if (w.type !== "save_action") {
-          refuse(message("refusal.hasnt_recharged_2", { name: c.name, action: cost.name }));
-        }
-      }
-      result = byHand(c, r.action, r.name, r.slot_level, r.rolls);
+      const costs = checkCosts(r.costs, {
+        catalog: ctx.catalog,
+        name: c.name,
+        ...(character ? { character } : {}),
+        daily_used: c.daily_used,
+        expended: c.expended,
+      });
+      result = byHand(c, r.action, r.name, r.slot_level, r.rolls, costs);
       notes.push(...r.messages); // a spell or legendary action whose effects are text
+      break;
+    }
+    case "spend": {
+      // A roll's costs paid: a character's through its play state, a monster's on its counters.
+      const c = find(action.id);
+      for (const cost of action.costs) {
+        if (cost.type === "play") applyTo(c, [cost.action]);
+        else if (cost.type === "daily") {
+          const used = c.daily_used[cost.key] ?? 0;
+          if (used < cost.per_day) c.daily_used[cost.key] = used + 1;
+          else {
+            refuse(
+              message("refusal.used_today", { name: c.name, what: cost.name, count: cost.per_day }),
+            );
+          }
+        } else if (!c.expended.includes(cost.name)) c.expended.push(cost.name);
+        else refuse(message("refusal.hasnt_recharged_2", { name: c.name, action: cost.name }));
+      }
       break;
     }
     case "legendary": {

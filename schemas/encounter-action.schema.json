@@ -2369,9 +2369,6 @@
               "type": "string",
               "const": "roll"
             },
-            "force": {
-              "type": "boolean"
-            },
             "id": {
               "type": "string"
             },
@@ -2383,6 +2380,32 @@
             "type",
             "id",
             "what"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "spend"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "costs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/RollCost"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "costs"
           ]
         },
         {
@@ -3401,6 +3424,68 @@
           "required": [
             "type",
             "action"
+          ]
+        }
+      ]
+    },
+    "RollCost": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "play"
+            },
+            "action": {
+              "$ref": "#/$defs/PlayAction"
+            }
+          },
+          "required": [
+            "type",
+            "action"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "daily"
+            },
+            "key": {
+              "type": "string"
+            },
+            "per_day": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "per_day",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "recharge"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "name"
           ]
         }
       ]

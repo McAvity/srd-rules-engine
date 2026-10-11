@@ -9,8 +9,9 @@
 import { type Catalog, lookup } from "../content/catalog";
 import type { CharacterBuild } from "../models/build";
 import type { Ability, MonsterDef, SpellDef } from "../models/content";
-import type { RollWhat } from "../models/encounter";
+import type { RollCost, RollWhat } from "../models/encounter";
 import type { Message } from "../models/messages";
+import type { OptionReason } from "../models/options";
 import type { CharacterState, PlayAction } from "../models/state";
 import { castSpell } from "../rules/casting";
 import {
@@ -25,7 +26,8 @@ import {
 import { type RolledDamage, rollDamage } from "../rules/damage";
 import { message, RuleError } from "../rules/messages";
 import { mathRng, type Rng } from "../rules/rng";
-import { computePlaySheet, type PlaySheet } from "./play";
+import { applyAction, computePlaySheet, PlayError, type PlaySheet } from "./play";
+import { optionReason } from "./refusals";
 
 /** The dice rolled by hand (`DeclaredResult.rolls`, `ByHandRoll.rolls`). */
 export interface DeclaredRolls {
@@ -41,21 +43,13 @@ export interface DeclaredRolls {
   readonly save: { readonly ability: Ability | null; readonly dc: number } | null;
 }
 
-/**
- * What a roll by hand costs, not spent: a play action on the character's state (a spell slot,
- * Concentration, a feature's uses: `applyAction`), one of a monster's daily uses (`key` counts
- * up to `per_day`), or a monster's ability expended until it recharges.
- */
-export type RollCost =
-  | { readonly type: "play"; readonly action: PlayAction }
-  | {
-      readonly type: "daily";
-      readonly key: string;
-      readonly per_day: number;
-      /** What's used (`refusal.used_today`). */
-      readonly name: string;
-    }
-  | { readonly type: "recharge"; readonly name: string };
+export type { RollCost } from "../models/encounter";
+
+/** A roll's cost, and whether it can be paid now (`reason` when it can't). */
+export type CheckedCost = RollCost & {
+  readonly payable: boolean;
+  readonly reason: OptionReason | null;
+};
 
 export interface ByHandRoll {
   readonly action: RollWhat["type"];
@@ -447,4 +441,66 @@ export function strikeDice(
     out.extra_damage.push({ dice: levelIn("barbarian") >= 17 ? "2d10" : "1d10", type: "weapon" });
   }
   return out;
+}
+
+/**
+ * Whether each cost can be paid now, paid in order (a slot and the Concentration it starts): a
+ * character's play actions are tried on its state (`character`), a monster's daily uses and
+ * Recharge against its counters. Nothing is spent.
+ */
+export function checkCosts(
+  costs: readonly RollCost[],
+  {
+    catalog,
+    name,
+    character,
+    daily_used = {},
+    expended = [],
+  }: {
+    readonly catalog: Catalog;
+    /** Who pays (for the reasons' messages). */
+    readonly name: string;
+    readonly character?: { readonly build: CharacterBuild; readonly state: CharacterState };
+    readonly daily_used?: Readonly<Record<string, number>>;
+    readonly expended?: readonly string[];
+  },
+): CheckedCost[] {
+  let state = character?.state;
+  const used = { ...daily_used };
+  const spent = new Set(expended);
+  const paid = (cost: RollCost): CheckedCost => ({ ...cost, payable: true, reason: null });
+  const unpaid = (cost: RollCost, m: Message): CheckedCost => ({
+    ...cost,
+    payable: false,
+    reason: optionReason(m),
+  });
+  return costs.map((cost) => {
+    if (cost.type === "play") {
+      if (!character || !state) return paid(cost); // a monster's Concentration
+      try {
+        state = applyAction(character.build, state, catalog, cost.action).state;
+        return paid(cost);
+      } catch (error) {
+        if (!(error instanceof PlayError)) throw error;
+        const reason = error.details[0] ?? message("refusal.no_uses", { feature: name });
+        return unpaid(cost, message("refusal.character", { name, reason }));
+      }
+    }
+    if (cost.type === "daily") {
+      const n = used[cost.key] ?? 0;
+      if (n >= cost.per_day) {
+        return unpaid(
+          cost,
+          message("refusal.used_today", { name, what: cost.name, count: cost.per_day }),
+        );
+      }
+      used[cost.key] = n + 1;
+      return paid(cost);
+    }
+    if (spent.has(cost.name)) {
+      return unpaid(cost, message("refusal.hasnt_recharged_2", { name, action: cost.name }));
+    }
+    spent.add(cost.name);
+    return paid(cost);
+  });
 }

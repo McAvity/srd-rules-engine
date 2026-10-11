@@ -11,7 +11,6 @@
 import { type Catalog, lookup } from "../content/catalog";
 import type { CharacterBuild } from "../models/build";
 import type { ConditionDef, MagicItemDef } from "../models/content";
-import { REFUSAL_CATEGORIES } from "../models/events";
 import type { Message } from "../models/messages";
 import type { OptionReason } from "../models/options";
 import {
@@ -47,7 +46,7 @@ import {
   type SpellLine,
 } from "../rules/sheet";
 import { BuildError, setChoice } from "./builder";
-import { refusalCode } from "./refusals";
+import { optionReason } from "./refusals";
 
 export class PlayError extends Error {
   override name = "PlayError";
@@ -344,23 +343,19 @@ export function spellSlots(
   play: Pick<PlaySheet["play"], "spell_slots" | "pact_magic">,
 ): Pick<PlaySpellLine, "slot_levels" | "pact_slot" | "slots"> {
   if (level === 0) return { slot_levels: [], pact_slot: null, slots: [] };
-  const none = (m: Message): OptionReason => {
-    const code = refusalCode(m.text);
-    return { code, category: REFUSAL_CATEGORIES[code], text: m.text, message: m };
-  };
   const slots: SpellSlotChoice[] = play.spell_slots
     .filter((s) => s.total > 0 && s.level >= level)
     .map((s) => {
       const left = Math.max(0, s.total - s.spent);
       const reason = left
         ? null
-        : none(message("refusal.no_level_spell_slots", { level: s.level }));
+        : optionReason(message("refusal.no_level_spell_slots", { level: s.level }));
       return { level: s.level, pact: false, left, available: left > 0, reason };
     });
   const pact = play.pact_magic;
   if (pact && pact.slots > 0 && pact.slot_level >= level) {
     const left = Math.max(0, pact.slots - pact.spent);
-    const reason = left ? null : none(message("refusal.no_pact_magic_slots"));
+    const reason = left ? null : optionReason(message("refusal.no_pact_magic_slots"));
     slots.push({ level: pact.slot_level, pact: true, left, available: left > 0, reason });
   }
   return {

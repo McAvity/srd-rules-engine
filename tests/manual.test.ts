@@ -128,6 +128,7 @@ describe("rolling by hand: a dice roller", () => {
           healing: null,
           save: null,
         },
+        costs: [],
       } satisfies DeclaredResult);
       expect(r.notes).toEqual([
         "Brakka uses Greatsword, by hand.",
@@ -158,7 +159,7 @@ describe("rolling by hand: a dice roller", () => {
     );
   });
 
-  it("Scorching Ray at level 3: four rays, each with 2d6 fire; the slot is spent", () => {
+  it("Scorching Ray at level 3: four rays, each with 2d6 fire; spend pays the slot", () => {
     const s = session("ilse", wizard(), ["goblin-warrior"]);
     const ray = roll("ilse", { type: "cast", spell: "scorching-ray", slot_level: 3 });
     const dice = [10, 1, 2, 11, 3, 4, 12, 5, 6, 13, 1, 1];
@@ -171,24 +172,38 @@ describe("rolling by hand: a dice roller", () => {
       [13, 2],
     ]);
     expect(r.rolls.attacks[0]?.damage?.parts[0]).toMatchObject({ dice: "2d6", type: "fire" });
+    // A free roll: the slot is a cost, not spent.
+    expect(r.costs).toEqual([
+      { type: "play", action: { type: "spend_slot", level: 3 }, payable: true, reason: null },
+    ]);
+    expect(slots(s, 3)).toBe(0);
+    const pay = (costs: DeclaredResult["costs"], force = false) =>
+      s.act([], { type: "spend", id: "ilse", costs: [...costs], ...(force ? { force } : {}) });
+    pay(r.costs);
     expect(slots(s, 3)).toBe(1);
-    // Two 3rd-level slots at level 5: the third cast has none left.
-    s.act(dice, ray);
+    pay(declared(s.act(dice, ray)).costs);
+    expect(slots(s, 3)).toBe(2);
+    // None left: the roll still rolls, and says the slot can't be paid.
+    const third = declared(s.act(dice, ray));
+    expect(third.rolls.attacks).toHaveLength(4);
+    expect(third.costs[0]).toMatchObject({
+      payable: false,
+      reason: { code: "no_resources", category: "resource" },
+    });
     try {
-      s.act(dice, ray);
+      pay(third.costs);
       expect.unreachable();
     } catch (error) {
       if (!(error instanceof EncounterError)) throw error;
       expect(error.messages).toEqual(["Ilse: No level 3 spell slots left"]);
       expect(error.codes).toEqual(["no_resources"]);
     }
-    // The GM can still force it: cast, no slot spent.
-    const forced = declared(s.act(dice, { ...ray, force: true } as EncounterAction));
-    expect(forced.rolls.attacks).toHaveLength(4);
+    // The GM can force it: nothing more to spend.
+    pay(third.costs, true);
     expect(slots(s, 3)).toBe(2);
   });
 
-  it("Fireball rolls 8d6 once and shows the DC; no saves, no area, no HP changed", () => {
+  it("Fireball rolls 8d6 once and shows the DC; no saves, no area, nothing spent", () => {
     const s = session("ilse", wizard(), ["goblin-warrior"]);
     const eight = [1, 2, 3, 4, 5, 6, 1, 2];
     const r = s.act(eight, roll("ilse", { type: "cast", spell: "fireball" }));
@@ -203,19 +218,24 @@ describe("rolling by hand: a dice roller", () => {
       "Fireball damage rolled: 24 fire (1 + 2 + 3 + 4 + 5 + 6 + 1 + 2).",
     ]);
     expect(s.get("goblin-warrior")?.hp).toBe(10);
-    expect(slots(s, 3)).toBe(1);
+    expect(slots(s, 3)).toBe(0);
     expect(s.get("ilse")?.used.action).toBe(false);
   });
 
-  it("a Concentration spell starts Concentration and replaces the previous one", () => {
+  it("paying a Concentration spell starts Concentration and replaces the previous one", () => {
     const s = session("ilse", wizard(), ["goblin-warrior"]);
-    s.act([], roll("ilse", { type: "cast", spell: "fly" }));
+    const cast = (spell: string) => {
+      const { costs } = declared(s.act([], roll("ilse", { type: "cast", spell })));
+      expect(s.state().concentration).not.toBe(spell);
+      s.act([], { type: "spend", id: "ilse", costs: [...costs] });
+    };
+    cast("fly");
     expect(s.state().concentration).toBe("Fly");
-    s.act([], roll("ilse", { type: "cast", spell: "haste" }));
+    cast("haste");
     expect(s.state().concentration).toBe("Haste");
   });
 
-  it("Second Wind rolls its healing and spends a use; out of uses, it's refused", () => {
+  it("Second Wind rolls its healing; each use is paid apart; out of uses, paying is refused", () => {
     const s = session("brakka", fighterBuild(), ["goblin-warrior"]);
     const wind = roll("brakka", { type: "feature", feature: "Second Wind" });
     const uses = s.sheet().play.uses.find((u) => u.key.endsWith(":second-wind"))?.max ?? 0;
@@ -224,29 +244,50 @@ describe("rolling by hand: a dice roller", () => {
       const r = s.act([7], wind);
       expect(declared(r).rolls.healing).toBe(8);
       expect(r.notes).toContain("Second Wind healing rolled: 8.");
+      s.act([], { type: "spend", id: "brakka", costs: [...declared(r).costs] });
     }
-    expect(() => s.act([7], wind)).toThrow(EncounterError);
+    const spare = declared(s.act([7], wind));
+    expect(spare.rolls.healing).toBe(8);
+    expect(spare.costs[0]).toMatchObject({
+      payable: false,
+      reason: { code: "no_resources", category: "resource" },
+    });
+    expect(() => s.act([], { type: "spend", id: "brakka", costs: [...spare.costs] })).toThrow(
+      EncounterError,
+    );
     expect(s.get("brakka")?.used.bonus_action).toBe(false);
     expect(s.state().hp.current).toBeNull();
   });
 
-  it("a monster's 1/Day spell and its Recharge breath: spent, rolled, refused when gone", () => {
+  it("a monster's 1/Day spell and its Recharge breath: rolled freely, paid apart", () => {
     const s = session("brakka", fighterBuild(), ["adult-black-dragon", "adult-red-dragon"]);
     const sphere = roll("adult-black-dragon", { type: "cast", spell: "vitriolic-sphere" });
-    // Its effects are text in the SRD data: nothing to roll, the daily use spent.
+    // Its effects are text in the SRD data: nothing to roll, the daily use a cost.
     const r = s.act([], sphere);
     expect(declared(r).rolls).toEqual({ attacks: [], damage: null, healing: null, save: null });
     expect(r.messages.map((m) => m.code)).toContain("spell.manual");
+    const pay = (id: string, costs: DeclaredResult["costs"]) =>
+      s.act([], { type: "spend", id, costs: [...costs] });
+    pay("adult-black-dragon", declared(r).costs);
     expect(s.get("adult-black-dragon")?.daily_used).toEqual({
       "Spellcasting#vitriolic-sphere": 1,
     });
-    expect(() => s.act([], sphere)).toThrow("1 time today");
+    const again = declared(s.act([], sphere));
+    expect(again.costs[0]?.reason?.text).toContain("1 time today");
+    expect(() => pay("adult-black-dragon", again.costs)).toThrow("1 time today");
     const breath = roll("adult-red-dragon", { type: "save_action", ability: "Fire Breath" });
     const fire = declared(s.act(Array<number>(17).fill(2), breath));
     expect(fire.rolls.save).toEqual({ ability: "dex", dc: 21 });
     expect(fire.rolls.damage?.parts[0]).toMatchObject({ dice: "17d6", total: 34 });
+    expect(fire.costs).toEqual([
+      { type: "recharge", name: "Fire Breath", payable: true, reason: null },
+    ]);
+    pay("adult-red-dragon", fire.costs);
     expect(s.get("adult-red-dragon")?.expended).toEqual(["Fire Breath"]);
-    expect(() => s.act([], breath)).toThrow("hasn't recharged");
+    // Waiting to recharge, it still rolls; its Recharge can't be paid.
+    const later = declared(s.act(Array<number>(17).fill(2), breath));
+    expect(later.costs[0]?.payable).toBe(false);
+    expect(() => pay("adult-red-dragon", later.costs)).toThrow("hasn't recharged");
   });
 
   it("Grapple by hand shows the DC; a legendary attack rolls without spending uses", () => {
@@ -261,11 +302,12 @@ describe("rolling by hand: a dice roller", () => {
     expect(s.get("adult-blue-dragon")?.legendary_used).toBe(0);
   });
 
-  it("checkAction agrees; undo gives the slot back", () => {
+  it("checkAction agrees; undo of the payment gives the slot back", () => {
     const s = session("ilse", wizard(), ["goblin-warrior"]);
     const fireball = roll("ilse", { type: "cast", spell: "fireball" });
     expect(checkAction(s.encounter(), fireball, s.ctx()).ok).toBe(true);
-    s.act(Array<number>(8).fill(1), fireball);
+    const r = declared(s.act(Array<number>(8).fill(1), fireball));
+    s.act([], { type: "spend", id: "ilse", costs: [...r.costs] });
     expect(slots(s, 3)).toBe(1);
     const undone = undoAction(s.history(), s.ctx());
     expect(undone.states.ilse?.spell_slots_spent ?? []).toEqual([]);
@@ -306,8 +348,10 @@ describe("options: every reason, with its category, and rollable", () => {
   it("Fireball with no level 3 slot and the action spent: both reasons, each categorized", () => {
     const s = session("ilse", wizard(), ["goblin-warrior"]);
     const fireball = roll("ilse", { type: "cast", spell: "fireball" });
-    s.act(Array<number>(8).fill(1), fireball);
-    s.act(Array<number>(8).fill(1), fireball);
+    for (let i = 0; i < 2; i++) {
+      const { costs } = declared(s.act(Array<number>(8).fill(1), fireball));
+      s.act([], { type: "spend", id: "ilse", costs: [...costs] });
+    }
     s.act([], { type: "dash", id: "ilse" });
     const entries = options(s, "ilse").spells.filter(
       (x) => x.action.type === "cast" && x.action.spell === "fireball",
@@ -320,8 +364,9 @@ describe("options: every reason, with its category, and rollable", () => {
     const reasons = option.reasons.map((r) => [r.code, r.category]);
     expect(reasons).toContainEqual(["economy_used", "economy"]);
     expect(reasons).toContainEqual(["no_resources", "resource"]);
-    // By hand, the slot stops it (unless forced).
-    expect(() => s.act(Array<number>(8).fill(1), fireball)).toThrow("No level 3 spell slots");
+    // By hand it still rolls; the slot is a cost it can't pay.
+    const free = declared(s.act(Array<number>(8).fill(1), fireball));
+    expect(free.costs[0]?.reason?.text).toBe("Ilse: No level 3 spell slots left");
   });
 
   it("an Incapacitated actor: every rollable option has the `state` reason", () => {

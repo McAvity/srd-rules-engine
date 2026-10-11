@@ -3,7 +3,9 @@
  * UI can tell "not your turn" from "out of range" without reading English.
  */
 
-import type { RefusalCode } from "../models/events";
+import { REFUSAL_CATEGORIES, type RefusalCode } from "../models/events";
+import type { Message } from "../models/messages";
+import type { OptionReason } from "../models/options";
 
 const PATTERNS: readonly [RegExp, RefusalCode][] = [
   [/^Waiting for a decision/, "pending_decision"],
@@ -25,7 +27,7 @@ const PATTERNS: readonly [RegExp, RefusalCode][] = [
     "no_movement",
   ],
   [
-    /spell slots? left|Pact Magic slots? left|times? today|hasn't recharged|uses? left|No uses|has no .*uses/,
+    /spell slots? left|Pact Magic slots? left|times? today|hasn't recharged|uses? left|No uses|has no .*uses|: \d+ left$|: no uses$/,
     "no_resources",
   ],
   [
@@ -41,4 +43,10 @@ const PATTERNS: readonly [RegExp, RefusalCode][] = [
 /** The code for one of the engine's refusal messages (`refused` when no pattern matches). */
 export function refusalCode(message: string): RefusalCode {
   return PATTERNS.find(([re]) => re.test(message))?.[1] ?? "refused";
+}
+
+/** A refusal message as a reason: its code and category (`REFUSAL_CATEGORIES`). */
+export function optionReason(m: Message): OptionReason {
+  const code = refusalCode(m.text);
+  return { code, category: REFUSAL_CATEGORIES[code], text: m.text, message: m };
 }

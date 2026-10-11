@@ -192,6 +192,8 @@ export {
   type PointOfInterest,
   PointOfInterestSchema,
   parseEncounter,
+  type RollCost,
+  RollCostSchema,
   type RollWhat,
   RollWhatSchema,
   type SpellMark,
@@ -444,8 +446,9 @@ export {
 export {
   type ByHandOptions,
   type ByHandRoll,
+  type CheckedCost,
+  checkCosts,
   type DeclaredRolls,
-  type RollCost,
   rollByHand,
 } from "./services/by-hand";
 export {

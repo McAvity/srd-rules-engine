@@ -176,7 +176,7 @@ npx tsx scripts/import-srd-monsters.ts --report   # monsters: what became data, 
 `POST /v1/builds/preview` — effect of a set-choice / set-level-class change, without applying it  
 `POST /v1/state/new` · `/apply` · `/sheet` · `/reconcile` — play state (HP, slots, conditions, inventory)
 `POST /v1/state/cast` — cast a catalog spell (slot spent, effects applied to targets' states)
-`POST /v1/state/roll` — roll an attack, spell or feature by hand (`rollByHand`), costs spent on the state
+`POST /v1/state/roll` — roll an attack, spell or feature by hand (`rollByHand`): dice + costs, nothing spent
 `POST /v1/encounters/apply` — encounter actions (initiative, turns, economy, effects on combatants)
 `POST /v1/encounters/options` — what a combatant can do now (`combatantOptions`);
 `/v1/encounters/check` — would the engine take an action (dry run, `checkAction`)  

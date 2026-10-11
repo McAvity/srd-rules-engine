@@ -41,12 +41,15 @@ migrated when it's loaded.
   actor's own state, bonus, total, `critical_hit`, `critical_miss` and the damage, crit dice
   doubled; `damage` rolled once; `healing`; a forced save's `ability` and `dc`) and `costs`
   (`RollCost`, not spent: a play action for the character's state, such as a spell slot,
-  Concentration or a feature's uses; a monster's daily use; a monster's ability to recharge).
-  In an encounter, `{ type: "roll", id, what, force? }` rolls and spends the costs: refused only
-  when a cost can't be paid or the actor can't act, `force` rolling anyway with an unpayable cost
-  unspent; its result is a `DeclaredResult`, with notes (`manual.declared`, `manual.attack`,
-  `manual.damage`, `manual.healing`, `manual.save`). On a sheet, `POST /v1/state/roll` rolls and
-  applies the character's costs. `rollAttack(attacker, attack, options)` rolls one attack without a
+  Concentration or a feature's uses; a monster's daily use; a monster's ability to recharge;
+  `RollCostSchema`). `checkCosts` says whether each can be paid now (`CheckedCost`: `payable`, and
+  a `reason` when not). In an encounter, `{ type: "roll", id, what }` is a free roll: it rolls,
+  is logged and spends nothing (an ability waiting to recharge still rolls); its result is a
+  `DeclaredResult` with the checked `costs` and notes (`manual.declared`, `manual.attack`,
+  `manual.damage`, `manual.healing`, `manual.save`). `{ type: "spend", id, costs, force? }` pays
+  them (character's slots, Concentration and uses through its play state; a monster's daily uses
+  and Recharge), refused when one can't be paid, `force` paying what it can. On a sheet,
+  `POST /v1/state/roll` rolls and checks the costs; `/v1/state/apply` pays them. `rollAttack(attacker, attack, options)` rolls one attack without a
   target; `castSpell` takes `by_hand` (its result's `by_hand`: `SpellDice`); `use_feature` takes
   `manual` to spend a feature's uses without its healing.
 - Every refusal reason, with a category: options (`OptionEntry`, `StrikeOption`) list `reasons`

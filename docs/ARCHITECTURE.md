@@ -807,20 +807,23 @@ missing parameter or a message pasted into a string.
   through `rollAttack` (shares `prepareAttack` with `makeAttack`: the mode comes from `attackMode`
   with no target, so only the actor's own state and the `mode` asked count; damage is rolled
   whatever the d20); spells through `castSpell` with `by_hand` (an attack roll per beam or ray
-  with its damage, else the damage rolled once, a save's DC, healing). The encounter's `roll`
-  action calls it (`rollWith`, which adds Brutal Strike's turn check for automatic attacks) and
-  spends the costs: play actions through `applyTo` (so `force` can override `no_resources`), daily
-  uses through `spendDaily`, Recharge into `expended` (an expended saving throw effect is refused
-  before rolling, since the monster's view drops it). `byHand` builds the `DeclaredResult` and its
-  notes. Nothing else changes in the documents; undo replays the dice like any action's.
+  with its damage, else the damage rolled once, a save's DC, healing). Rolling and paying are
+  separate. The encounter's `roll` action is a free roll: it calls the roller (`rollWith`, which
+  adds Brutal Strike's turn check for automatic attacks) on the combatant's full stat block (an
+  ability waiting to recharge still rolls), checks each cost with `checkCosts` (a character's
+  play actions tried in order on its state, a monster's counters), spends nothing, and `byHand`
+  builds the `DeclaredResult` and its notes. The `spend` action pays costs: play actions through
+  `applyTo` (so the Concentration sweep runs at once and `force` can override `no_resources`),
+  daily uses and Recharge on the monster's counters, refused when one can't be paid. Both go in
+  the history, so undo replays rolls and payments like any action.
 - **Every reason, with a category.** `REFUSAL_CATEGORIES` maps each refusal code to what it's
   about (`economy`, `turn`, `target`, `movement`, `resource`, `state`, `input`, `other`), so a
   client picks what to enforce: the engine informs, the caller decides. An option the plain dry
   run refuses gets a second dry run with `force: true`: each refusal the GM could override becomes
   a note and the run goes on, so `reasons` lists all of them, then the one that stops it
   (`EncounterError.overridden` keeps the overridden ones when the run fails). An option of a
-  rollable kind (`RollWhatSchema` parses it) is also judged as a forced `roll`: rollable unless it
-  stops for something other than a `resource` or `state` reason, whose reasons are merged in.
+  rollable kind (`RollWhatSchema` parses it) is also judged as a `roll`: rollable when the engine
+  takes it, with the costs it couldn't pay now merged into its reasons.
 - **GM override.** `force: true` on an action taken in turns turns a refusal of legality into a
   note: `run` checks those with `refuse(reason)` instead of `fail`, which throws unless the action
   is forced and the reason's refusal code is in `FORCEABLE_REFUSALS` (turn, Incapacitated,
@@ -1078,8 +1081,9 @@ Where the SRD is silent or ambiguous, the engine picks a reading and lists it he
 
 **Encounters**
 
-- **What an action rolled by hand spends.** Resources only, never the action economy
-  or the turn: the same attack can be rolled any number of times. It changes nothing else: no
+- **What an action rolled by hand changes.** Nothing: its resources are costs the table pays
+  with `spend` if it wants, never the action economy or the turn; the same attack can be rolled
+  any number of times. No
   Rage extension, hiding, Help, Vex, Sap or marks used, no Action Surge action or granted attacks,
   no Bardic Inspiration die given. A Grapple or Shove shows its DC with the target's choice of
   Strength or Dexterity (`ability: null`) unless `save` names one.

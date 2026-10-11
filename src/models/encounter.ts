@@ -517,6 +517,26 @@ export const RollWhatSchema = z
   .meta({ id: "RollWhat" });
 export type RollWhat = z.infer<typeof RollWhatSchema>;
 
+/**
+ * What a roll by hand costs (`rollByHand`'s `costs`; the `spend` action pays them): a play
+ * action on the character's state (a spell slot, Concentration, a feature's uses), one of a
+ * monster's daily uses (`key` counts up to `per_day`; `name` is what's used), or a monster's
+ * ability expended until it recharges.
+ */
+export const RollCostSchema = z
+  .discriminatedUnion("type", [
+    z.object({ type: z.literal("play"), action: PlayActionSchema }),
+    z.object({
+      type: z.literal("daily"),
+      key: z.string(),
+      per_day: n.min(1),
+      name: z.string(),
+    }),
+    z.object({ type: z.literal("recharge"), name: z.string() }),
+  ])
+  .meta({ id: "RollCost" });
+export type RollCost = z.infer<typeof RollCostSchema>;
+
 const AttackActionSchema = z.object({
   type: z.literal("attack"),
   force,
@@ -994,13 +1014,18 @@ export const EncounterActionSchema = z
     /** Extend Rage this turn some other way (forcing a saving throw). */
     z.object({ type: z.literal("extend"), id: z.string() }),
     /**
-     * Roll by hand (`rollByHand`): the actor's dice for `what`, its costs spent (slots, feature
-     * uses, daily uses, Recharge, Concentration), and nothing else: no target, no action economy,
-     * no turn, no outcome (the table applies it with `effects`). Refused only when a cost can't
-     * be paid or the actor can't act (`force` rolls anyway, an unpayable cost not spent). The
-     * result is a `DeclaredResult`.
+     * Roll by hand (`rollByHand`), a free roll: the actor's dice for `what`, and nothing else. No
+     * target, no action economy, no turn, nothing spent, no outcome (the table applies it with
+     * `effects`). The result is a `DeclaredResult` with what it costs and whether each cost can be
+     * paid now; `spend` pays them.
      */
-    z.object({ type: z.literal("roll"), force, id: z.string(), what: RollWhatSchema }),
+    z.object({ type: z.literal("roll"), id: z.string(), what: RollWhatSchema }),
+    /**
+     * Pay a roll's costs (`DeclaredResult.costs`): spell slots, Concentration and feature uses on
+     * the character's state, a monster's daily uses and Recharge. Refused when one can't be paid
+     * (`force` pays what it can).
+     */
+    z.object({ type: z.literal("spend"), force, id: z.string(), costs: z.array(RollCostSchema) }),
     /**
      * A legendary action, taken right after another creature's turn: an attack (`target`, and
      * `attack` when it offers a choice), a saving throw effect (`targets`), another action it uses,
