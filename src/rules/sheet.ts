@@ -272,7 +272,11 @@ export interface DerivedSheet {
    * `class_id` (kenli K-001): the class whose feature grants it, or `null` (feats, species, items). A class-granted
    * `attack.spell` Advantage applies only to that class's spells (Innate Sorcery: "Sorcerer spells").
    */
-  readonly advantages: readonly { readonly target: AdvantageTarget; readonly source: string; readonly class_id: string | null }[];
+  readonly advantages: readonly {
+    readonly target: AdvantageTarget;
+    readonly source: string;
+    readonly class_id: string | null;
+  }[];
   /** Features used in turns (Second Wind, Action Surge), keyed like toggles (`fighter:second-wind`). */
   readonly actions: readonly FeatureActionLine[];
   /** Rules in code switched on by features (`evasion`, `reliable_talent`, `potent_cantrip`). */
@@ -742,7 +746,8 @@ export function computeSheet(
     advantages: [...res.sources, ...itemSources].flatMap((src) =>
       src.grants.advantages.flatMap((grant) => {
         // Danger Sense: "unless you have the Incapacitated condition".
-        if (typeof grant === "string") return [{ target: grant, source: src.name, class_id: classScope(src) }];
+        if (typeof grant === "string")
+          return [{ target: grant, source: src.name, class_id: classScope(src) }];
         if (grant.unless.some((c) => play?.conditions.has(c))) return [];
         return [{ target: grant.target, source: src.name, class_id: classScope(src) }];
       }),
@@ -1095,7 +1100,11 @@ function limitedUses(
  * kenli K-001: the class a source belongs to for "your <Class> spells" effects: a class or subclass feature (and a
  * toggle it grants) has its class; a feat (even one taken at a class level), species, background or item has none.
  */
-function classScope(src: { readonly feat: unknown; readonly class_id: string | null; readonly key?: string }): string | null {
+function classScope(src: {
+  readonly feat: unknown;
+  readonly class_id: string | null;
+  readonly key?: string;
+}): string | null {
   if (src.feat || src.key?.startsWith("item:")) return null;
   return src.class_id ?? null;
 }
