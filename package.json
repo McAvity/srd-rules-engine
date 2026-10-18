@@ -22,7 +22,8 @@
     "dist",
     "content",
     "schemas",
-    "DATA-SOURCES.md"
+    "DATA-SOURCES.md",
+    "src"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -71,7 +72,9 @@
     "./srd-5.2.1.json": "./dist/srd-5.2.1.json",
     "./srd-5.2.1/*": "./dist/srd-5.2.1/*",
     "./schemas/*": "./schemas/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./source": "./src/index.ts",
+    "./source/srd": "./src/srd.ts"
   },
   "bin": {
     "srd-rules": "./dist/cli.mjs"
