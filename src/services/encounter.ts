@@ -130,6 +130,11 @@ export class EncounterError extends Error {
 export interface CharacterRef {
   readonly build: CharacterBuild;
   readonly state: CharacterState;
+  /**
+   * The character's own catalog (its content packs): its sheet, the spells it knows and casts and
+   * what they cost. Default: the encounter's `catalog`, which also holds monsters and conditions.
+   */
+  readonly catalog?: Catalog;
 }
 
 export interface EncounterContext {
@@ -243,7 +248,7 @@ export function encounterCombatant(
   }
   const ref = characterRef(ctx, c);
   return withDodge(ctx, encounter, c, {
-    ...combatantFromCharacter(ref.build, ref.state, ctx.catalog),
+    ...combatantFromCharacter(ref.build, ref.state, ref.catalog ?? ctx.catalog),
     id: c.id,
     name: c.name,
     inspiration_die: c.inspiration?.die ?? null,
@@ -516,7 +521,7 @@ function run(
     const ref = characterRef(ctx, c);
     let r: ReturnType<typeof applyAction>;
     try {
-      r = applyAction(ref.build, ref.state, ctx.catalog, a, { rng });
+      r = applyAction(ref.build, ref.state, ref.catalog ?? ctx.catalog, a, { rng });
     } catch (error) {
       // Forced, a cost the character can't pay (a slot, a feature's use) isn't spent.
       if (error instanceof PlayError && error.details.every(forceable)) {
@@ -531,7 +536,7 @@ function run(
       }
       throw error;
     }
-    chars[c.character as string] = { build: ref.build, state: r.state };
+    chars[c.character as string] = { ...ref, state: r.state };
     states[c.character as string] = r.state;
     notes.push(...r.messages);
   };
@@ -572,7 +577,7 @@ function run(
         if (a.type === "activate") {
           c.toggled_on.push(a.key);
           const ref = characterRef(ctx, c);
-          const t = computePlaySheet(ref.build, ref.state, ctx.catalog).toggles.find(
+          const t = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).toggles.find(
             (x) => x.key === a.key,
           );
           if (t?.rounds) c.toggle_rounds[a.key] = t.rounds;
@@ -611,7 +616,7 @@ function run(
     a: Extract<PlayAction, { type: "damage" }>,
   ): number | null => {
     const ref = characterRef(ctx, c);
-    const sheet = computePlaySheet(ref.build, ref.state, ctx.catalog);
+    const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
     if (!sheet.rules.includes("relentless_rage")) return null;
     if (!sheet.toggles.some((t) => t.active && t.key.endsWith(":rage"))) return null;
     const view = encounterCombatant(e, c.id, ctx);
@@ -646,7 +651,9 @@ function run(
     const still = e.effects.some(
       (x) => x.target === effect.target && x.condition === effect.condition,
     );
-    const name = lookup(ctx.catalog.conditions, effect.condition)?.name ?? effect.condition;
+    const name =
+      lookup((target ? catalogOf(ctx, target) : ctx.catalog).conditions, effect.condition)?.name ??
+      effect.condition;
     notes.push(
       message("effect.ends", {
         condition: name,
@@ -1043,7 +1050,7 @@ function run(
     tick(c, "end");
     if (c.character !== null) {
       const ref = characterRef(ctx, c);
-      const sheet = computePlaySheet(ref.build, ref.state, ctx.catalog);
+      const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
       for (const t of sheet.toggles) {
         if (t.active && t.extends_each_turn && !c.extended && !c.toggled_on.includes(t.key)) {
           notes.push(message("toggle.not_extended", { toggle: t.name }));
@@ -1070,7 +1077,7 @@ function run(
     // A dying character makes a Death Saving Throw at the start of its turn (SRD).
     if (c.character !== null) {
       const ref = characterRef(ctx, c);
-      const play = computePlaySheet(ref.build, ref.state, ctx.catalog).play;
+      const play = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).play;
       if (play.dying && e.auto_death_saves) applyTo(c, [{ type: "death_save" }]);
       else if (play.dying) notes.push(message("turn.death_save", { name: c.name }));
     }
@@ -1081,7 +1088,7 @@ function run(
     // duration (Rage's 10 minutes) count it down.
     if (c.character !== null) {
       const ref = characterRef(ctx, c);
-      for (const t of computePlaySheet(ref.build, ref.state, ctx.catalog).toggles) {
+      for (const t of computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).toggles) {
         if (!t.active) {
           delete c.toggle_rounds[t.key];
           continue;
@@ -1106,7 +1113,7 @@ function run(
       notes.push(message("readied.lost", { name: c.name }));
       c.readied = null;
       if (spell?.type === "cast") {
-        const name = lookup(ctx.catalog.spells, spell.spell)?.name ?? spell.spell;
+        const name = lookup(catalogOf(ctx, c).spells, spell.spell)?.name ?? spell.spell;
         if (concentrationOf(c) === name) {
           if (c.monster !== null) c.concentration = null;
           else play(c, { type: "set_concentration", spell: null });
@@ -1153,8 +1160,8 @@ function run(
     if (save) e.marks = e.marks.filter((m) => !(m.kind === "staggered" && m.on === c.id));
     if (save?.indomitable && c.character !== null) {
       const ref = characterRef(ctx, c);
-      const use = computePlaySheet(ref.build, ref.state, ctx.catalog).play.uses.find((u) =>
-        u.key.endsWith(":indomitable"),
+      const use = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).play.uses.find(
+        (u) => u.key.endsWith(":indomitable"),
       );
       if (use) play(c, { type: "use", key: use.key });
       notes.push(message("indomitable.used", { name: c.name }));
@@ -1440,7 +1447,7 @@ function run(
     if (t.character === null || t.used.reaction) return null;
     if (conditionsOf(ctx, t).has("incapacitated")) return null;
     const ref = characterRef(ctx, t);
-    const sheet = computePlaySheet(ref.build, ref.state, ctx.catalog);
+    const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
     return sheet.actions.find((a) => a.halves_attack_damage)?.name ?? null;
   };
   /** `t`'s feature that reduces an attack's damage as its reaction (Deflect Attacks), if usable. */
@@ -1448,7 +1455,7 @@ function run(
     if (t.character === null || t.used.reaction) return null;
     if (conditionsOf(ctx, t).has("incapacitated")) return null;
     const ref = characterRef(ctx, t);
-    const f = computePlaySheet(ref.build, ref.state, ctx.catalog).actions.find(
+    const f = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).actions.find(
       (a) => a.reduces_attack_damage,
     );
     return f?.reduces_attack_damage ? { name: f.name, ...f.reduces_attack_damage } : null;
@@ -1663,7 +1670,10 @@ function run(
     }
     const ref = c.character !== null ? characterRef(ctx, c) : null;
     const character = ref
-      ? { sheet: computePlaySheet(ref.build, ref.state, ctx.catalog), state: ref.state }
+      ? {
+          sheet: computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog),
+          state: ref.state,
+        }
       : null;
     // "Brutal Strike": on your turn, not with an Opportunity Attack.
     const turn = options.opportunity || current()?.id !== c.id ? false : undefined;
@@ -2308,7 +2318,7 @@ function run(
       // "If your Concentration is broken, the spell dissipates without taking effect."
       const held = c.readied?.held && c.readied.action.type === "cast" ? c.readied.action : null;
       if (held?.type === "cast") {
-        const name = lookup(ctx.catalog.spells, held.spell)?.name ?? held.spell;
+        const name = lookup(catalogOf(ctx, c).spells, held.spell)?.name ?? held.spell;
         if (concentrationOf(c) !== name) {
           c.readied = null;
           notes.push(message("readied.dissipates", { name: c.name, spell: name }));
@@ -2997,7 +3007,8 @@ function run(
       });
       result = check;
       useInspiration(c, check.inspiration);
-      const condition = lookup(ctx.catalog.conditions, hold.condition)?.name ?? hold.condition;
+      const condition =
+        lookup(catalogOf(ctx, c).conditions, hold.condition)?.name ?? hold.condition;
       notes.push(
         message("escape.result", {
           name: c.name,
@@ -3138,7 +3149,7 @@ function run(
         // "you cast it as normal (expending any resources used to cast it) but hold its energy
         // … To be readied, a spell must have a casting time of an action … Concentration".
         const spell =
-          lookup(ctx.catalog.spells, then.spell) ??
+          lookup(catalogOf(ctx, c).spells, then.spell) ??
           fail(message("refusal.unknown_spell", { spell: then.spell }));
         if (!/^Action/i.test(spell.casting_time)) {
           fail(
@@ -3151,7 +3162,7 @@ function run(
         takeAction(c, "Ready");
         if (c.character !== null) {
           const ref = characterRef(ctx, c);
-          const known = computePlaySheet(ref.build, ref.state, ctx.catalog).spells;
+          const known = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).spells;
           if (!known.some((x) => x.id === spell.id))
             fail(message("refusal.cant_cast", { name: c.name, spell: spell.name }));
           if (spell.level > 0) {
@@ -3428,7 +3439,7 @@ function run(
       let r: ByHandRoll;
       try {
         r = rollWith(encounterCombatant(whole, c.id, ctx), w, {
-          catalog: ctx.catalog,
+          catalog: catalogOf(ctx, c),
           rng,
           ...(c.monster !== null ? { monster: monsterDef(ctx, c) } : {}),
           ...(character ? { character } : {}),
@@ -3438,7 +3449,7 @@ function run(
         throw error;
       }
       const costs = checkCosts(r.costs, {
-        catalog: ctx.catalog,
+        catalog: catalogOf(ctx, c),
         name: c.name,
         ...(character ? { character } : {}),
         daily_used: c.daily_used,
@@ -3574,7 +3585,7 @@ function run(
       if (c.character === null) fail(message("refusal.no_class_features", { name: c.name }));
       const ref = characterRef(ctx, c);
       const f =
-        computePlaySheet(ref.build, ref.state, ctx.catalog).actions.find(
+        computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).actions.find(
           (a) => a.key === action.feature || a.name === action.feature,
         ) ?? fail(message("refusal.no_feature", { name: c.name, feature: action.feature }));
       if (f.halves_attack_damage || f.reduces_attack_damage) {
@@ -3628,7 +3639,7 @@ function run(
         }
         for (const condition of f.removes) {
           if (!conditionsOf(ctx, x).has(condition)) {
-            const name = lookup(ctx.catalog.conditions, condition)?.name ?? condition;
+            const name = lookup(catalogOf(ctx, x).conditions, condition)?.name ?? condition;
             fail(message("refusal.isnt", { other: x.name, name }));
           }
         }
@@ -3667,7 +3678,7 @@ function run(
       }
       for (const condition of f.removes) {
         applyTo(t, [{ type: "remove_condition", condition }]);
-        const name = lookup(ctx.catalog.conditions, condition)?.name ?? condition;
+        const name = lookup(catalogOf(ctx, t).conditions, condition)?.name ?? condition;
         notes.push(message("feature.removes", { name: t.name, condition: name }));
       }
       if (f.extra_action) {
@@ -3772,7 +3783,7 @@ function run(
       const c = find(action.id);
       canAct(c);
       const spell =
-        lookup(ctx.catalog.spells, action.spell) ??
+        lookup(catalogOf(ctx, c).spells, action.spell) ??
         fail(message("refusal.unknown_spell", { spell: action.spell }));
       let what: "action" | "bonus_action" | "reaction" = "action";
       let slot_level = action.slot_level;
@@ -3780,9 +3791,11 @@ function run(
       let line: ReturnType<typeof monsterSpells>[number] | undefined;
       if (c.character !== null) {
         const ref = characterRef(ctx, c);
-        const known = computePlaySheet(ref.build, ref.state, ctx.catalog).spells.find(
-          (x) => x.id === spell.id,
-        );
+        const known = computePlaySheet(
+          ref.build,
+          ref.state,
+          ref.catalog ?? ctx.catalog,
+        ).spells.find((x) => x.id === spell.id);
         if (!known) fail(message("refusal.cant_cast", { name: c.name, spell: spell.name }));
         spellcasting = action.spellcasting ?? spellcastingOf(known);
         what = castingEconomy(spell);
@@ -3950,17 +3963,22 @@ export function characterRef(ctx: EncounterContext, c: EncounterCombatant): Char
   );
 }
 
+/** The catalog of a combatant's own rules: a character's (`CharacterRef.catalog`), else the encounter's. */
+export function catalogOf(ctx: EncounterContext, c: EncounterCombatant): Catalog {
+  return c.character !== null ? (characterRef(ctx, c).catalog ?? ctx.catalog) : ctx.catalog;
+}
+
 function initiativeBonus(ctx: EncounterContext, c: EncounterCombatant): number {
   if (c.monster !== null) return monsterDef(ctx, c).initiative;
   const ref = characterRef(ctx, c);
-  return computePlaySheet(ref.build, ref.state, ctx.catalog).initiative.total;
+  return computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).initiative.total;
 }
 
 /** Active conditions, implied ones included. */
 export function conditionsOf(ctx: EncounterContext, c: EncounterCombatant): Set<string> {
   if (c.monster === null) {
     const ref = characterRef(ctx, c);
-    const sheet = computePlaySheet(ref.build, ref.state, ctx.catalog);
+    const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
     return new Set(sheet.play.conditions.map((x) => x.id));
   }
   const out = new Set<string>();
@@ -3978,7 +3996,7 @@ export function speedOf(ctx: EncounterContext, c: EncounterCombatant, e: Encount
   let speed: number;
   if (c.monster === null) {
     const ref = characterRef(ctx, c);
-    speed = computePlaySheet(ref.build, ref.state, ctx.catalog).speed.total;
+    speed = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).speed.total;
   } else {
     const stopped = [...conditionsOf(ctx, c)].some(
       (id) => lookup(ctx.catalog.conditions, id)?.speed_zero,
@@ -4297,7 +4315,7 @@ export function alliesOf(e: Encounter, id: string, c: EncounterCombatant): boole
 export function proficientIn(ctx: EncounterContext, c: EncounterCombatant, skill: string): boolean {
   if (c.monster !== null) return Object.hasOwn(monsterDef(ctx, c).skills, skill);
   const ref = characterRef(ctx, c);
-  const sheet = computePlaySheet(ref.build, ref.state, ctx.catalog);
+  const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
   return sheet.skills.some((line) => line.skill === skill && line.proficient_from !== null);
 }
 
@@ -4345,7 +4363,8 @@ export function spaceOf(ctx: EncounterContext, c: EncounterCombatant): number {
 function sizeOf(ctx: EncounterContext, c: EncounterCombatant): string | null | undefined {
   return c.monster !== null
     ? monsterDef(ctx, c).size.split(" ")[0]?.toLowerCase()
-    : computePlaySheet(characterRef(ctx, c).build, characterRef(ctx, c).state, ctx.catalog).size;
+    : computePlaySheet(characterRef(ctx, c).build, characterRef(ctx, c).state, catalogOf(ctx, c))
+        .size;
 }
 
 const SIZES = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
@@ -4354,7 +4373,7 @@ const SIZES = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 function creatureTypeOf(ctx: EncounterContext, c: EncounterCombatant): string {
   if (c.monster !== null) return monsterDef(ctx, c).creature_type;
   const species = characterRef(ctx, c).build.species_id;
-  return lookup(ctx.catalog.species, species)?.creature_type ?? "Humanoid";
+  return lookup(catalogOf(ctx, c).species, species)?.creature_type ?? "Humanoid";
 }
 
 /**

@@ -12,7 +12,11 @@ import type { CharacterState } from "../models/state";
 import { computePlaySheet } from "./play";
 
 interface Characters {
-  readonly [key: string]: { readonly build: CharacterBuild; readonly state: CharacterState };
+  readonly [key: string]: {
+    readonly build: CharacterBuild;
+    readonly state: CharacterState;
+    readonly catalog?: Catalog;
+  };
 }
 
 /** HP, temp HP, conditions and status of a combatant, from its document or its state. */
@@ -109,8 +113,8 @@ export function encounterEvents(
     }
     const key = c.character ?? "";
     const ref = charactersBefore[key];
-    const v0 = vitals(b, catalog, ref?.build, ref?.state);
-    const v1 = vitals(c, catalog, ref?.build, statesAfter[key] ?? ref?.state);
+    const v0 = vitals(b, ref?.catalog ?? catalog, ref?.build, ref?.state);
+    const v1 = vitals(c, ref?.catalog ?? catalog, ref?.build, statesAfter[key] ?? ref?.state);
     if (!v0 || !v1) continue;
     if (v0.hp !== v1.hp || v0.temp !== v1.temp) {
       events.push({

@@ -471,6 +471,17 @@ notes, result }`, or `EncounterError`. `states` holds the character states the a
 `result` is the roll of an `attack`, `save_action`, `cast`, `check`, `unarmed` or `escape`. `POST /v1/encounters/apply` runs a
 list of actions.
 
+**A character's own catalog.** A character may be built on other content than the encounter (another
+version of a pack): its `CharacterRef` can carry `catalog`. Then everything about that combatant
+comes from its catalog: its sheet, defences and resistances, the spells it knows and casts, what
+they cost, its species and size; the effect of an action on it is settled by its catalog too (the
+actor's dice, DC and attack bonus carry over). Monsters, their conditions, `add_monster` and the
+map use the encounter's `catalog`. `catalogOf(ctx, combatant)` says which. Without `catalog`
+(the default) every character uses the encounter's catalog, as before. Every step of an action,
+and a caller passing states on to the next action or `replayHistory`, keeps the whole reference
+(`{ ...ref, state }`). Nothing falls back to another catalog: an id the judging catalog lacks is
+refused.
+
 - **Setup and order:** `add_monster` (average or rolled HP), `add_character`, `remove`,
   `roll_initiative` (d20 + Initiative bonus; Disadvantage when surprised; one roll per group of
   identical monsters), `set_initiative`, `set_order` (ties only), `start`, `next_turn`, `end`.

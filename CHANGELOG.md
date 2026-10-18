@@ -8,6 +8,12 @@ migrated when it's loaded.
 ## [Unreleased]
 
 ### Added
+- A character's own catalog in an encounter (kenli F-008 T03): `CharacterRef.catalog` (optional)
+  judges everything about that character (sheet, defences, known spells and their definitions,
+  costs, species, size, its options and checks, events), while monsters and the map use the
+  encounter's `catalog`; `catalogOf(ctx, combatant)` (new export) tells which. Without it nothing
+  changes. Every rebuilt reference keeps its catalog: an action's cost then its effect on the same
+  character, `replayHistory`, the HTTP list of actions. Test: `tests/character-catalog.test.ts`.
 - A spell's spellcasting feature (kenli F-004 T03): `SpellLine.spellcasting` (the sheet's and play
   sheet's spells) lists the features it's cast with (`SpellcastingLine.source`: the class's
   Spellcasting for a class or subclass feature's spell, a feat's own). The `roll` action's `cast`

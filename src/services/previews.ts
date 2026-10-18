@@ -16,6 +16,7 @@ import { reachable } from "../rules/grid";
 import { message, texts } from "../rules/messages";
 import {
   alliesOf,
+  catalogOf,
   type EncounterContext,
   EncounterError,
   encounterCombatant,
@@ -278,7 +279,7 @@ function areaOf(
   request: AreaRequest,
 ): { area: SpellArea | null; range: number | null; label: string } {
   const fromSpell = (id: string) => {
-    const spell = lookup(ctx.catalog.spells, id);
+    const spell = lookup(catalogOf(ctx, c).spells, id);
     if (!spell) throw new EncounterError([message("refusal.unknown_spell", { spell: id })]);
     return { area: spell.mechanics?.area ?? null, range: spellRangeFeet(spell), label: spell.name };
   };

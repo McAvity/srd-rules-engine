@@ -536,7 +536,7 @@ export function createHandler(options: HandlerOptions = {}): FetchHandler {
           applied += 1;
           for (const [key, state] of Object.entries(result.states)) {
             states[key] = state;
-            characters[key] = { build: (characters[key] as CharacterRef).build, state };
+            characters[key] = { ...(characters[key] as CharacterRef), state };
           }
           messages.push(...result.messages);
         }

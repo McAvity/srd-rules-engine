@@ -36,6 +36,7 @@ import {
   alliesOf,
   applyEncounterAction,
   castingEconomy,
+  catalogOf,
   characterRef,
   conditionsOf,
   currentCombatant,
@@ -501,10 +502,10 @@ export function combatantOptions(
   };
   if (c.character !== null) {
     const ref = characterRef(ctx, c);
-    const sheet = computePlaySheet(ref.build, ref.state, ctx.catalog);
+    const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
     const play = sheet.play;
     for (const known of sheet.spells) {
-      const spell = lookup(ctx.catalog.spells, known.id);
+      const spell = lookup((ref.catalog ?? ctx.catalog).spells, known.id);
       if (!spell) continue;
       const cantrip = spell.level === 0;
       const { slot_levels, pact_slot } = spellSlots(spell.level, play);
@@ -580,7 +581,7 @@ export function combatantOptions(
   const features: OptionEntry[] = [];
   if (c.character !== null) {
     const ref = characterRef(ctx, c);
-    const sheet = computePlaySheet(ref.build, ref.state, ctx.catalog);
+    const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
     for (const f of sheet.actions) {
       const use = sheet.play.uses.find((u) => u.key === f.uses);
       const uses = use ? { left: use.max - use.spent, max: use.max } : null;
@@ -958,7 +959,7 @@ function oddsOf(
   const hit = "targets" in result ? result.targets.find((t) => t.target === 0) : undefined;
   if (!hit) return null;
   if ("spell" in result) {
-    const spell = ctx.catalog.spells[result.spell];
+    const spell = catalogOf(ctx, c).spells[result.spell];
     if (hit.attack && result.attack_bonus !== null) {
       const ac = them.armor_class + coverBonus(e, ctx, c, target, action);
       const chances = attackOdds({

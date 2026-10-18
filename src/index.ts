@@ -455,6 +455,7 @@ export {
   applyEncounterAction,
   type CharacterRef,
   type Cover,
+  catalogOf,
   combatantPassivePerception,
   createEncounter,
   currentCombatant,

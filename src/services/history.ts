@@ -46,7 +46,7 @@ export function replayHistory(
     const characters = Object.fromEntries(
       Object.entries(ctx.characters ?? {}).map(([k, ref]) => [
         k,
-        { build: ref.build, state: states[k] as CharacterState },
+        { ...ref, state: states[k] as CharacterState },
       ]),
     );
     const r = applyEncounterAction(encounter, step.action, {

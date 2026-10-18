@@ -273,6 +273,11 @@ const { states, notes } = applyEncounterAction(encounter,
 //                      "Goblin Warrior drops to 0 Hit Points and dies."]
 ```
 
+A character built on other content than the encounter (another version of a pack) carries its own
+catalog: `characters: { aerin: { build, state, catalog: aerinCatalog } }`. Its sheet, spells, costs
+and defences come from it; monsters and the map from the encounter's `catalog`
+(`catalogOf(ctx, combatant)`). Pass states on as `{ ...ref, state }` so the catalog stays.
+
 The encounter enforces the turn rules: one action and one Bonus Action on your turn, a reaction
 once a round, movement up to your Speed (Dash doubles it), Extra Attack and Multiattack,
 Opportunity Attacks, Dodge, Disengage, Help, Grapple and Shove (and escaping a grapple), Hide and
