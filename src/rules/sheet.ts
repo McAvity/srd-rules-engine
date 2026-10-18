@@ -268,7 +268,11 @@ export interface DerivedSheet {
   readonly languages: Readonly<Record<string, string>>;
   readonly resistances: readonly string[];
   /** Advantage on saving throws or checks (`save.str`), with where it comes from. */
-  readonly advantages: readonly { readonly target: AdvantageTarget; readonly source: string }[];
+  /**
+   * `class_id` (kenli K-001): the class whose feature grants it, or `null` (feats, species, items). A class-granted
+   * `attack.spell` Advantage applies only to that class's spells (Innate Sorcery: "Sorcerer spells").
+   */
+  readonly advantages: readonly { readonly target: AdvantageTarget; readonly source: string; readonly class_id: string | null }[];
   /** Features used in turns (Second Wind, Action Surge), keyed like toggles (`fighter:second-wind`). */
   readonly actions: readonly FeatureActionLine[];
   /** Rules in code switched on by features (`evasion`, `reliable_talent`, `potent_cantrip`). */
@@ -339,6 +343,8 @@ type Conditions = ReadonlyMap<EffectCondition, boolean>;
 export interface SpellcastingLine {
   /** The feature's source, e.g. `Wizard` or `Magic Initiate`. */
   readonly source: string;
+  /** kenli K-001: the class whose Spellcasting this is (its spells are that class's spells), `null` for a feat. */
+  readonly class_id: string | null;
   /** Spell list id; `null` for a fixed set of spells or while it depends on an unanswered choice. */
   readonly list: string | null;
   readonly ability: Ability | null;
@@ -661,11 +667,14 @@ export function computeSheet(
       (total, i) => total + (i.active && i.magic ? i.magic.bonus.spell_attack : 0),
       0,
     ) + d20Penalty;
-  // Spell save DC bonuses (Innate Sorcery while active).
-  const spellSaveBonus = effects("spell.save_dc").reduce(
-    (total, [op, value]) => total + (op === "add" ? value : 0),
-    0,
-  );
+  // Spell save DC bonuses (Innate Sorcery while active). kenli K-001: a bonus granted by a class feature applies
+  // only to that class's Spellcasting ("the spell save DC of your Sorcerer spells"); other sources apply to all.
+  const saveBonuses = effects("spell.save_dc").filter(([op]) => op === "add");
+  const spellSaveBonus = (classId: string | null): number =>
+    saveBonuses.reduce((total, [, value, , src]) => {
+      const scope = classScope(src);
+      return total + (scope === null || scope === classId ? value : 0);
+    }, 0);
   const magic = spellcastingSummary(
     res,
     catalog,
@@ -733,9 +742,9 @@ export function computeSheet(
     advantages: [...res.sources, ...itemSources].flatMap((src) =>
       src.grants.advantages.flatMap((grant) => {
         // Danger Sense: "unless you have the Incapacitated condition".
-        if (typeof grant === "string") return [{ target: grant, source: src.name }];
+        if (typeof grant === "string") return [{ target: grant, source: src.name, class_id: classScope(src) }];
         if (grant.unless.some((c) => play?.conditions.has(c))) return [];
-        return [{ target: grant.target, source: src.name }];
+        return [{ target: grant.target, source: src.name, class_id: classScope(src) }];
       }),
     ),
     rules: [...new Set([...res.sources, ...itemSources].flatMap((src) => src.grants.rules))],
@@ -1082,6 +1091,15 @@ function limitedUses(
   return [...byKey.values()].map((v) => v.line);
 }
 
+/**
+ * kenli K-001: the class a source belongs to for "your <Class> spells" effects: a class or subclass feature (and a
+ * toggle it grants) has its class; a feat (even one taken at a class level), species, background or item has none.
+ */
+function classScope(src: { readonly feat: unknown; readonly class_id: string | null; readonly key?: string }): string | null {
+  if (src.feat || src.key?.startsWith("item:")) return null;
+  return src.class_id ?? null;
+}
+
 function spellcastingSummary(
   res: Resolution,
   catalog: Catalog,
@@ -1089,7 +1107,7 @@ function spellcastingSummary(
   pb: number,
   classLevels: ReadonlyMap<string, number>,
   spellAttackBonus = 0,
-  spellSaveBonus = 0,
+  spellSaveBonus: (classId: string | null) => number = () => 0,
 ): {
   spellcasting: SpellcastingLine[];
   slots: number[];
@@ -1104,11 +1122,13 @@ function spellcastingSummary(
     const sc = src.grants.spellcasting;
     if (!sc) continue;
     const ability = res.resolveRef(src, sc.ability) as Ability | null;
+    const classId = classScope(src);
     spellcasting.push({
       source: src.name,
+      class_id: classId,
       list: sc.list === null ? null : res.resolveRef(src, sc.list),
       ability,
-      save_dc: ability ? 8 + pb + mod[ability] + spellSaveBonus : null,
+      save_dc: ability ? 8 + pb + mod[ability] + spellSaveBonus(classId) : null,
       attack_bonus: ability ? pb + mod[ability] + spellAttackBonus : null,
       progression: sc.progression,
     });

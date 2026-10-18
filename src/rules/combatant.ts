@@ -57,6 +57,8 @@ export interface CombatantSpellcasting {
   readonly attack_bonus: number;
   /** The spellcasting ability modifier (added by Cure Wounds and similar). */
   readonly modifier: number;
+  /** kenli K-001: the class whose spells these are (`null` for a feat); scopes class-granted spell Advantage. */
+  readonly class_id?: string | null;
 }
 
 export interface Combatant {
@@ -89,6 +91,11 @@ export interface Combatant {
   readonly spellcasting: readonly CombatantSpellcasting[];
   /** Advantage on saving throws or checks (`save.str` while raging). */
   readonly advantages: readonly AdvantageTarget[];
+  /**
+   * kenli K-001: classes whose spells have Advantage on their attack rolls from a class feature (Innate Sorcery:
+   * `sorcerer`). Unscoped `attack.spell` in `advantages` still applies to every spell attack.
+   */
+  readonly spell_attack_classes?: readonly string[];
   /** Can't cast spells or concentrate (Rage). */
   readonly no_spells: boolean;
   /** Conditions it can't have (a monster's Immunities). */
@@ -339,6 +346,8 @@ export interface AttackModeOptions {
   ability?: Ability | null;
   /** A spell attack (`attack.spell` Advantage: Innate Sorcery). */
   spell?: boolean;
+  /** kenli K-001: the class of the Spellcasting used (`CombatantSpellcasting.class_id`), for class-scoped Advantage. */
+  spell_class?: string | null;
 }
 
 /**
@@ -356,11 +365,17 @@ export function attackMode(
     modes = [],
     ability = null,
     spell = false,
+    spell_class = null,
   }: AttackModeOptions,
 ): { mode: RollMode; reasons: string[]; reason_messages: Message[]; critical_on_hit: boolean } {
   const reasons: ModeReason[] = [...modes];
-  // Innate Sorcery: Advantage on the attack rolls of spells.
-  if (spell && attacker.advantages.includes("attack.spell")) {
+  // Advantage on the attack rolls of spells: unscoped, or (kenli K-001) only for the granting class's spells
+  // (Innate Sorcery: "Sorcerer spells you cast").
+  if (
+    spell &&
+    (attacker.advantages.includes("attack.spell") ||
+      (spell_class !== null && (attacker.spell_attack_classes ?? []).includes(spell_class)))
+  ) {
     reasons.push(modeReason("advantage", message("reason.features", { name: attacker.name })));
   }
   // Reckless Attack: Advantage on attack rolls using Strength, and on attack rolls against you.

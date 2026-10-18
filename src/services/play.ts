@@ -424,7 +424,11 @@ export function combatantFromCharacter(
     attacks: sheet.attacks,
     critical_hit_on: sheet.critical_hit_on,
     attacks_per_action: sheet.attacks_per_action,
-    advantages: sheet.advantages.map((a) => a.target),
+    // kenli K-001: class-granted spell-attack Advantage is scoped to that class's Spellcasting.
+    advantages: sheet.advantages.filter((a) => !(a.target === "attack.spell" && a.class_id !== null)).map((a) => a.target),
+    spell_attack_classes: [
+      ...new Set(sheet.advantages.flatMap((a) => (a.target === "attack.spell" && a.class_id !== null ? [a.class_id] : []))),
+    ],
     no_spells: sheet.toggles.some((t) => t.active && t.no_spells),
     condition_immunities: [],
     save_actions: [],
@@ -445,6 +449,7 @@ export function combatantFromCharacter(
         : [
             {
               source: line.source,
+              class_id: line.class_id,
               list: line.list,
               ability: line.ability,
               save_dc: line.save_dc,

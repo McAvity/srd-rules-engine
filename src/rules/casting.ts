@@ -335,6 +335,7 @@ export function castSpell(
       for (let beam = 0; beam < beams; beam++) {
         const effective = attackMode(caster, null, {
           spell: true,
+          spell_class: line?.class_id ?? null,
           mode,
           within_5ft: m.attack === "melee",
         });
@@ -405,6 +406,7 @@ export function castSpell(
       // Conditions change the roll like a weapon attack's; a melee spell attack is within 5 ft.
       const effective = attackMode(caster, target, {
         spell: true,
+        spell_class: line?.class_id ?? null,
         mode,
         within_5ft: within_5ft?.[index] ?? m.attack === "melee",
         modes: [...(m.attack === "ranged" ? modes : []), ...(modesFor?.(index, shot) ?? [])],
