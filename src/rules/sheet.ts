@@ -365,6 +365,13 @@ export interface SpellLine {
   readonly source: string;
   /** Granted by a feature (Favored Enemy, Druidic…); doesn't count against prepared spells. */
   readonly always_prepared: boolean;
+  /**
+   * The spellcasting features (`SpellcastingLine.source`) the spell is cast with: the one of each feature that gives it
+   * (a class or subclass feature: its class's Spellcasting; a feat with its own: that one). Usually one; empty when no
+   * spellcasting feature applies; more than one only when the same spell is given twice (a validation error). Pass it
+   * as `spellcasting` to cast through it.
+   */
+  readonly spellcasting: readonly string[];
 }
 
 export function computeSheet(
@@ -1152,16 +1159,37 @@ function spellcastingSummary(
   const slots =
     casterLevel > 0 ? [...(catalog.creation.spell_slots[Math.min(casterLevel, 20) - 1] ?? [])] : [];
 
+  // The spellcasting feature a source's spells are cast with: its own, else its class's (a subclass or a class level
+  // feature); a feat, species, background or item without its own has none.
+  const castWith = (src: (typeof res.sources)[number]): string | null => {
+    if (src.grants.spellcasting) return src.name;
+    const classId = classScope(src);
+    return classId === null
+      ? null
+      : (spellcasting.find((l) => l.class_id === classId)?.source ?? null);
+  };
   const spells = new Map<string, SpellLine>();
-  const add = (id: string, source: string, always: boolean) => {
+  const add = (id: string, src: (typeof res.sources)[number], always: boolean) => {
     const spell = lookup(catalog.spells, id);
-    if (spell && !spells.has(id)) {
-      spells.set(id, { id, name: spell.name, level: spell.level, source, always_prepared: always });
+    if (!spell) return;
+    const line = castWith(src);
+    const known = spells.get(id);
+    if (!known) {
+      spells.set(id, {
+        id,
+        name: spell.name,
+        level: spell.level,
+        source: src.name,
+        always_prepared: always,
+        spellcasting: line === null ? [] : [line],
+      });
+    } else if (line !== null && !known.spellcasting.includes(line)) {
+      spells.set(id, { ...known, spellcasting: [...known.spellcasting, line] });
     }
   };
   for (const src of res.sources) {
-    for (const id of src.grants.cantrips) add(id, src.name, false);
-    for (const id of src.grants.spells) add(id, src.name, true);
+    for (const id of src.grants.cantrips) add(id, src, false);
+    for (const id of src.grants.spells) add(id, src, true);
   }
   const spellbook: string[] = [];
   for (const choice of res.choices) {
@@ -1171,7 +1199,7 @@ function spellcastingSummary(
     const isPool = tag !== null && res.choices.some((c) => c.definition.subset_of === tag);
     for (const id of res.contributed(choice)) {
       if (isPool) spellbook.push(id);
-      else add(id, choice.source.name, choice.definition.always_prepared);
+      else add(id, choice.source, choice.definition.always_prepared);
     }
   }
   const sorted = [...spells.values()].sort((a, b) => a.level - b.level);

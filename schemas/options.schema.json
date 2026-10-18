@@ -5507,6 +5507,9 @@
                     "via": {
                       "type": "string"
                     },
+                    "spellcasting": {
+                      "type": "string"
+                    },
                     "targets": {
                       "type": "array",
                       "items": {
@@ -6188,6 +6191,9 @@
               "type": "string"
             },
             "via": {
+              "type": "string"
+            },
+            "spellcasting": {
               "type": "string"
             },
             "targets": {
@@ -7550,6 +7556,9 @@
               "type": "string"
             },
             "via": {
+              "type": "string"
+            },
+            "spellcasting": {
               "type": "string"
             },
             "slot_level": {

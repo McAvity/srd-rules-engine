@@ -400,7 +400,15 @@ its index in `targets`, `id`: its combatant id in an encounter, `name`) with the
 that the caster has the spell and applies everything to the states.
 
 The spellcasting feature used is the one asked for, else the one with the best save DC whose
-spell list has the spell, else the best overall (a species' fixed spells). A spell without
+spell list has the spell, else the best overall (a species' fixed spells). A character's spell
+says which feature it's cast with (`SpellLine.spellcasting`: the Spellcasting of the class or
+subclass feature that gives it, or a feat's own); a roll by hand (`roll`'s `cast`) and an
+encounter `cast` take `spellcasting` and, without one, use the spell's when it has exactly one.
+So a Bard spell that's also on the Sorcerer list is cast as a Bard spell, and a Sorcerer's
+bonuses scoped to "your Sorcerer spells" (Innate Sorcery, kenli K-001) don't reach it. A spell
+given by two features (a validation error) lists both and is cast as `castSpell` picks unless
+the caller names one. A monster casts through its action (`via`); another `spellcasting` is
+refused. A spell without
 `mechanics` is still cast (slot, Concentration) with a note that its effects are in the text.
 
 84 SRD spells have mechanics: hand-written entries (golden spells with worked tests, zones,

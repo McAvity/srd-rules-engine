@@ -102,6 +102,7 @@ import {
   type DeclaredRolls,
   monsterCastLine,
   rollWith,
+  spellcastingOf,
   strikeDice,
 } from "./by-hand";
 import { encounterEvents } from "./events";
@@ -3779,9 +3780,11 @@ function run(
       let line: ReturnType<typeof monsterSpells>[number] | undefined;
       if (c.character !== null) {
         const ref = characterRef(ctx, c);
-        const known = computePlaySheet(ref.build, ref.state, ctx.catalog).spells;
-        if (!known.some((x) => x.id === spell.id))
-          fail(message("refusal.cant_cast", { name: c.name, spell: spell.name }));
+        const known = computePlaySheet(ref.build, ref.state, ctx.catalog).spells.find(
+          (x) => x.id === spell.id,
+        );
+        if (!known) fail(message("refusal.cant_cast", { name: c.name, spell: spell.name }));
+        spellcasting = action.spellcasting ?? spellcastingOf(known);
         what = castingEconomy(spell);
       } else {
         // A monster casts it through an action that lists it (legendary ones: `legendary`).
@@ -3805,6 +3808,9 @@ function run(
           );
         }
         slot_level = fixed;
+        if (action.spellcasting !== undefined && action.spellcasting !== line.action) {
+          fail(message("rule.no_spellcasting", { name: c.name, source: action.spellcasting }));
+        }
         spellcasting = line.action;
         if (line.recharge && c.expended.includes(line.action)) {
           refuse(message("refusal.hasnt_recharged_2", { name: c.name, action: line.action }));

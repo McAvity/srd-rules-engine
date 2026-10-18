@@ -8,6 +8,14 @@ migrated when it's loaded.
 ## [Unreleased]
 
 ### Added
+- A spell's spellcasting feature (kenli F-004 T03): `SpellLine.spellcasting` (the sheet's and play
+  sheet's spells) lists the features it's cast with (`SpellcastingLine.source`: the class's
+  Spellcasting for a class or subclass feature's spell, a feat's own). The `roll` action's `cast`
+  (`RollWhat`) and the encounter `cast` action take an optional `spellcasting`. Without it a
+  character's spell is cast with its feature when it has exactly one (before: the best save DC
+  on whose list it is, so a Bard spell also on the Sorcerer list could be cast as a Sorcerer
+  spell and get Innate Sorcery's bonus). Costs are unchanged; a monster's other `spellcasting` is
+  refused (`rule.no_spellcasting`).
 - The play sheet's spells say which slots each can be cast with now (`PlaySheet.spells`:
   `PlaySpellLine`): `slot_levels` (levels with a slot left; empty for a cantrip), `pact_slot`
   (the Pact Magic slot's level while one is left), and `slots` (`SpellSlotChoice`: every level it

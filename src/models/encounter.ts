@@ -493,6 +493,11 @@ export const RollWhatSchema = z
       spell: z.string(),
       /** A monster's action that casts it, when several do. */
       via: z.string().optional(),
+      /**
+       * A character's spellcasting feature to cast it with (`SpellLine.spellcasting`, e.g. `Bard`); by default the one
+       * the spell's feature gives when there's one, else the best on whose list it is (`castSpell`).
+       */
+      spellcasting: z.string().optional(),
       slot_level: n.min(1).max(9).optional(),
       pact: z.boolean().optional(),
       mode,
@@ -583,6 +588,8 @@ const CastActionSchema = z.object({
   id: z.string(),
   spell: z.string(),
   via: z.string().optional(),
+  /** A character's spellcasting feature to cast it with (see the `roll` action's `cast`). */
+  spellcasting: z.string().optional(),
   targets: z.array(z.string()).optional(),
   /** An area spell or effect: its point (Sphere, Cube) or the square it's aimed toward (Cone,
    * Line); its targets are the positioned creatures in it. */

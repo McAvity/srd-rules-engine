@@ -417,7 +417,7 @@ export default { fetch: handler };                // Cloudflare Workers
 | `POST /v1/state/apply` | `{ build, state, action }` (one action or a list, all or nothing) → `{ state, notes, messages }` |
 | `POST /v1/state/sheet` · `/v1/state/reconcile` | Play sheet and state issues · fit a state to a changed build |
 | `POST /v1/state/attack` | `{ attacker: {build, state}, target: {build, state}, attack, mode?, two_handed?, riders?, ally_adjacent? }` → the attack, and the target's state after the damage |
-| `POST /v1/state/roll` | `{ build, state, what }` → an attack, spell or feature rolled by hand (`rollByHand`): the dice and its costs, each with whether it can be paid now (pay with `/v1/state/apply`) |
+| `POST /v1/state/roll` | `{ build, state, what }` → an attack, spell or feature rolled by hand (`rollByHand`): the dice and its costs, each with whether it can be paid now (pay with `/v1/state/apply`); a spell's `spellcasting` picks the feature it's cast with (`SpellLine.spellcasting`) |
 | `POST /v1/state/cast` | `{ caster: {build, state}, spell, targets: [{build, state}], slot_level?, pact? }` → the spell's results, the caster's state (slot spent, Concentration) and the targets' states |
 | `POST /v1/encounters/apply` | `{ encounter, characters: { key: {build, state} }, action }` (one or a list, all or nothing) → `{ encounter, states, notes, messages, events, log, pending, applied }` (`log`: each action with the dice it drew): Initiative, turns, attacks, spells, effects on monsters and characters; a list stops at a decision to make (`pending`), answered with `{ type: "decide", use }` |
 | `POST /v1/encounters/options` | `{ encounter, characters, id }` → what that combatant can do now (`combatantOptions`; schema in `schemas/options.schema.json`) |

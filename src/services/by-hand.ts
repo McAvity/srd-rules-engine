@@ -26,6 +26,7 @@ import {
 import { type RolledDamage, rollDamage } from "../rules/damage";
 import { message, RuleError } from "../rules/messages";
 import { mathRng, type Rng } from "../rules/rng";
+import type { SpellLine } from "../rules/sheet";
 import { applyAction, computePlaySheet, PlayError, type PlaySheet } from "./play";
 import { optionReason } from "./refusals";
 
@@ -83,6 +84,16 @@ const NO_ROLLS: DeclaredRolls = { attacks: [], damage: null, healing: null, save
  * rolled (an unknown attack, a feature without the character's sheet); never checks whether a
  * cost can be paid: that's the caller's (`costs`).
  */
+/**
+ * The spellcasting feature a character's spell is cast with when the caller names none: the one its feature gives
+ * (`SpellLine.spellcasting`) when there's exactly one; otherwise `castSpell` picks (the best on whose list it is).
+ */
+export function spellcastingOf(
+  line: Pick<SpellLine, "spellcasting"> | undefined,
+): string | undefined {
+  return line?.spellcasting.length === 1 ? line.spellcasting[0] : undefined;
+}
+
 export function rollByHand(
   combatant: Combatant,
   what: RollWhat,
@@ -192,11 +203,15 @@ export function rollWith(
     case "cast": {
       const spell = spellOf(what.spell);
       const s = sheetOf();
-      if (s && !s.spells.some((x) => x.id === spell.id)) {
+      const known = s?.spells.find((x) => x.id === spell.id);
+      if (s && !known) {
         fail(message("refusal.cant_cast", { name, spell: spell.name }));
       }
       if (monster && !character) {
         const line = monsterCastLine(monster, name, spell, what.via);
+        if (what.spellcasting !== undefined && what.spellcasting !== line.action) {
+          fail(message("rule.no_spellcasting", { name, source: what.spellcasting }));
+        }
         const fixed = spell.level === 0 ? undefined : (line.level ?? spell.level);
         if (what.slot_level !== undefined && what.slot_level !== fixed) {
           fail(message("refusal.fixed_level", { name, spell: spell.name, level: fixed ?? 0 }));
@@ -212,6 +227,7 @@ export function rollWith(
       return spellRoll(spell, spell.name, {
         slot_level: what.slot_level,
         pact: what.pact,
+        spellcasting: what.spellcasting ?? spellcastingOf(known),
         mode: what.mode,
         damage_type: what.damage_type,
       });
