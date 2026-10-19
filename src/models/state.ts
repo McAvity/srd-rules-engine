@@ -159,12 +159,26 @@ export const PlayActionSchema = z
       amount: n.min(1).optional(),
       /** Spend its uses only: what it heals is the table's (manual play). */
       manual: z.boolean().optional(),
+      /**
+       * A spell slot paying for it (`slot_payment`): instead of its uses (`instead`), or the slot
+       * it always takes (`required`, Font of Inspiration).
+       */
+      payment: z
+        .discriminatedUnion("type", [
+          z.object({ type: z.literal("slot"), level: n.min(1).max(9) }),
+          z.object({ type: z.literal("pact") }),
+        ])
+        .optional(),
+      /** The GM overrides a refusal of legality (Incapacitated): the feature is used anyway. */
+      force: z.boolean().optional(),
     }),
     z.object({ type: z.literal("add_condition"), condition: id }),
     z.object({ type: z.literal("remove_condition"), condition: id }),
     z.object({ type: z.literal("set_exhaustion"), level: n.min(0).max(6) }),
     z.object({ type: z.literal("set_concentration"), spell: z.string().nullable() }),
     z.object({ type: z.literal("set_inspiration"), value: z.boolean() }),
+    /** Spend Heroic Inspiration (to reroll a die): refused without it. */
+    z.object({ type: z.literal("spend_inspiration") }),
     /** Switch a toggle on (spending its use) or off: `barbarian:rage`. */
     z.object({ type: z.literal("activate"), key: z.string() }),
     z.object({ type: z.literal("deactivate"), key: z.string() }),

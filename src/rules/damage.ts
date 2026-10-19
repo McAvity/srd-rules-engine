@@ -16,6 +16,8 @@ export interface DamagePart {
   readonly dice: string | null;
   readonly bonus: number;
   readonly type: string;
+  /** Who added it (the GM's `damage_bonus_dice`), when labelled. */
+  readonly label?: string;
 }
 
 /** `1d8+3`, `1d6-1`, `4` (fixed); several parts joined with ` + `: `1d8+3 + 2d6`. */
@@ -32,6 +34,11 @@ export interface RolledDamagePart extends DamagePart {
   readonly rolls: readonly number[];
   /** Dice + bonus, never below 0. */
   readonly total: number;
+  /**
+   * On a Critical Hit, the index in `rolls` where the second set of dice starts (`rolls` holds
+   * the first set, then the second); absent otherwise.
+   */
+  readonly critical_from?: number;
 }
 
 export interface RolledDamage {
@@ -52,7 +59,10 @@ export function rollDamage(
     if (part.dice === null) return { ...part, rolls: [], total: Math.max(0, part.bonus) };
     const { count, sides } = parseDiceExpression(part.dice);
     const result = roll(`${critical ? count * 2 : count}d${sides}`, rng);
-    return { ...part, rolls: result.rolls, total: Math.max(0, result.total + part.bonus) };
+    const total = Math.max(0, result.total + part.bonus);
+    return critical
+      ? { ...part, rolls: result.rolls, total, critical_from: count }
+      : { ...part, rolls: result.rolls, total };
   });
   return { parts: rolled, total: rolled.reduce((n, p) => n + p.total, 0), critical };
 }

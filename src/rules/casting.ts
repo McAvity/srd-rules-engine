@@ -12,8 +12,10 @@ import type { PlayAction } from "../models/state";
 import {
   type AttackDice,
   attackMode,
+  attackReasons,
   type Combatant,
   type CombatantSpellcasting,
+  type D20Additions,
   type D20Roll,
   type Decide,
   inspire,
@@ -21,7 +23,9 @@ import {
   type RollMode,
   rollD20,
   rollSavingThrow,
+  rollWithReasons,
   type SaveResult,
+  withDamageModifiers,
 } from "./combatant";
 import {
   type DamageInstance,
@@ -32,7 +36,7 @@ import {
   takeDamage,
 } from "./damage";
 import { parseDiceExpression } from "./dice";
-import { message, RuleError } from "./messages";
+import { message, plainMessage, RuleError } from "./messages";
 import { mathRng, type Rng } from "./rng";
 
 export interface CastOptions {
@@ -67,6 +71,15 @@ export interface CastOptions {
   damage_type?: DamageType;
   /** Whether the caster is within 5 feet of each target (default: a melee spell attack is). */
   within_5ft?: readonly (boolean | undefined)[];
+  /**
+   * By hand: the GM's additions to each spell attack roll (`DmOptions` without damage), refused
+   * for a spell without an attack roll; `extra_damage` and `damage_modifiers` add to its damage.
+   */
+  dm?: D20Additions;
+  /** By hand: more damage parts (doubled on a Critical Hit), labelled. */
+  extra_damage?: readonly { dice: string; type: DamageType; label: string }[];
+  /** By hand: flat damage, added once to the first part. */
+  damage_modifiers?: readonly { value: number; label: string }[];
 }
 
 export interface SpellAttackRoll {
@@ -194,8 +207,19 @@ export function castSpell(
     nearby = [],
     damage_type,
     critical = false,
+    dm,
+    extra_damage = [],
+    damage_modifiers,
   }: CastOptions = {},
 ): SpellCastResult {
+  // Armor without training: "you can't cast spells" (SRD "Armor Training").
+  if (caster.armor_untrained)
+    throw new RuleError(
+      message("refusal.armor_untrained_no_spellcasting", {
+        name: caster.name,
+        armor: caster.armor_untrained,
+      }),
+    );
   if (caster.no_spells)
     throw new RuleError(message("rule.cant_cast_spells_right", { name: caster.name }));
   const m = spell.mechanics;
@@ -328,32 +352,69 @@ export function castSpell(
 
   if (by_hand) {
     // The caster's dice only: an attack roll per beam or ray with its damage, else the damage
-    // rolled once; the save's DC; healing.
+    // rolled once; the save's DC; healing. The GM's additions go to the attack rolls and damage.
+    const d20Asked =
+      dm && (dm.modes?.length || dm.mode_override || dm.modifiers?.length || dm.bonus_dice?.length);
+    if (d20Asked && !m.attack) {
+      throw new RuleError(
+        message("refusal.dm_roll_not_applicable", { what: spell.name, part: "attack" }),
+      );
+    }
+    const extraParts = extra_damage.map((x) => ({
+      dice: x.dice,
+      bonus: 0,
+      type: x.type,
+      label: x.label,
+    }));
+    const withExtras = (p: readonly DamagePart[]) =>
+      withDamageModifiers([...p, ...extraParts], damage_modifiers);
     const attacks: AttackDice[] = [];
     if (m.attack) {
       const bonus = line?.attack_bonus ?? 0;
       for (let beam = 0; beam < beams; beam++) {
-        const effective = attackMode(caster, null, {
+        const { reasons } = attackReasons(caster, null, {
           spell: true,
           spell_class: line?.class_id ?? null,
-          mode,
           within_5ft: m.attack === "melee",
+          modes: [
+            ...(m.attack === "ranged" ? modes : []),
+            ...(dm?.modes ?? []).map((x) => ({
+              mode: x.mode,
+              reason: x.label,
+              message: plainMessage(x.label),
+            })),
+          ],
         });
-        const roll = rollD20({ mode: effective.mode, rng });
-        const critical_hit = roll.d20 === 20;
+        // A spell attack is a Critical Hit on a natural 20 only.
+        const r = rollWithReasons("attack", mode, reasons, {
+          bonus,
+          critical_on: 20,
+          add: dm ?? {},
+          rng,
+        });
+        const critical_miss = r.roll.natural === 1;
+        const critical_hit = !critical_miss && r.roll.natural === 20;
         attacks.push({
           attack: spell.name,
-          roll,
-          bonus,
-          total: roll.d20 + bonus,
+          roll: r.roll,
+          bonus: r.resolution.bonus,
+          total: r.total,
           critical_hit,
-          critical_miss: roll.d20 === 1,
-          reasons: effective.reasons,
-          reason_messages: effective.reason_messages,
+          critical_miss,
+          reasons: r.reasons,
+          reason_messages: r.reason_messages,
           damage: parts.length
-            ? rollDamage(partsFor(beam === 0), { critical: critical_hit, rng })
+            ? rollDamage(withExtras(partsFor(beam === 0)), { critical: critical_hit, rng })
             : null,
           riders: [],
+          resolution: r.resolution,
+          modifiers: r.modifiers,
+          bonus_dice: r.bonus_dice,
+          ...(damage_modifiers?.length
+            ? {
+                damage_modifiers: damage_modifiers.map((x) => ({ label: x.label, value: x.value })),
+              }
+            : {}),
         });
       }
     }
@@ -362,9 +423,9 @@ export function castSpell(
     let save: SpellDice["save"] = null;
     if (m.save) {
       save = { ability: m.save.ability, dc };
-      damage = parts.length ? rollDamage(partsFor(true), { rng }) : null;
+      damage = parts.length ? rollDamage(withExtras(partsFor(true)), { rng }) : null;
     } else if (!m.attack && parts.length) {
-      damage = rollDamage(projectiles ? parts : partsFor(true), { critical, rng });
+      damage = rollDamage(withExtras(projectiles ? parts : partsFor(true)), { critical, rng });
     }
     if (m.follow_up) {
       save = { ability: m.follow_up.save.ability, dc };

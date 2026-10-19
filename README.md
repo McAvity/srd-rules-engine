@@ -301,7 +301,10 @@ conditions ending with it, and Rage ending when it isn't extended. Rolled by han
 (`{ type: "roll", id, what }`), an action is a free roll, like a virtual tabletop's: the engine
 rolls its dice and says what it costs, with no target, no action economy and nothing spent; the
 table pays the costs it wants with `spend` and applies the outcome with `effects`. `rollByHand`
-does the same without an encounter. A GM can rule that something happens anyway: `force: true` applies an
+does the same without an encounter. A roll by hand can carry the GM's additions (`dm`), a spell
+its payment (a slot, a free cast's use, a ritual), a feature a slot instead of its uses; its
+result keeps what's needed to reroll a die (Heroic Inspiration), add Advantage late (Luck
+Points) or make it a Critical Hit (`rerollDie`, `addAdvantageDie`, `setCritical`). A GM can rule that something happens anyway: `force: true` applies an
 action refused for its legality (turn, economy, range, movement, resources), noting the override.
 
 What a combatant can do now, for a UI's buttons: `combatantOptions(encounter, id, ctx)` lists

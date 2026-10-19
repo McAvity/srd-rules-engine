@@ -27,9 +27,9 @@ import { choiceIssues } from "../rules/build-validation";
 import {
   type Combatant,
   conditionRolls,
+  type D20TestOptions,
   type D20TestRequest,
   type D20TestResult,
-  type RollMode,
   rollD20Test,
 } from "../rules/combatant";
 import { coinsFor, formatCp, pay, priceInCp, purseValue } from "../rules/currency";
@@ -110,6 +110,8 @@ export interface PlaySheet extends DerivedSheet {
       max: number;
       spent: number;
       recharge: "short" | "long";
+      /** What else a use can be spent on (a luck-style resource: `d20_advantage`). */
+      spend_for?: readonly ("d20_advantage" | "impose_disadvantage")[];
     }[];
     readonly inventory: readonly {
       id: string;
@@ -302,6 +304,7 @@ export function computePlaySheet(
       max: u.max,
       spent: state.uses_spent[u.key] ?? 0,
       recharge: u.recharge,
+      ...(u.spend_for ? { spend_for: u.spend_for } : {}),
     })),
     inventory,
     attuned: state.inventory.filter((i) => i.attuned).length,
@@ -311,7 +314,36 @@ export function computePlaySheet(
     rest_choices: Object.keys(state.choices).filter((k) => restChoiceKeys(res).has(k)),
     starting_equipment_taken: startingEquipmentTaken(state),
   };
-  const spells = sheet.spells.map((line) => ({ ...line, ...spellSlots(line.level, play) }));
+  const name = build.name || "Character";
+  const blockingToggle = sheet.toggles.some((t) => t.active && t.no_spells);
+  const blocked = sheet.armor_untrained
+    ? optionReason(
+        message("refusal.armor_untrained_no_spellcasting", { name, armor: sheet.armor_untrained }),
+      )
+    : blockingToggle
+      ? optionReason(message("rule.cant_cast_spells_right", { name }))
+      : null;
+  const spells = sheet.spells.map((line) => ({
+    ...line,
+    ...spellSlots(line.level, play),
+    free: sheet.free_casts
+      .filter((f) => line.level > 0 && f.spells.includes(line.id))
+      .map((f): FreeCastChoice => {
+        const use = play.uses.find((u) => u.key === f.use);
+        const left = use ? Math.max(0, use.max - use.spent) : 0;
+        return {
+          use: f.use,
+          name: f.name,
+          spellcasting: f.spellcasting,
+          left,
+          available: left > 0,
+          reason:
+            left > 0 ? null : optionReason(message("refusal.free_cast_spent", { use: f.name })),
+        };
+      }),
+    ritual: line.level > 0 && (lookup(catalog.spells, line.id)?.ritual ?? false),
+    blocked,
+  }));
   return { ...sheet, spells, play };
 }
 
@@ -327,8 +359,27 @@ export interface SpellSlotChoice {
   readonly reason: OptionReason | null;
 }
 
+/** A free cast of a spell (`Grants.free_casts`) on the play sheet, with the uses left. */
+export interface FreeCastChoice {
+  /** The limited use it spends (`RollWhat.cast.payment: {type: "free", use}`). */
+  readonly use: string;
+  readonly name: string;
+  /** The spellcasting feature it's cast with. */
+  readonly spellcasting: string | null;
+  readonly left: number;
+  readonly available: boolean;
+  /** Why not (`refusal.free_cast_spent`); `null` when available. */
+  readonly reason: OptionReason | null;
+}
+
 /** A spell on the play sheet, with the slots it can be cast with now. */
 export interface PlaySpellLine extends SpellLine {
+  /** Ways to cast it without a slot through a limited use (Magic Initiate). */
+  readonly free: readonly FreeCastChoice[];
+  /** It has the Ritual tag: it can be cast as a ritual (no slot, 10 minutes longer). */
+  readonly ritual: boolean;
+  /** Why no spell can be cast now (armor without training, Rage), or `null`. */
+  readonly blocked: OptionReason | null;
   /** Slot levels it can be cast with now (a slot left); empty for a cantrip. */
   readonly slot_levels: readonly number[];
   /** The Pact Magic slot's level when it can use one now, else `null`. */
@@ -386,9 +437,14 @@ export function rollCheck(
   state: CharacterState,
   catalog: Catalog,
   request: D20TestRequest,
-  options: { rng?: Rng; mode?: RollMode; dc?: number | null } = {},
+  options: D20TestOptions = {},
 ): D20TestResult {
-  return rollD20Test(combatantFromCharacter(build, state, catalog), request, options);
+  const result = rollD20Test(combatantFromCharacter(build, state, catalog), request, options);
+  // The limited uses that can give this roll Advantage now (a luck-style resource).
+  const resources = computePlaySheet(build, state, catalog)
+    .play.uses.filter((u) => u.spend_for?.includes("d20_advantage") && u.spent < u.max)
+    .map((u) => ({ use: u.key, for: "d20_advantage" as const }));
+  return resources.length ? { ...result, resources } : result;
 }
 
 /**
@@ -435,7 +491,10 @@ export function combatantFromCharacter(
         ),
       ),
     ],
-    no_spells: sheet.toggles.some((t) => t.active && t.no_spells),
+    no_spells: sheet.armor_untrained !== null || sheet.toggles.some((t) => t.active && t.no_spells),
+    armor_untrained: sheet.armor_untrained,
+    d20_floors: sheet.d20_floors,
+    initiative: sheet.initiative.total,
     condition_immunities: [],
     save_actions: [],
     condition_rolls: conditionRolls(conditions, catalog.conditions),
@@ -995,13 +1054,57 @@ export function applyAction(
       if (feature.pool && action.amount === undefined)
         fail(message("refusal.how_much_amount", { feature: feature.name }));
       const amount = feature.pool ? (action.amount as number) : feature.cost;
-      if (feature.uses) {
+      const payment = action.payment;
+      if (payment && !feature.slot_payment)
+        fail(message("refusal.payment_not_accepted", { feature: feature.name }));
+      if (!payment && feature.slot_payment === "required")
+        fail(message("refusal.payment_required", { feature: feature.name }));
+      // An action, Bonus Action or reaction needs a creature that isn't Incapacitated.
+      if (feature.economy !== "free" && conditionsNow.has("incapacitated")) {
+        if (!action.force)
+          fail(
+            message("refusal.incapacitated_feature", {
+              feature: feature.name,
+              name: build.name || "Character",
+            }),
+          );
+        notes.push(message("play.forced", { feature: feature.name }));
+      }
+      if (payment?.type === "slot") {
+        const slot = p.spell_slots.find((x) => x.level === payment.level);
+        if (!slot || slot.spent >= slot.total)
+          fail(message("refusal.no_level_spell_slots", { level: payment.level }));
+      } else if (payment?.type === "pact") {
+        if (!p.pact_magic || p.pact_magic.spent >= p.pact_magic.slots)
+          fail(message("refusal.no_pact_magic_slots"));
+      }
+      const restored = feature.restores
+        ? p.uses.find((u) => u.key === feature.restores)
+        : undefined;
+      if (feature.restores && !restored?.spent) {
+        const use = restored?.name ?? feature.restores;
+        fail(message("refusal.nothing_to_restore", { feature: feature.name, use }));
+      }
+      if (payment?.type === "slot") {
+        s.spell_slots_spent[payment.level - 1] = (s.spell_slots_spent[payment.level - 1] ?? 0) + 1;
+        for (let i = 0; i < s.spell_slots_spent.length; i++) s.spell_slots_spent[i] ??= 0;
+      } else if (payment?.type === "pact") s.pact_slots_spent += 1;
+      if (restored) {
+        s.uses_spent[restored.key] = restored.spent - 1;
+        notes.push(message("play.feature_restores", { feature: feature.name, use: restored.name }));
+      }
+      // A slot paid instead of its uses leaves them as they are (a feature with `slot_payment: instead`).
+      if (feature.uses && !(payment && feature.slot_payment === "instead")) {
         const use =
           p.uses.find((u) => u.key === feature.uses) ??
           fail(message("refusal.no_uses", { feature: feature.name }));
         if (use.spent + amount > use.max)
           fail(
-            message("refusal.uses_left_count", { name: feature.name, left: use.max - use.spent }),
+            message("refusal.uses_left_count", {
+              name: feature.name,
+              left: use.max - use.spent,
+              ...(feature.slot_payment === "instead" ? { slot_payment: true } : {}),
+            }),
           );
         s.uses_spent[use.key] = use.spent + amount;
       }
@@ -1100,6 +1203,12 @@ export function applyAction(
     }
     case "set_inspiration": {
       s.heroic_inspiration = action.value;
+      break;
+    }
+    case "spend_inspiration": {
+      if (!s.heroic_inspiration)
+        fail(message("refusal.no_heroic_inspiration", { name: build.name || "Character" }));
+      s.heroic_inspiration = false;
       break;
     }
     case "set_choice": {

@@ -109,7 +109,7 @@ describe("rolling by hand: a dice roller", () => {
           attacks: [
             {
               attack: "Greatsword",
-              roll: { rolls: [15], d20: 15, mode: "normal" },
+              roll: { rolls: [15], d20: 15, mode: "normal", kept: 0, natural: 15 },
               bonus: 5,
               total: 20,
               critical_hit: false,
@@ -122,6 +122,17 @@ describe("rolling by hand: a dice roller", () => {
                 critical: false,
               },
               riders: [],
+              resolution: {
+                kind: "attack",
+                sources: [],
+                override: null,
+                floors: [],
+                critical_on: 20,
+                automatic_failure: null,
+                bonus: 5,
+              },
+              modifiers: [],
+              bonus_dice: [],
             },
           ],
           damage: null,
@@ -152,7 +163,13 @@ describe("rolling by hand: a dice roller", () => {
     });
     const r = s.act([15, 4, 3, 4], greatsword);
     const [poisoned] = declared(r).rolls.attacks;
-    expect(poisoned?.roll).toEqual({ rolls: [15, 4], d20: 4, mode: "disadvantage" });
+    expect(poisoned?.roll).toEqual({
+      rolls: [15, 4],
+      d20: 4,
+      mode: "disadvantage",
+      kept: 1,
+      natural: 4,
+    });
     expect(poisoned?.reasons).toEqual(["Disadvantage: Brakka is Poisoned"]);
     expect(r.notes[1]).toBe(
       "Greatsword attack roll: 9 (4 on the die); Disadvantage: Brakka is Poisoned.",

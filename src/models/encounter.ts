@@ -462,6 +462,55 @@ const force = z.boolean().optional();
 export const ECONOMY = ["action", "bonus_action", "reaction"] as const;
 
 const mode = z.enum(["normal", "advantage", "disadvantage"]).optional();
+const dice = z.string().regex(/^[1-9]\d*d[1-9]\d*$/, "dice like 1d4");
+
+/**
+ * Additions to a D20 Test or an attack rolled by hand that the table (the GM) gives: more reasons
+ * for Advantage or Disadvantage, a mode that replaces the computed one, flat modifiers and dice
+ * added to the d20's total, and for an attack, flat damage (once) and damage dice (doubled on a
+ * Critical Hit). Each is listed in the result with its label.
+ */
+export const DmOptionsSchema = z
+  .strictObject({
+    modes: z
+      .array(z.strictObject({ mode: z.enum(["advantage", "disadvantage"]), label: z.string() }))
+      .optional(),
+    mode_override: z
+      .strictObject({ mode: z.enum(["normal", "advantage", "disadvantage"]), reason: z.string() })
+      .optional(),
+    modifiers: z.array(z.strictObject({ value: n, label: z.string() })).optional(),
+    bonus_dice: z
+      .array(
+        z.strictObject({
+          dice,
+          label: z.string(),
+          sign: z.union([z.literal(1), z.literal(-1)]).optional(),
+        }),
+      )
+      .optional(),
+    damage_modifiers: z.array(z.strictObject({ value: n, label: z.string() })).optional(),
+    damage_bonus_dice: z
+      .array(z.strictObject({ dice, type: z.enum(DAMAGE_TYPES), label: z.string() }))
+      .optional(),
+  })
+  .meta({ id: "DmOptions" });
+export type DmOptions = z.infer<typeof DmOptionsSchema>;
+
+/** How a spell rolled by hand is paid: a slot (the default), a free cast's use, or as a ritual. */
+export const SpellPaymentSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("slot") }),
+  z.object({ type: z.literal("free"), use: z.string() }),
+  z.object({ type: z.literal("ritual") }),
+]);
+export type SpellPayment = z.infer<typeof SpellPaymentSchema>;
+
+/** A spell slot paying for a feature (`slot_payment`): one of a level, or the Pact Magic slot. */
+export const SlotPaymentSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("slot"), level: n.min(1).max(9) }),
+  z.object({ type: z.literal("pact") }),
+]);
+export type SlotPayment = z.infer<typeof SlotPaymentSchema>;
+
 /**
  * What's rolled by hand (`rollByHand`, the encounter's `roll` action): an attack, a Grapple or
  * Shove, a spell, a feature, a saving throw effect or a legendary action, with the fields of the
@@ -481,6 +530,8 @@ export const RollWhatSchema = z
       cunning: z.array(z.enum(["poison", "trip", "withdraw"])).optional(),
       /** Brutal Strike effects: Advantage forgone while Reckless, for 1d10 and an effect. */
       brutal: z.array(z.enum(["forceful", "hamstring", "staggering", "sundering"])).optional(),
+      /** The GM's additions to this attack (`DmOptions`). */
+      dm: DmOptionsSchema.optional(),
     }),
     /** The DC only: the target picks Strength or Dexterity, unless `save` gives it. */
     z.object({
@@ -502,6 +553,10 @@ export const RollWhatSchema = z
       pact: z.boolean().optional(),
       mode,
       damage_type: z.enum(DAMAGE_TYPES).optional(),
+      /** A character's spell: a slot (default), a free cast's use (`free_casts`), or a ritual. */
+      payment: SpellPaymentSchema.optional(),
+      /** The GM's additions to its attack rolls and damage (`DmOptions`). */
+      dm: DmOptionsSchema.optional(),
     }),
     /** A character's feature (`sheet.actions`, by key or name); `amount` for a pool. */
     z.object({
@@ -509,6 +564,8 @@ export const RollWhatSchema = z
       feature: z.string(),
       amount: n.min(1).optional(),
       damage_type: z.enum(DAMAGE_TYPES).optional(),
+      /** A spell slot instead of its uses, or the slot it requires (`slot_payment`). */
+      payment: SlotPaymentSchema.optional(),
     }),
     /** A saving throw effect (a breath weapon), by name. */
     z.object({ type: z.literal("save_action"), ability: z.string() }),

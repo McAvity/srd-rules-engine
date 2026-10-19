@@ -21,7 +21,13 @@ const brakka = (state: CharacterState = fresh()) => combatantFromCharacter(fight
 
 describe("rollD20", () => {
   it("keeps the higher die with Advantage and the lower with Disadvantage", () => {
-    expect(rollD20({ rng: scriptedRng([7]) })).toEqual({ rolls: [7], d20: 7, mode: "normal" });
+    expect(rollD20({ rng: scriptedRng([7]) })).toEqual({
+      rolls: [7],
+      d20: 7,
+      mode: "normal",
+      kept: 0,
+      natural: 7,
+    });
     expect(rollD20({ mode: "advantage", rng: scriptedRng([7, 15]) }).d20).toBe(15);
     expect(rollD20({ mode: "disadvantage", rng: scriptedRng([7, 15]) }).d20).toBe(7);
   });

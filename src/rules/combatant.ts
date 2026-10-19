@@ -36,11 +36,11 @@ import {
   rollDamage,
   takeDamage,
 } from "./damage";
-import { abilityModifier } from "./dice";
+import { abilityModifier, roll as rollDice } from "./dice";
 import { spaceForSize } from "./grid";
 import { message, plainMessage, RuleError, texts } from "./messages";
 import { mathRng, type Rng } from "./rng";
-import type { AttackLine } from "./sheet";
+import type { AttackLine, D20FloorLine } from "./sheet";
 import { parseRange } from "./weapons";
 
 export const ROLL_MODES = ["normal", "advantage", "disadvantage"] as const;
@@ -131,6 +131,22 @@ export interface Combatant {
    * left; `null` without it.
    */
   readonly indomitable?: number | null;
+  /** d20 floors on its ability checks from features (`DerivedSheet.d20_floors`). */
+  readonly d20_floors?: readonly D20FloorLine[];
+  /**
+   * The armor it wears without training (`Chain Mail`): Disadvantage on Strength and Dexterity
+   * D20 Tests and no spellcasting (SRD "Armor Training"); `null` or absent otherwise.
+   */
+  readonly armor_untrained?: string | null;
+  /** Its Initiative bonus (`DerivedSheet.initiative`); absent: its Dexterity modifier. */
+  readonly initiative?: number;
+}
+
+/** Disadvantage on a Strength or Dexterity D20 Test in armor without training. */
+export function armorModes(c: Combatant, ability: Ability | null): ModeReason[] {
+  if (!c.armor_untrained || (ability !== "str" && ability !== "dex")) return [];
+  const why = message("reason.armor_untrained", { name: c.name, armor: c.armor_untrained });
+  return [modeReason("disadvantage", why)];
 }
 
 /** An ability modifier added to the damage of matching spells, worked out (`bonus`). */
@@ -358,8 +374,17 @@ export interface AttackModeOptions {
 export function attackMode(
   attacker: Combatant,
   target: Combatant | null,
+  options: AttackModeOptions,
+): { mode: RollMode; reasons: string[]; reason_messages: Message[]; critical_on_hit: boolean } {
+  const { reasons, critical_on_hit } = attackReasons(attacker, target, options);
+  return { ...resolveMode(options.mode ?? "normal", reasons), critical_on_hit };
+}
+
+/** The reasons for Advantage or Disadvantage on an attack roll (`attackMode`, before resolving). */
+export function attackReasons(
+  attacker: Combatant,
+  target: Combatant | null,
   {
-    mode = "normal",
     within_5ft,
     against_source_of = [],
     modes = [],
@@ -367,8 +392,8 @@ export function attackMode(
     spell = false,
     spell_class = null,
   }: AttackModeOptions,
-): { mode: RollMode; reasons: string[]; reason_messages: Message[]; critical_on_hit: boolean } {
-  const reasons: ModeReason[] = [...modes];
+): { reasons: ModeReason[]; critical_on_hit: boolean } {
+  const reasons: ModeReason[] = [...modes, ...armorModes(attacker, ability)];
   // Advantage on the attack rolls of spells: unscoped, or (kenli K-001) only for the granting class's spells
   // (Innate Sorcery: "Sorcerer spells you cast").
   if (
@@ -404,10 +429,9 @@ export function attackMode(
       reasons.push(modeReason(c.mode, why));
     }
   }
-  const resolved = resolveMode(mode, reasons);
   const critical_on_hit =
     target !== null && within_5ft && target.condition_rolls.critical_within_5ft.length > 0;
-  return { ...resolved, critical_on_hit };
+  return { reasons, critical_on_hit };
 }
 
 /** A saving throw effect with a fixed DC (a monster's breath weapon or gaze). */
@@ -429,11 +453,198 @@ export interface SaveActionLine {
 }
 
 export interface D20Roll {
-  /** One die, or two with Advantage or Disadvantage. */
+  /** One die, or two with Advantage or Disadvantage (raw, in the order rolled). */
   readonly rolls: readonly number[];
-  /** The die that counts. */
+  /** The die that counts: the kept die after floors (Reliable Talent). */
   readonly d20: number;
   readonly mode: RollMode;
+  /** The index in `rolls` of the kept die (`-1`: none rolled, an automatic failure). */
+  readonly kept: number;
+  /** The kept die as rolled, before floors (`0` when none was rolled). */
+  readonly natural: number;
+}
+
+/** A floor a D20 Test's d20 can be raised to (`D20Resolution.floors`). */
+export interface D20FloorRule {
+  readonly min: number;
+  readonly label: string;
+}
+
+/**
+ * Everything a later change of a D20 Test or an attack roll needs (a reroll, a late Advantage, a
+ * Critical Hit decided by the table), captured when it was rolled: no build, state or catalog is
+ * needed afterwards, and no other die is rolled again.
+ */
+export interface D20Resolution {
+  readonly kind: "check" | "save" | "attack";
+  /** Every source of Advantage or Disadvantage the roll had (features, conditions, the GM…). */
+  readonly sources: readonly {
+    readonly mode: "advantage" | "disadvantage";
+    readonly label: string;
+  }[];
+  /** A mode that replaced the computed one (`DmOptions.mode_override`). */
+  readonly override: { readonly mode: RollMode; readonly reason: string } | null;
+  /** Every floor that applies to this roll, used or not (a pack's floor, Reliable Talent). */
+  readonly floors: readonly D20FloorRule[];
+  /** An attack's lowest Critical Hit roll (weapons: `critical_hit_on`; spells: 20); else `null`. */
+  readonly critical_on: number | null;
+  /** The condition that failed it without a roll, if any. */
+  readonly automatic_failure: string | null;
+  /** What the total adds to the d20 besides bonus dice: the bonus and every modifier. */
+  readonly bonus: number;
+}
+
+/** A bonus die group added to a d20 roll's total (Bless 1d4), rolled. */
+export interface RolledBonusDie {
+  readonly label: string;
+  readonly dice: string;
+  readonly sign: 1 | -1;
+  readonly rolls: readonly number[];
+  readonly total: number;
+}
+
+/** A floor raised on a roll's dice (`{label, from, to}`). */
+export interface AppliedFloor {
+  readonly label: string;
+  readonly from: number;
+  readonly to: number;
+}
+
+/** The GM's additions to a d20 roll (`DmOptions` without damage). */
+export interface D20Additions {
+  readonly modes?: readonly {
+    readonly mode: "advantage" | "disadvantage";
+    readonly label: string;
+  }[];
+  readonly mode_override?: { readonly mode: RollMode; readonly reason: string };
+  readonly modifiers?: readonly { readonly value: number; readonly label: string }[];
+  readonly bonus_dice?: readonly {
+    readonly dice: string;
+    readonly label: string;
+    readonly sign?: 1 | -1;
+  }[];
+}
+
+/** The modes asked by the GM, as reasons. */
+function dmModes(add: D20Additions): ModeReason[] {
+  return (add.modes ?? []).map((m) => modeReason(m.mode, plainMessage(m.label)));
+}
+
+/** Raise the kept die to the highest floor (each die is raised before one is kept: the same pick). */
+export function applyFloors(
+  roll: D20Roll,
+  floors: readonly D20FloorRule[],
+): { roll: D20Roll; applied: AppliedFloor[] } {
+  const top = floors.reduce<D20FloorRule | null>((t, f) => (!t || f.min > t.min ? f : t), null);
+  if (!top || roll.kept < 0) return { roll: { ...roll, d20: roll.natural }, applied: [] };
+  const applied = roll.rolls.flatMap((v) =>
+    v < top.min ? [{ label: top.label, from: v, to: top.min }] : [],
+  );
+  return { roll: { ...roll, d20: Math.max(roll.natural, top.min) }, applied };
+}
+
+/** Why the d20 counts as more: the floor that raised it (Reliable Talent keeps its own text). */
+export function floorReason(
+  applied: readonly AppliedFloor[],
+  floors: readonly D20FloorRule[],
+): Message | null {
+  if (!applied.length) return null;
+  const top = floors.reduce((t, f) => (f.min > t.min ? f : t));
+  return top.label === "Reliable Talent"
+    ? message("reason.reliable_talent")
+    : message("reason.d20_floor", { label: top.label, min: top.min });
+}
+
+/** Floors on an ability check: Reliable Talent (a proficient skill) and the features' `d20_floors`. */
+export function checkFloors(c: Combatant, skill: Skill | null, ability: Ability): D20FloorRule[] {
+  const out: D20FloorRule[] = [];
+  const proficient = skill !== null && c.proficient_skills.includes(skill);
+  if (proficient && c.rules.includes("reliable_talent"))
+    out.push({ min: 10, label: "Reliable Talent" });
+  for (const f of c.d20_floors ?? []) {
+    if (f.skills && (skill === null || !f.skills.includes(skill))) continue;
+    if (f.abilities && !f.abilities.includes(ability)) continue;
+    if (f.proficient && !proficient) continue;
+    out.push({ min: f.min, label: f.label });
+  }
+  return out;
+}
+
+/** Roll the GM's bonus dice. */
+export function rollBonusDice(dice: D20Additions["bonus_dice"], rng: Rng): RolledBonusDie[] {
+  return (dice ?? []).map((b) => {
+    const r = rollDice(b.dice, rng);
+    const sign = b.sign ?? 1;
+    return { label: b.label, dice: b.dice, sign, rolls: r.rolls, total: sign * r.total };
+  });
+}
+
+/** Sources as listed in a resolution (the caller's `mode` included, as `requested`). */
+function sourcesOf(asked: RollMode, reasons: readonly ModeReason[]): D20Resolution["sources"] {
+  const all = reasons.map((r) => ({ mode: r.mode, label: r.reason }));
+  return asked === "normal" ? all : [{ mode: asked, label: "requested" }, ...all];
+}
+
+/**
+ * A d20 roll from its reasons: the computed mode, the GM's override, the dice, floors and bonus
+ * dice; the total and the resolution that lets it be changed later (`rerollDie`).
+ */
+export function rollWithReasons(
+  kind: D20Resolution["kind"],
+  asked: RollMode,
+  reasons: readonly ModeReason[],
+  {
+    bonus,
+    floors = [],
+    critical_on = null,
+    add = {},
+    forced,
+    rng,
+  }: {
+    bonus: number;
+    floors?: readonly D20FloorRule[];
+    critical_on?: number | null;
+    add?: D20Additions;
+    /** A mode the rules set (Brutal Strike forgoes Advantage), with why; the GM's still wins. */
+    forced?: { mode: RollMode; message: Message };
+    rng: Rng;
+  },
+) {
+  const resolved = resolveMode(asked, reasons);
+  const override =
+    add.mode_override ?? (forced ? { mode: forced.mode, reason: forced.message.text } : null);
+  const mode = override?.mode ?? resolved.mode;
+  const floored = applyFloors(rollD20({ mode, rng }), floors);
+  const bonus_dice = rollBonusDice(add.bonus_dice, rng);
+  const modifiers = (add.modifiers ?? []).map((m) => ({ label: m.label, value: m.value }));
+  const fullBonus = bonus + modifiers.reduce((n, m) => n + m.value, 0);
+  const resolution: D20Resolution = {
+    kind,
+    sources: sourcesOf(asked, reasons),
+    override,
+    floors: [...floors],
+    critical_on,
+    automatic_failure: null,
+    bonus: fullBonus,
+  };
+  const reason_messages = [...resolved.reason_messages];
+  const floor = floorReason(floored.applied, floors);
+  if (floor) reason_messages.push(floor);
+  if (add.mode_override) {
+    const o = add.mode_override;
+    reason_messages.push(message("reason.mode_override", { mode: o.mode, reason: o.reason }));
+  } else if (forced) reason_messages.push(forced.message);
+  return {
+    roll: floored.roll,
+    applied: floored.applied,
+    computed_mode: resolved.mode,
+    reasons: texts(reason_messages),
+    reason_messages,
+    bonus_dice,
+    modifiers,
+    resolution,
+    total: floored.roll.d20 + fullBonus + bonus_dice.reduce((n, b) => n + b.total, 0),
+  };
 }
 
 /** Roll a d20 for a D20 Test: two dice and the higher (Advantage) or lower (Disadvantage). */
@@ -446,11 +657,11 @@ export function rollD20({
 } = {}): D20Roll {
   if (mode === "normal") {
     const d20 = rng.int(1, 20);
-    return { rolls: [d20], d20, mode };
+    return { rolls: [d20], d20, mode, kept: 0, natural: d20 };
   }
   const rolls = [rng.int(1, 20), rng.int(1, 20)];
   const d20 = mode === "advantage" ? Math.max(...rolls) : Math.min(...rolls);
-  return { rolls, d20, mode };
+  return { rolls, d20, mode, kept: rolls.indexOf(d20), natural: d20 };
 }
 
 export interface AttackResult {
@@ -513,11 +724,19 @@ export interface AttackOptions {
   /** Dice taken off a requested rider before rolling (Cunning Strike: Sneak Attack dice). */
   forgo?: readonly { rider: string; dice: number }[];
   /** Extra damage on a hit, of the weapon's type when `type` is `weapon` (Brutal Strike). */
-  extra_damage?: readonly { dice: string; type: "weapon" | string }[];
+  extra_damage?: readonly { dice: string; type: "weapon" | string; label?: string }[];
   /** No Advantage on this roll (Brutal Strike); refused if it has Disadvantage. */
   forgo_advantage?: boolean;
   /** A flat bonus to the attack roll (Sundering Blow: +5). */
   bonus?: number;
+  /** The GM's mode for this roll, replacing the computed one (`DmOptions.mode_override`). */
+  mode_override?: { mode: RollMode; reason: string };
+  /** Labelled modifiers to the attack roll (`DmOptions.modifiers`), listed in the result. */
+  modifiers?: readonly { value: number; label: string }[];
+  /** Dice added to the attack roll (`DmOptions.bonus_dice`: Bless 1d4). */
+  bonus_dice?: readonly { dice: string; label: string; sign?: 1 | -1 }[];
+  /** Flat damage added once, never doubled (`DmOptions.damage_modifiers`). */
+  damage_modifiers?: readonly { value: number; label: string }[];
 }
 
 /** Check an attack and work out its mode, rider damage and extra damage, before any roll. */
@@ -547,13 +766,17 @@ function prepareAttack(
       message("rule.no_attack_named", { name: attacker.name, attack: String(attack), known }),
     );
   }
-  const moded = attackMode(attacker, target, {
-    mode,
+  const raw = attackReasons(attacker, target, {
     within_5ft: within_5ft ?? line.kind === "melee",
     against_source_of,
     modes,
     ability: line.ability,
   });
+  const moded = {
+    ...resolveMode(mode, raw.reasons),
+    critical_on_hit: raw.critical_on_hit,
+    raw: raw.reasons,
+  };
   if (forgo_advantage && moded.mode === "disadvantage") {
     throw new RuleError(message("rule.attack_roll_disadvantage_advantage"));
   }
@@ -618,9 +841,17 @@ function prepareAttack(
     riderNames.push(rider.name);
   }
   for (const x of extra_damage) {
-    extra.push({ dice: x.dice, bonus: 0, type: x.type === "weapon" ? line.damage_type : x.type });
+    const type = x.type === "weapon" ? line.damage_type : x.type;
+    extra.push({ dice: x.dice, bonus: 0, type, ...(x.label ? { label: x.label } : {}) });
   }
-  return { line, effective, extra, riderNames };
+  return {
+    line,
+    effective,
+    extra,
+    riderNames,
+    moded,
+    forgone: effective !== moded ? forgone : null,
+  };
 }
 
 /**
@@ -712,6 +943,23 @@ export interface AttackDice {
   readonly damage: RolledDamage | null;
   /** The riders added to the damage (Sneak Attack). */
   readonly riders: readonly string[];
+  /** What a later change of the roll needs (`rerollDie`, `addAdvantageDie`, `setCritical`). */
+  readonly resolution: D20Resolution;
+  /** The GM's modifiers to the attack roll (in `bonus`) and its bonus dice (in `total`). */
+  readonly modifiers: readonly { readonly label: string; readonly value: number }[];
+  readonly bonus_dice: readonly RolledBonusDie[];
+  /** The GM's flat damage, added once to the first damage part (`damage_modifiers`). */
+  readonly damage_modifiers?: readonly { readonly label: string; readonly value: number }[];
+}
+
+/** Damage parts with the GM's flat damage added once to the first part (never below 0 in total). */
+export function withDamageModifiers(
+  parts: readonly DamagePart[],
+  mods: readonly { value: number }[] | undefined,
+): DamagePart[] {
+  const add = (mods ?? []).reduce((n, m) => n + m.value, 0);
+  const [first, ...rest] = parts;
+  return add && first ? [{ ...first, bonus: first.bonus + add }, ...rest] : [...parts];
 }
 
 /**
@@ -726,27 +974,53 @@ export function rollAttack(
   options: AttackOptions = {},
 ): AttackDice {
   const { rng = mathRng, two_handed = false, light_extra = false, cleave = false } = options;
-  const { line, effective, extra, riderNames } = prepareAttack(attacker, attack, null, options);
-  const roll = rollD20({ mode: effective.mode, rng });
-  const bonus = line.attack_bonus + (options.bonus ?? 0);
-  const critical_miss = roll.d20 === 1;
-  const critical_hit = !critical_miss && roll.d20 >= Math.min(20, attacker.critical_hit_on);
+  const { line, extra, riderNames, moded, forgone } = prepareAttack(
+    attacker,
+    attack,
+    null,
+    options,
+  );
+  const critical_on = Math.min(20, attacker.critical_hit_on);
+  const r = rollWithReasons("attack", options.mode ?? "normal", moded.raw, {
+    bonus: line.attack_bonus + (options.bonus ?? 0),
+    critical_on,
+    add: {
+      ...(options.mode_override ? { mode_override: options.mode_override } : {}),
+      ...(options.modifiers ? { modifiers: options.modifiers } : {}),
+      ...(options.bonus_dice ? { bonus_dice: options.bonus_dice } : {}),
+    },
+    ...(forgone ? { forced: { mode: "normal" as const, message: forgone } } : {}),
+    rng,
+  });
+  const critical_miss = r.roll.natural === 1;
+  const critical_hit = !critical_miss && r.roll.natural >= critical_on;
   let base_parts = line.damage_parts;
   if (light_extra && line.light_extra_damage_parts) base_parts = line.light_extra_damage_parts;
   else if (cleave && line.cleave_damage_parts) base_parts = line.cleave_damage_parts;
   else if (two_handed && line.two_handed_damage_parts) base_parts = line.two_handed_damage_parts;
-  const parts = [...base_parts, ...extra];
+  const parts = withDamageModifiers([...base_parts, ...extra], options.damage_modifiers);
   return {
     attack: line.name,
-    roll,
-    bonus,
-    total: roll.d20 + bonus,
+    roll: r.roll,
+    bonus: r.resolution.bonus,
+    total: r.total,
     critical_hit,
     critical_miss,
-    reasons: effective.reasons,
-    reason_messages: effective.reason_messages,
+    reasons: r.reasons,
+    reason_messages: r.reason_messages,
     damage: parts.length ? rollDamage(parts, { critical: critical_hit, rng }) : null,
     riders: riderNames,
+    resolution: r.resolution,
+    modifiers: r.modifiers,
+    bonus_dice: r.bonus_dice,
+    ...(options.damage_modifiers?.length
+      ? {
+          damage_modifiers: options.damage_modifiers.map((m) => ({
+            label: m.label,
+            value: m.value,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -806,7 +1080,7 @@ export function rollSavingThrow(
   const failing = combatant.condition_rolls.fail_saves[ability];
   if (failing) {
     const resisted = resist(null);
-    const roll = { rolls: [], d20: 0, mode: "normal" as const };
+    const roll = { rolls: [], d20: 0, mode: "normal" as const, kept: -1, natural: 0 };
     return {
       ...base,
       roll,
@@ -860,7 +1134,7 @@ export function rollSavingThrow(
 
 /** Advantage or Disadvantage on `combatant`'s saving throws with `ability` (features, conditions). */
 function saveModes(combatant: Combatant, ability: Ability): ModeReason[] {
-  const reasons: ModeReason[] = [];
+  const reasons: ModeReason[] = [...armorModes(combatant, ability)];
   if (combatant.advantages.includes(`save.${ability}`)) {
     reasons.push(modeReason("advantage", message("reason.features", { name: combatant.name })));
   }
@@ -876,10 +1150,14 @@ function saveModes(combatant: Combatant, ability: Ability): ModeReason[] {
   return reasons;
 }
 
-/** A D20 Test to roll on its own: a check (skill or ability), a saving throw, an attack roll. */
+/**
+ * A D20 Test to roll on its own: a check (skill or ability), Initiative (a Dexterity check with
+ * the sheet's Initiative bonus), a saving throw, an attack roll.
+ */
 export type D20TestRequest =
   | { skill: Skill }
   | { ability: Ability }
+  | { initiative: true }
   | { save: Ability }
   | { attack: string };
 
@@ -887,7 +1165,7 @@ export type D20TestRequest =
 export interface D20TestResult {
   readonly kind: "check" | "save" | "attack";
   readonly name: string;
-  /** `Stealth check`, `Dexterity saving throw`, `Longsword attack roll`. */
+  /** `Stealth check`, `Dexterity saving throw`, `Longsword attack roll`, `Initiative`. */
   readonly label: string;
   /** `label` as a message (`roll.check`, `roll.save`, `roll.attack_label`), for translation. */
   readonly label_message: Message;
@@ -897,8 +1175,10 @@ export interface D20TestResult {
   readonly attack: string | null;
   /** The DC, or the AC for an attack; `null`: none given. */
   readonly dc: number | null;
+  /** The skill's, save's or attack line's bonus (the GM's modifiers are in `modifiers`). */
   readonly bonus: number;
   readonly roll: D20Roll;
+  /** `roll.d20` + `bonus` + the modifiers + the bonus dice. */
   readonly total: number;
   /** Against `dc`; `null` without one. */
   readonly success: boolean | null;
@@ -911,104 +1191,187 @@ export interface D20TestResult {
   readonly reasons: readonly string[];
   /** `reasons` as messages (for translation). */
   readonly reason_messages: readonly Message[];
+  /** The mode its sources give, before the GM's `mode_override`. */
+  readonly computed_mode: RollMode;
+  /** Floors that raised its dice (`{label, from, to}`). */
+  readonly floors: readonly AppliedFloor[];
+  readonly modifiers: readonly { readonly label: string; readonly value: number }[];
+  readonly bonus_dice: readonly RolledBonusDie[];
+  /** What a later change of the roll needs (`rerollDie`, `addAdvantageDie`). */
+  readonly resolution: D20Resolution;
+  /** An Initiative roll. */
+  readonly initiative?: true;
+  /** Limited uses that can be spent on this roll (a luck-style resource: `d20_advantage`), from `rollCheck`. */
+  readonly resources?: readonly { readonly use: string; readonly for: "d20_advantage" }[];
+}
+
+/** `rollD20Test`'s options: the dice, the caller's mode, a DC, and the GM's additions. */
+export interface D20TestOptions extends D20Additions {
+  readonly rng?: Rng;
+  readonly mode?: RollMode;
+  readonly dc?: number | null;
+}
+
+/** Advantage or Disadvantage on an ability check (features, conditions, armor). */
+function checkModes(combatant: Combatant, ability: Ability): ModeReason[] {
+  const reasons: ModeReason[] = [];
+  if (combatant.advantages.includes(`check.${ability}`)) {
+    reasons.push(modeReason("advantage", message("reason.features", { name: combatant.name })));
+  }
+  for (const c of combatant.condition_rolls.ability_checks) {
+    reasons.push(
+      modeReason(c.mode, message("reason.is", { name: combatant.name, condition: c.condition })),
+    );
+  }
+  return [...reasons, ...armorModes(combatant, ability)];
+}
+
+/** Advantage or Disadvantage on Initiative (features, conditions, armor: a Dexterity check). */
+function initiativeModes(combatant: Combatant): ModeReason[] {
+  const reasons: ModeReason[] = [];
+  if (combatant.advantages.includes("initiative")) {
+    reasons.push(modeReason("advantage", message("reason.features", { name: combatant.name })));
+  }
+  for (const c of combatant.condition_rolls.initiative) {
+    reasons.push(
+      modeReason(c.mode, message("reason.is", { name: combatant.name, condition: c.condition })),
+    );
+  }
+  return [...reasons, ...armorModes(combatant, "dex")];
 }
 
 /**
- * A D20 Test for a sheet's roll button (SRD "D20 Tests"): an ability check, a saving throw or an
- * attack roll with no target, with the Advantage and Disadvantage the combatant's features and
- * conditions give, combined with `mode`. Nothing is spent: no Indomitable, Legendary Resistance
- * or Bardic Inspiration is offered. An attack against `dc` (the target's AC) hits on a natural 20
- * or its Critical Hit range and misses on a natural 1.
+ * A D20 Test for a sheet's roll button (SRD "D20 Tests"): an ability check, Initiative, a saving
+ * throw or an attack roll with no target, with the Advantage and Disadvantage the combatant's
+ * features and conditions give, combined with `mode`, and the GM's additions (`D20Additions`:
+ * more reasons, a mode override, modifiers, bonus dice). Nothing is spent: no Indomitable,
+ * Legendary Resistance or Bardic Inspiration is offered. An attack against `dc` (the target's AC)
+ * hits on a natural 20 or its Critical Hit range and misses on a natural 1. The result's
+ * `resolution` lets it be changed later (`rerollDie`, `addAdvantageDie`).
  */
 export function rollD20Test(
   combatant: Combatant,
   request: D20TestRequest,
-  {
-    rng = mathRng,
-    mode = "normal",
-    dc = null,
-  }: { rng?: Rng; mode?: RollMode; dc?: number | null } = {},
+  options: D20TestOptions = {},
 ): D20TestResult {
-  const never: Decide = () => false;
+  const { rng = mathRng, mode = "normal", dc = null } = options;
+  if ("damage_modifiers" in options || "damage_bonus_dice" in options) {
+    throw new RuleError(
+      message("refusal.dm_roll_not_applicable", { what: "A D20 Test", part: "damage" }),
+    );
+  }
+  const add: D20Additions = options;
+  const extra = dmModes(add);
   const none = { attack: null, automatic_failure: null, critical: false, critical_miss: false };
-  if ("skill" in request || "ability" in request) {
-    const check = rollAbilityCheck(combatant, request, dc, { rng, mode, decide: never });
-    const label = check.skill ? skillName(check.skill as Skill) : ABILITY_NAMES[check.ability];
+  const result = (r: ReturnType<typeof rollWithReasons>) => ({
+    roll: r.roll,
+    total: r.total,
+    reasons: r.reasons,
+    reason_messages: r.reason_messages,
+    computed_mode: r.computed_mode,
+    floors: r.applied,
+    modifiers: r.modifiers,
+    bonus_dice: r.bonus_dice,
+    resolution: r.resolution,
+  });
+  if ("initiative" in request) {
+    const bonus = combatant.initiative ?? combatant.modifiers.dex;
+    const r = rollWithReasons("check", mode, [...extra, ...initiativeModes(combatant)], {
+      bonus,
+      add,
+      rng,
+    });
     return {
       ...none,
+      ...result(r),
+      kind: "check",
+      name: combatant.name,
+      label: "Initiative",
+      label_message: message("roll.initiative"),
+      ability: "dex",
+      skill: null,
+      dc,
+      bonus,
+      success: dc === null ? null : r.total >= dc,
+      initiative: true,
+    };
+  }
+  if ("skill" in request || "ability" in request) {
+    const skill = "skill" in request ? request.skill : null;
+    const ability = skill ? SKILL_ABILITY[skill] : (request as { ability: Ability }).ability;
+    const bonus =
+      (skill ? combatant.skills[skill] : undefined) ?? combatant.ability_checks[ability];
+    const r = rollWithReasons("check", mode, [...extra, ...checkModes(combatant, ability)], {
+      bonus,
+      floors: checkFloors(combatant, skill, ability),
+      add,
+      rng,
+    });
+    const label = skill ? skillName(skill) : ABILITY_NAMES[ability];
+    return {
+      ...none,
+      ...result(r),
       kind: "check",
       name: combatant.name,
       label: `${label} check`,
       label_message: message("roll.check", {
-        label: message(check.skill ? `skill.${check.skill as Skill}` : `ability.${check.ability}`),
+        label: message(skill ? `skill.${skill}` : `ability.${ability}`),
       }),
-      ability: check.ability,
-      skill: check.skill,
+      ability,
+      skill,
       dc,
-      bonus: check.bonus,
-      roll: check.roll,
-      total: check.total,
-      success: check.success,
-      reasons: check.reasons,
-      reason_messages: check.reason_messages,
+      bonus,
+      success: dc === null ? null : r.total >= dc,
     };
   }
   if ("save" in request) {
     const ability = request.save;
     const label = `${ABILITY_NAMES[ability]} saving throw`;
     const label_message = message("roll.save", { ability: message(`ability.${ability}`) });
+    const bonus = combatant.saving_throws[ability];
     const base = {
       ...none,
-      kind: "save",
+      kind: "save" as const,
       name: combatant.name,
       label,
       label_message,
       ability,
       skill: null,
       dc,
+      bonus,
     };
-    if (dc !== null) {
-      const save = rollSavingThrow(combatant, ability, dc, { rng, mode, decide: never });
-      return {
-        ...base,
-        kind: "save",
-        bonus: save.bonus,
-        roll: save.roll,
-        total: save.total,
-        success: save.success,
-        automatic_failure: save.automatic_failure,
-        reasons: save.reasons,
-        reason_messages: save.reason_messages,
-      };
-    }
-    const bonus = combatant.saving_throws[ability];
     const failing = combatant.condition_rolls.fail_saves[ability];
     if (failing) {
-      const roll = { rolls: [], d20: 0, mode: "normal" as const };
+      const roll = { rolls: [], d20: 0, mode: "normal" as const, kept: -1, natural: 0 };
       return {
         ...base,
-        kind: "save",
-        bonus,
         roll,
         total: 0,
         success: false,
         automatic_failure: failing,
         reasons: [],
         reason_messages: [],
+        computed_mode: "normal",
+        floors: [],
+        modifiers: [],
+        bonus_dice: [],
+        resolution: {
+          kind: "save",
+          sources: [],
+          override: null,
+          floors: [],
+          critical_on: null,
+          automatic_failure: failing,
+          bonus,
+        },
       };
     }
-    const resolved = resolveMode(mode, saveModes(combatant, ability));
-    const roll = rollD20({ mode: resolved.mode, rng });
-    return {
-      ...base,
-      kind: "save",
+    const r = rollWithReasons("save", mode, [...extra, ...saveModes(combatant, ability)], {
       bonus,
-      roll,
-      total: roll.d20 + bonus,
-      success: null,
-      reasons: resolved.reasons,
-      reason_messages: resolved.reason_messages,
-    };
+      add,
+      rng,
+    });
+    return { ...base, ...result(r), success: dc === null ? null : r.total >= dc };
   }
   const line = combatant.attacks.find((a) => a.name === request.attack);
   if (!line) {
@@ -1017,16 +1380,22 @@ export function rollD20Test(
       message("rule.no_attack", { combatant: combatant.name, attack: request.attack, known }),
     );
   }
-  const moded = attackMode(combatant, null, {
-    mode,
+  const critical_on = Math.min(20, combatant.critical_hit_on);
+  const { reasons } = attackReasons(combatant, null, {
     within_5ft: line.kind === "melee",
     ability: line.ability,
+    modes: extra,
   });
-  const roll = rollD20({ mode: moded.mode, rng });
-  const total = roll.d20 + line.attack_bonus;
-  const critical_miss = roll.d20 === 1;
-  const critical = !critical_miss && roll.d20 >= Math.min(20, combatant.critical_hit_on);
+  const r = rollWithReasons("attack", mode, reasons, {
+    bonus: line.attack_bonus,
+    critical_on,
+    add,
+    rng,
+  });
+  const critical_miss = r.roll.natural === 1;
+  const critical = !critical_miss && r.roll.natural >= critical_on;
   return {
+    ...result(r),
     kind: "attack",
     name: combatant.name,
     label: `${line.name} attack roll`,
@@ -1036,14 +1405,10 @@ export function rollD20Test(
     attack: line.name,
     dc,
     bonus: line.attack_bonus,
-    roll,
-    total,
-    success: dc === null ? null : critical || (!critical_miss && total >= dc),
+    success: dc === null ? null : critical || (!critical_miss && r.total >= dc),
     automatic_failure: null,
     critical,
     critical_miss,
-    reasons: moded.reasons,
-    reason_messages: moded.reason_messages,
   };
 }
 
@@ -1085,31 +1450,15 @@ export function rollAbilityCheck(
   const skill = "skill" in what ? what.skill : null;
   const ability = skill ? SKILL_ABILITY[skill] : (what as { ability: Ability }).ability;
   const bonus = (skill ? combatant.skills[skill] : undefined) ?? combatant.ability_checks[ability];
-  const reasons: ModeReason[] = [...modes];
-  if (combatant.advantages.includes(`check.${ability}`)) {
-    reasons.push(modeReason("advantage", message("reason.features", { name: combatant.name })));
-  }
-  for (const c of combatant.condition_rolls.ability_checks) {
-    reasons.push(
-      modeReason(c.mode, message("reason.is", { name: combatant.name, condition: c.condition })),
-    );
-  }
-  const resolved = resolveMode(mode, reasons);
   const label = message(skill ? `skill.${skill}` : `ability.${ability}`);
   const rolled = message("roll.check", { label });
-  let roll = rollD20({ mode: resolved.mode, rng });
-  // Reliable Talent: "treat a d20 roll of 9 or lower as a 10" with a proficient skill.
-  const reliable =
-    skill !== null &&
-    combatant.rules.includes("reliable_talent") &&
-    combatant.proficient_skills.includes(skill);
-  if (reliable && roll.d20 < 10) {
-    roll = { ...roll, d20: 10 };
-    const why = message("reason.reliable_talent");
-    resolved.reasons.push(why.text);
-    resolved.reason_messages.push(why);
-  }
-  let total = roll.d20 + bonus;
+  // Floors (Reliable Talent: "treat a d20 roll of 9 or lower as a 10" with a proficient skill).
+  const r = rollWithReasons("check", mode, [...modes, ...checkModes(combatant, ability)], {
+    bonus,
+    floors: checkFloors(combatant, skill, ability),
+    rng,
+  });
+  let total = r.total;
   const inspiration = dc === null ? null : inspire(combatant, total, dc, rolled, decide, rng);
   total += inspiration ?? 0;
   return {
@@ -1118,11 +1467,11 @@ export function rollAbilityCheck(
     skill,
     dc,
     bonus,
-    roll,
+    roll: r.roll,
     total,
     success: dc === null ? null : total >= dc,
-    reasons: resolved.reasons,
-    reason_messages: resolved.reason_messages,
+    reasons: r.reasons,
+    reason_messages: r.reason_messages,
     inspiration,
   };
 }

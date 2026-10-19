@@ -172,6 +172,38 @@ toggles:
       automatic: true                      # part of every matching attack's damage
 ```
 
+Payments, free casts and d20 floors (all optional, absent = none). The bundled SRD doesn't use
+them (its data stays byte for byte, since documents can pin a pack by its hash); a pack adds them
+to SRD entities with patches, e.g.
+`{target: classes/bard, op: append, path: features.5.actions, value: {id: font-of-inspiration, …}}`
+or `{target: feats/magic-initiate, op: append, path: grants.free_casts, value: {uses: free-cast,
+choice: spell}}`:
+
+```yaml
+actions:
+- id: font-of-inspiration       # a pack's patch on the SRD Bard (`features.5.actions`)
+  name: Font of Inspiration
+  economy: free
+  restores: bardic-inspiration  # gives one use of this resource (same source) back
+  slot_payment: required        # always paid with a spell slot; `instead`: a slot may replace `uses`
+- id: taunt                   # a pack's feature with a die the user rolls (by hand: `rolls.die`)
+  name: Taunt
+  economy: bonus_action
+  uses: bardic-inspiration
+  roll: {progression: Bardic Die}   # a class table column, or {dice: 1d6}
+resources:
+- id: fortune
+  name: Fortune
+  max: {proficiency: true}
+  recharge: long
+  spend_for: [d20_advantage, impose_disadvantage]   # what else a use can be spent on
+free_casts:                     # cast without a slot by spending a use of the same source
+- {uses: free-cast, choice: spell}          # the spells picked in this source's `spell` choice
+- {uses: misty, spells: [misty-step]}       # or named
+d20_floors:                     # a d20 of min - 1 or lower counts as min (each die, before keeping)
+- {min: 10, kind: check, skills: [persuasion, deception], abilities: [cha], label: Honeyed Words}
+```
+
 A rider that isn't `automatic` (Sneak Attack, Divine Strike) is listed on matching attack lines
 and added when `makeAttack` is asked to; `type` is `weapon` (the default), a damage type, or a
 list to choose from. `requires` (`advantage_or_ally`: Sneak Attack; `target_damaged`: Colossus

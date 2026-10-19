@@ -8,8 +8,9 @@
 
 import { type Catalog, lookup } from "../content/catalog";
 import type { CharacterBuild } from "../models/build";
+import type { RollResult } from "../models/combat";
 import type { Ability, MonsterDef, SpellDef } from "../models/content";
-import type { RollCost, RollWhat } from "../models/encounter";
+import type { DmOptions, RollCost, RollWhat } from "../models/encounter";
 import type { Message } from "../models/messages";
 import type { OptionReason } from "../models/options";
 import type { CharacterState, PlayAction } from "../models/state";
@@ -24,7 +25,8 @@ import {
   type SaveActionLine,
 } from "../rules/combatant";
 import { type RolledDamage, rollDamage } from "../rules/damage";
-import { message, RuleError } from "../rules/messages";
+import { roll as rollDiceExpression } from "../rules/dice";
+import { message, plainMessage, RuleError } from "../rules/messages";
 import { mathRng, type Rng } from "../rules/rng";
 import type { SpellLine } from "../rules/sheet";
 import { applyAction, computePlaySheet, PlayError, type PlaySheet } from "./play";
@@ -42,6 +44,8 @@ export interface DeclaredRolls {
    * for a Grapple or Shove) and the actor's DC. No save is rolled (`check` with `save` rolls one).
    */
   readonly save: { readonly ability: Ability | null; readonly dc: number } | null;
+  /** A feature's own die the user rolls (a pack's feature rolling a Bardic Die), when it has one. */
+  readonly die?: RollResult | null;
 }
 
 export type { RollCost } from "../models/encounter";
@@ -78,6 +82,26 @@ const fail = (m: Message): never => {
 };
 
 const NO_ROLLS: DeclaredRolls = { attacks: [], damage: null, healing: null, save: null };
+
+/** The GM's additions to an attack rolled by hand, as `rollAttack`'s options (`DmOptions`). */
+function attackDm(dm: DmOptions | undefined) {
+  if (!dm) return {};
+  return {
+    ...(dm.modes?.length
+      ? {
+          modes: dm.modes.map((m) => ({
+            mode: m.mode,
+            reason: m.label,
+            message: plainMessage(m.label),
+          })),
+        }
+      : {}),
+    ...(dm.mode_override ? { mode_override: dm.mode_override } : {}),
+    ...(dm.modifiers?.length ? { modifiers: dm.modifiers } : {}),
+    ...(dm.bonus_dice?.length ? { bonus_dice: dm.bonus_dice } : {}),
+    ...(dm.damage_modifiers?.length ? { damage_modifiers: dm.damage_modifiers } : {}),
+  };
+}
 
 /**
  * Roll `what` for `combatant` by hand (see the module). Throws a `RuleError` for what can't be
@@ -157,18 +181,36 @@ export function rollWith(
       spellcasting?: string;
       mode?: "normal" | "advantage" | "disadvantage";
       damage_type?: NonNullable<Extract<RollWhat, { type: "cast" }>["damage_type"]>;
+      dm?: DmOptions;
     },
     costs: readonly RollCost[] = [],
+    /** Without a slot: a free cast's use spent instead, or a ritual (nothing instead). */
+    instead?: { use: string; message: Message } | { ritual: Message },
   ): ByHandRoll => {
-    const r = castSpell(combatant, spell, [], { ...cast, rng, by_hand: true });
+    const { dm, ...rest } = cast;
+    const r = castSpell(combatant, spell, [], {
+      ...rest,
+      rng,
+      by_hand: true,
+      ...(dm ? { dm } : {}),
+      ...(dm?.damage_bonus_dice?.length ? { extra_damage: dm.damage_bonus_dice } : {}),
+      ...(dm?.damage_modifiers?.length ? { damage_modifiers: dm.damage_modifiers } : {}),
+    });
+    const noSlot = (a: PlayAction) =>
+      !instead || (a.type !== "spend_slot" && a.type !== "spend_pact_slot");
     const paid = r.caster_actions
-      .filter((a) => !monster || character || a.type === "set_concentration")
+      .filter((a) => (!monster || character || a.type === "set_concentration") && noSlot(a))
       .map((a): RollCost => ({ type: "play", action: a }));
+    const use: RollCost[] =
+      instead && "use" in instead
+        ? [{ type: "play", action: { type: "use", key: instead.use } }]
+        : [];
+    const note = instead ? ["use" in instead ? instead.message : instead.ritual] : [];
     return roll(r.by_hand ?? {}, {
       name: as,
       slot_level: r.slot_level,
-      costs: [...costs, ...paid],
-      messages: r.messages,
+      costs: [...costs, ...use, ...paid],
+      messages: [...r.messages, ...note],
     });
   };
   const spellOf = (id: string): SpellDef =>
@@ -184,6 +226,7 @@ export function rollWith(
         s && character ? { sheet: s, state: character.state } : null,
         { turn },
       );
+      const dm = attackDm(what.dm);
       const dice = attackDice(what.attack, {
         mode: what.mode,
         two_handed: what.two_handed,
@@ -191,6 +234,15 @@ export function rollWith(
         light_extra: what.light_extra,
         cleave: what.cleave,
         ...strikes,
+        ...dm,
+        extra_damage: [
+          ...strikes.extra_damage,
+          ...(what.dm?.damage_bonus_dice ?? []).map((d) => ({
+            dice: d.dice,
+            type: d.type,
+            label: d.label,
+          })),
+        ],
       });
       return roll({ attacks: [dice] }, { name: what.attack, costs: dailyOf(what.attack) });
     }
@@ -198,7 +250,11 @@ export function rollWith(
       // "the DC equals 8 plus your Strength modifier and Proficiency Bonus"; the target picks
       // Strength or Dexterity.
       const dc = 8 + combatant.modifiers.str + combatant.proficiency_bonus;
-      return roll({ save: { ability: what.save ?? null, dc } }, { name: what.option });
+      // What the save decides is the table's: the text says what it is (SRD "Unarmed Strike").
+      return roll(
+        { save: { ability: what.save ?? null, dc } },
+        { name: what.option, messages: [message(`unarmed.${what.option}`, { dc })] },
+      );
     }
     case "cast": {
       const spell = spellOf(what.spell);
@@ -208,6 +264,9 @@ export function rollWith(
         fail(message("refusal.cant_cast", { name, spell: spell.name }));
       }
       if (monster && !character) {
+        if (what.payment && what.payment.type !== "slot") {
+          fail(message("refusal.payment_not_accepted", { feature: spell.name }));
+        }
         const line = monsterCastLine(monster, name, spell, what.via);
         if (what.spellcasting !== undefined && what.spellcasting !== line.action) {
           fail(message("rule.no_spellcasting", { name, source: what.spellcasting }));
@@ -221,15 +280,67 @@ export function rollWith(
           ...daily(`${line.action}#${line.spell}`, line.per_day, spell.name),
           ...(line.recharge ? [{ type: "recharge" as const, name: line.action }] : []),
         ];
-        const cast = { slot_level: fixed, spellcasting: line.action, mode: what.mode };
+        const cast = { slot_level: fixed, spellcasting: line.action, mode: what.mode, dm: what.dm };
         return spellRoll(spell, spell.name, { ...cast, damage_type: what.damage_type }, costs);
       }
+      const payment = what.payment ?? { type: "slot" as const };
+      const common = { mode: what.mode, damage_type: what.damage_type, dm: what.dm };
+      if (payment.type === "free") {
+        // A free cast: at the spell's level, with the spellcasting feature that gives it.
+        const entry =
+          known?.free.find((f) => f.use === payment.use) ??
+          fail(message("refusal.free_cast_not_for_spell", { use: payment.use, spell: spell.name }));
+        if ((what.slot_level !== undefined && what.slot_level !== spell.level) || what.pact) {
+          fail(
+            message("refusal.free_cast_base_level", {
+              spell: spell.name,
+              use: entry.name,
+              level: spell.level,
+            }),
+          );
+        }
+        if (what.spellcasting !== undefined && what.spellcasting !== entry.spellcasting) {
+          fail(
+            message("refusal.free_cast_source", {
+              spell: spell.name,
+              use: entry.name,
+              spellcasting: entry.spellcasting ?? "",
+            }),
+          );
+        }
+        const free = message("cast.free", { spell: spell.name, use: entry.name });
+        return spellRoll(
+          spell,
+          spell.name,
+          { ...common, slot_level: spell.level, spellcasting: entry.spellcasting ?? undefined },
+          [],
+          { use: entry.use, message: free },
+        );
+      }
+      if (payment.type === "ritual") {
+        // SRD "Rituals": a prepared spell with the Ritual tag, no slot, 10 minutes longer.
+        if (!spell.ritual || spell.level === 0)
+          fail(message("refusal.not_ritual", { spell: spell.name }));
+        if (what.slot_level !== undefined || what.pact) {
+          fail(message("refusal.ritual_no_slot", { spell: spell.name }));
+        }
+        return spellRoll(
+          spell,
+          spell.name,
+          {
+            ...common,
+            slot_level: spell.level,
+            spellcasting: what.spellcasting ?? spellcastingOf(known),
+          },
+          [],
+          { ritual: message("cast.ritual", { spell: spell.name }) },
+        );
+      }
       return spellRoll(spell, spell.name, {
+        ...common,
         slot_level: what.slot_level,
         pact: what.pact,
         spellcasting: what.spellcasting ?? spellcastingOf(known),
-        mode: what.mode,
-        damage_type: what.damage_type,
       });
     }
     case "feature": {
@@ -270,10 +381,18 @@ export function rollWith(
         key: f.key,
         ...(what.amount !== undefined ? { amount: what.amount } : {}),
         manual: true,
+        ...(what.payment ? { payment: what.payment } : {}),
       };
+      // Its own die, rolled last; what it does is the table's.
+      const die = f.roll_die ? rollDiceExpression(f.roll_die, rng) : undefined;
       return roll(
-        { healing, damage, save },
-        { name: f.name, costs: [{ type: "play", action: use }] },
+        { healing, damage, save, ...(f.roll_die !== undefined ? { die: die ?? null } : {}) },
+        {
+          name: f.name,
+          costs: [{ type: "play", action: use }],
+          messages:
+            f.roll_die !== undefined ? [message("feature.manual_effect", { feature: f.name })] : [],
+        },
       );
     }
     case "save_action": {

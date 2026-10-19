@@ -308,6 +308,21 @@ marked `rest_change` (prepared spells, Weapon Mastery…). The state stores only
   `no_spells` drops Concentration, refuses new Concentration and makes the combatant unable to
   cast. In an encounter, `extends_each_turn` toggles also end at the end of a turn they weren't
   extended in (see "Encounters").
+- **Feature payments** (kenli F-005). `use_feature` checks, in order, the action, its
+  `payment` (`slot_payment: required` needs one, a feature without `slot_payment` takes none),
+  Incapacitated (an action, Bonus Action or reaction; `force` is the GM's override, noted), the
+  slot, and what `restores` would give back, then spends: the slot, one use back, and its `uses`
+  unless a slot paid `instead`. By hand a feature's `roll` die is rolled last (`rolls.die`).
+- **Free casts and rituals.** `Grants.free_casts` link a source's use to spells (named, or its
+  `spell` choice's picks); the play sheet's spells list them (`free`, uses left, reason) with
+  `ritual` and `blocked` (armor without training, a `no_spells` toggle). `RollWhat.cast.payment`
+  `free` costs that `use` instead of the slot, at the spell's level, with the source's line;
+  `ritual` costs no slot. Concentration is a cost as before.
+- **Rolls changed afterwards.** Every `D20TestResult` and `AttackDice` carries its
+  `resolution` (sources, override, floors, `critical_on`, automatic failure, bonus), so
+  `rerollDie`, `addAdvantageDie` and `setCritical` (`rules/rerolls.ts`) work from the result:
+  no build, state or catalog, no other die rolled again, nothing spent (the caller spends a use
+  or `spend_inspiration`). An app keeps the result until the character changes.
 - **Build changes** don't touch the state; `reconcileState` clamps spent resources, drops
   rest-change picks that no longer fit, ends attunements that are no longer allowed and toggles
   that are gone.
@@ -872,6 +887,25 @@ preview can't say whether a zone would stop a creature on the way. The results h
 ## Interpretations (flagged, not invented)
 
 Where the SRD is silent or ambiguous, the engine picks a reading and lists it here.
+
+**Player actions (kenli F-005)**
+
+- **A ritual** needs the spell on the sheet (prepared or known) with the Ritual tag, at its own
+  level, no slot; the engine doesn't tell classes apart. **A free cast** is at the spell's level,
+  with the spellcasting feature of the source that gives it.
+- **Font of Inspiration** takes a slot of any level, Pact Magic included, and is refused when no
+  use is spent. **A slot `instead` of a use** may be paid while a use is left (the player's
+  choice).
+- **Incapacitated** refuses features that take an action, Bonus Action or reaction, not ones
+  with `economy: free`; a `use` (a luck-style resource) isn't checked.
+- **d20 floors** apply to ability checks only (not saves, attacks, Initiative or death saves),
+  to each d20 before one is kept: the same die is kept as without them.
+- **Late Advantage**: a normal roll with no source gains a die; Disadvantage alone becomes a
+  normal roll keeping the first die; cancelled modes, Advantage, the GM's override or an
+  automatic failure can't change. **A Critical Hit gained after the roll** adds one more set of
+  each damage part's dice (the rolled ones stay), one lost drops it. **A spell attack** by hand is
+  a Critical Hit on a natural 20 only; a weapon's on its `critical_hit_on`.
+- **Armor without training**: Initiative counts as a Dexterity D20 Test (Disadvantage too).
 
 **Character building**
 

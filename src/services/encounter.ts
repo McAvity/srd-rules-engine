@@ -53,6 +53,7 @@ import {
 } from "../rules/casting";
 import {
   type AttackResult,
+  armorModes,
   type CheckResult,
   type Combatant,
   combatantFromMonster,
@@ -2555,6 +2556,8 @@ function run(
           if (surprised.has(c.id)) {
             reasons.push(modeReason("disadvantage", message("reason.surprised")));
           }
+          // Armor without training: Initiative is a Dexterity check (Disadvantage).
+          reasons.push(...armorModes(view, "dex"));
           d20 = rollD20({ mode: resolveMode("normal", reasons).mode, rng }).d20;
           if (key !== null) groupRolls.set(key, d20);
         }

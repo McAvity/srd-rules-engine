@@ -432,6 +432,23 @@ export const FeatureActionSchema = z.strictObject({
   inspiration: z.strictObject({ progression: z.string() }).nullable().default(null),
   /** Your reaction when an attack hits you: halve its damage (Uncanny Dodge). */
   halves_attack_damage: z.boolean().default(false),
+  /**
+   * The resource (of the same source) it gives one use of back (Font of Inspiration: Bardic
+   * Inspiration). Optional, so older content parses to the same object.
+   */
+  restores: z.string().optional(),
+  /**
+   * Paid with a spell slot of any level: `instead` of its `uses` when the player chooses
+   * (a feature whose own use is spent), or always (`required`: Font of Inspiration).
+   */
+  slot_payment: z.enum(["instead", "required"]).optional(),
+  /**
+   * A die the user rolls when using it (a class table column: `{progression: Bardic Die}`, or
+   * fixed `{dice: 1d6}`); what it does is the table's (a target's next save, …).
+   */
+  roll: z
+    .union([z.strictObject({ progression: z.string() }), z.strictObject({ dice: Dice })])
+    .optional(),
 });
 export type FeatureActionDef = z.infer<typeof FeatureActionSchema>;
 
@@ -502,8 +519,41 @@ export const ResourceSchema = z.strictObject({
   recharge: z.enum(["short", "long"]),
   /** For `long` resources that also regain some uses on a Short Rest (Rage: 1). */
   short_rest_regain: z.int().nullable().default(null),
+  /**
+   * What a use can be spent on besides the feature itself: Advantage on your own D20 Test
+   * (`d20_advantage`, before or right after the roll) or Disadvantage on an attack roll against
+   * you (`impose_disadvantage`). Optional, so older content parses to the same object.
+   */
+  spend_for: z.array(z.enum(["d20_advantage", "impose_disadvantage"])).optional(),
 });
 export type ResourceDef = z.infer<typeof ResourceSchema>;
+
+/**
+ * A spell its source lets you cast without a spell slot, spending a limited use of the same
+ * source instead: `spells` by id, or the spells picked in its `choice` (Magic Initiate's level 1
+ * spell). At the spell's own level, with the source's spellcasting feature.
+ */
+export const FreeCastSchema = z.strictObject({
+  uses: z.string(),
+  spells: z.array(z.string()).optional(),
+  choice: z.string().optional(),
+});
+export type FreeCast = z.infer<typeof FreeCastSchema>;
+
+/**
+ * A d20 roll of `min - 1` or lower counts as `min` on some ability checks (Reliable Talent-like):
+ * checks with one of `skills` (any skill when absent), made with one of `abilities` (any when
+ * absent), only proficient ones with `proficient`. Each d20 is raised before one is kept.
+ */
+export const D20FloorSchema = z.strictObject({
+  min: z.int().min(2).max(20),
+  kind: z.literal("check"),
+  skills: z.array(z.enum(SKILLS)).optional(),
+  abilities: z.array(z.enum(ABILITIES)).optional(),
+  proficient: z.boolean().optional(),
+  label: z.string().optional(),
+});
+export type D20Floor = z.infer<typeof D20FloorSchema>;
 
 export const ItemGrantSchema = z.strictObject({
   item: z.string(),
@@ -644,6 +694,10 @@ export interface Grants {
   actions: FeatureActionDef[];
   /** Features you switch on in play (Rage); their grants apply while active. */
   toggles: ToggleDef[];
+  /** Spells cast without a slot, spending a use (Magic Initiate). Optional. */
+  free_casts?: FreeCast[];
+  /** d20 floors on ability checks (Reliable Talent-like features in packs). Optional. */
+  d20_floors?: D20Floor[];
   items: ItemGrant[];
   gp: number;
   traits: Trait[];
@@ -770,6 +824,8 @@ export const GrantsSchema: z.ZodType<Grants, unknown> = z
       spell_damage: z.array(SpellDamageSchema).default([]),
       actions: z.array(FeatureActionSchema).default([]),
       toggles: z.array(ToggleSchema).default([]),
+      free_casts: z.array(FreeCastSchema).optional(),
+      d20_floors: z.array(D20FloorSchema).optional(),
       items: z.array(ItemGrantSchema).default([]),
       gp: z.int().default(0),
       traits: z.array(TraitSchema).default([]),

@@ -801,6 +801,39 @@ export const MESSAGES_EN = {
   "stat.initiative": "Initiative",
   "stat.speed": "Speed",
   "stat.passive_perception": "Passive Perception",
+  // Player actions: payments, free casts and rituals, rolls changed after the fact (F-005).
+  "reason.armor_untrained": "{name} wears {armor} without training",
+  "reason.mode_override":
+    "the GM sets {mode, select, advantage {Advantage} disadvantage {Disadvantage} other {a normal roll}}: {reason}",
+  "reason.d20_floor": "{label}: the d20 counts as {min}",
+  "refusal.nothing_to_restore": "{feature}: no use of {use} to regain",
+  "refusal.payment_required": "{feature} needs a spell slot",
+  "refusal.payment_not_accepted": "{feature} isn't paid with a spell slot",
+  "refusal.incapacitated_feature": "{feature}: {name} is Incapacitated",
+  "refusal.free_cast_spent": "{use}: no uses left",
+  "refusal.free_cast_not_for_spell": "{use} doesn't cast {spell}",
+  "refusal.free_cast_base_level": "{spell} through {use} is cast at level {level}",
+  "refusal.free_cast_source": "{spell} through {use} is cast with {spellcasting}",
+  "refusal.not_ritual": "{spell} isn't a ritual",
+  "refusal.ritual_no_slot": "{spell} as a ritual takes no spell slot",
+  "refusal.roll_not_applicable": "This roll can't be changed that way",
+  "refusal.dice_unexpected": "No new die: the roll keeps its first d20",
+  "refusal.dice_missing": "Give the new die's value",
+  "refusal.reroll_die_unknown": "No such die to reroll",
+  "refusal.dm_roll_not_applicable":
+    "{what}: no {part, select, attack {attack roll} other {damage}} to add to",
+  "refusal.no_heroic_inspiration": "{name} has no Heroic Inspiration",
+  "refusal.armor_untrained_no_spellcasting": "{name} can't cast spells in {armor} without training",
+  "play.feature_restores": "{feature}: one use of {use} regained",
+  "play.forced": "{feature}: used anyway (the GM's override)",
+  "feature.manual_effect": "{feature}: what it does is the table's to resolve",
+  "cast.ritual": "{spell} cast as a ritual: no spell slot, 10 minutes longer",
+  "cast.free": "{spell} cast with {use}: no spell slot",
+  "unarmed.grapple":
+    "Grapple, DC {dc}: the target makes a Strength or Dexterity saving throw (its choice) or has the Grappled condition. Only a creature at most one size larger than you, with a hand of yours free.",
+  "unarmed.shove":
+    "Shove, DC {dc}: the target makes a Strength or Dexterity saving throw (its choice) or you push it 5 feet away or knock it Prone. Only a creature at most one size larger than you.",
+  "roll.initiative": "Initiative",
 } as const;
 
 export type MessageCode = keyof typeof MESSAGES_EN;

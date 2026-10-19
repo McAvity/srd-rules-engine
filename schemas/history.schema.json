@@ -5119,6 +5119,43 @@
             },
             "manual": {
               "type": "boolean"
+            },
+            "payment": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "slot"
+                    },
+                    "level": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "level"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "pact"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                }
+              ]
+            },
+            "force": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -5209,6 +5246,18 @@
           "required": [
             "type",
             "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "spend_inspiration"
+            }
+          },
+          "required": [
+            "type"
           ]
         },
         {
@@ -5580,6 +5629,9 @@
                   "sundering"
                 ]
               }
+            },
+            "dm": {
+              "$ref": "#/$defs/DmOptions"
             }
           },
           "required": [
@@ -5663,6 +5715,53 @@
                 "slashing",
                 "thunder"
               ]
+            },
+            "payment": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "slot"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "free"
+                    },
+                    "use": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "use"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "ritual"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                }
+              ]
+            },
+            "dm": {
+              "$ref": "#/$defs/DmOptions"
             }
           },
           "required": [
@@ -5701,6 +5800,40 @@
                 "radiant",
                 "slashing",
                 "thunder"
+              ]
+            },
+            "payment": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "slot"
+                    },
+                    "level": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "level"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "pact"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                }
               ]
             }
           },
@@ -5753,6 +5886,169 @@
           ]
         }
       ]
+    },
+    "DmOptions": {
+      "type": "object",
+      "properties": {
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "advantage",
+                  "disadvantage"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "mode_override": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "normal",
+                "advantage",
+                "disadvantage"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "modifiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "value",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "bonus_dice": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "dice": {
+                "type": "string",
+                "pattern": "^[1-9]\\d*d[1-9]\\d*$"
+              },
+              "label": {
+                "type": "string"
+              },
+              "sign": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "const": 1
+                  },
+                  {
+                    "type": "number",
+                    "const": -1
+                  }
+                ]
+              }
+            },
+            "required": [
+              "dice",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "damage_modifiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "value",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "damage_bonus_dice": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "dice": {
+                "type": "string",
+                "pattern": "^[1-9]\\d*d[1-9]\\d*$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "acid",
+                  "bludgeoning",
+                  "cold",
+                  "fire",
+                  "force",
+                  "lightning",
+                  "necrotic",
+                  "piercing",
+                  "poison",
+                  "psychic",
+                  "radiant",
+                  "slashing",
+                  "thunder"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "dice",
+              "type",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
     },
     "RollCost": {
       "oneOf": [

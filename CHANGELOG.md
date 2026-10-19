@@ -7,7 +7,48 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Changed
+- Armor worn without its training (kenli F-005 D-03): no spellcasting (`castSpell` refuses,
+  `refusal.armor_untrained_no_spellcasting`; the combatant's `no_spells`; `DerivedSheet.
+  armor_untrained`) and Disadvantage on Strength and Dexterity D20 Tests (checks, saves, attack
+  rolls, Initiative). Before, the sheet only warned.
+- A spell attack rolled by hand now takes `CastOptions.modes` (ranged) and the GM's modes; before
+  it ignored them.
+- `D20Roll` has `kept` (the index of the kept die) and `natural` (its raw value); `d20` stays the
+  value that counts. A critical damage part has `critical_from`.
+
 ### Added
+- Player actions (kenli F-005 T02), all optional and additive (old documents and content parse to
+  the same objects):
+  - Feature payments: `FeatureActionDef.restores` and `slot_payment` (`instead` | `required`); the
+    play action `use_feature` takes `payment` (`{type: "slot", level}` | `{type: "pact"}`) and
+    `force`: Font of Inspiration as a pack patches it onto the SRD Bard (a slot of any level →
+    one Bardic Inspiration use; `refusal.nothing_to_restore`, `payment_required`,
+    `payment_not_accepted`). The bundled SRD data is unchanged, byte for byte, so content pinned
+    by its hash keeps resolving (kenli F-008). A feature
+    taking an action, Bonus Action or reaction is refused while Incapacitated
+    (`refusal.incapacitated_feature`) unless `force`.
+  - A feature's own die: `FeatureActionDef.roll` (`{progression}` | `{dice}`) →
+    `FeatureActionLine.roll_die`; rolled by hand as `DeclaredRolls.die`, with
+    `feature.manual_effect`. `RollWhat.feature.payment` pays its cost with a slot.
+  - Free casts and rituals: `Grants.free_casts` (a pack can patch Magic Initiate's `spell` choice in);
+    `PlaySpellLine.free`, `ritual` and `blocked`; `RollWhat.cast.payment` (`slot` | `free` with
+    its `use` | `ritual`), with `refusal.free_cast_*`, `not_ritual`, `ritual_no_slot`.
+  - D20 Tests: `{initiative: true}`; the GM's additions (`DmOptionsSchema`: `modes`,
+    `mode_override`, `modifiers`, `bonus_dice`, and for attacks `damage_modifiers`,
+    `damage_bonus_dice`) on `rollCheck`/`rollD20Test` and on `RollWhat.attack.dm` /
+    `RollWhat.cast.dm`; `Grants.d20_floors` (a d20 counts as at least `min` on some checks);
+    `Resource.spend_for` (`d20_advantage`, `impose_disadvantage`) and `D20TestResult.resources`
+    from `rollCheck`.
+  - Rolls changed afterwards from the result alone: `D20TestResult` and `AttackDice` carry a
+    `resolution` (sources, override, every floor that applies, `critical_on`, automatic failure,
+    bonus), `modifiers` and `bonus_dice`; new exports `rerollDie` (a d20, a bonus die, a damage
+    die, a single roll), `addAdvantageDie` (late Advantage) and `setCritical`; the play action
+    `spend_inspiration`. A Critical Hit gained adds one more set of every damage part's dice, one
+    lost drops it (`RolledDamagePart.critical_from`); no other die is rolled again, nothing is
+    spent. Messages `unarmed.grapple` / `unarmed.shove` say what a Grapple or Shove decides.
+  - Test: `tests/player-actions.test.ts` (an invented `source: test` pack for features only packs
+    have).
 - A character's own catalog in an encounter (kenli F-008 T03): `CharacterRef.catalog` (optional)
   judges everything about that character (sheet, defences, known spells and their definitions,
   costs, species, size, its options and checks, events), while monsters and the map use the

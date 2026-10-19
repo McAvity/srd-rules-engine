@@ -858,6 +858,16 @@
                     "type": "null"
                   }
                 ]
+              },
+              "spend_for": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "d20_advantage",
+                    "impose_disadvantage"
+                  ]
+                }
               }
             },
             "required": [
@@ -1822,6 +1832,45 @@
               "halves_attack_damage": {
                 "default": false,
                 "type": "boolean"
+              },
+              "restores": {
+                "type": "string"
+              },
+              "slot_payment": {
+                "type": "string",
+                "enum": [
+                  "instead",
+                  "required"
+                ]
+              },
+              "roll": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "progression": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "progression"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "dice": {
+                        "type": "string",
+                        "pattern": "^\\d+d\\d+$"
+                      }
+                    },
+                    "required": [
+                      "dice"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "required": [
@@ -1904,6 +1953,98 @@
               "id",
               "name",
               "grants"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "free_casts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "uses": {
+                "type": "string"
+              },
+              "spells": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "choice": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "uses"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "d20_floors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 20
+              },
+              "kind": {
+                "type": "string",
+                "const": "check"
+              },
+              "skills": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "acrobatics",
+                    "animal-handling",
+                    "arcana",
+                    "athletics",
+                    "deception",
+                    "history",
+                    "insight",
+                    "intimidation",
+                    "investigation",
+                    "medicine",
+                    "nature",
+                    "perception",
+                    "performance",
+                    "persuasion",
+                    "religion",
+                    "sleight-of-hand",
+                    "stealth",
+                    "survival"
+                  ]
+                }
+              },
+              "abilities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "str",
+                    "dex",
+                    "con",
+                    "int",
+                    "wis",
+                    "cha"
+                  ]
+                }
+              },
+              "proficient": {
+                "type": "boolean"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "min",
+              "kind"
             ],
             "additionalProperties": false
           }

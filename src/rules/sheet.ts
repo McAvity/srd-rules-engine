@@ -154,6 +154,31 @@ export interface FeatureActionLine {
   /** The die it gives (8 for a d8). */
   readonly inspiration_die: number | null;
   readonly halves_attack_damage: boolean;
+  /** The limited use it gives one back of (`bard:bardic-inspiration`), when it does. */
+  readonly restores?: string;
+  /** Paid with a spell slot instead of its uses, or always (`FeatureActionDef.slot_payment`). */
+  readonly slot_payment?: "instead" | "required";
+  /** The die the user rolls when using it (`1d8`), when it has one; `null`: no column value. */
+  readonly roll_die?: string | null;
+}
+
+/** A spell cast without a slot through a limited use (`Grants.free_casts`), on the sheet. */
+export interface FreeCastLine {
+  /** The limited use spent (`feat:magic-initiate@…#feat:free-cast`). */
+  readonly use: string;
+  readonly name: string;
+  /** The spellcasting feature it's cast with (`SpellcastingLine.source`), or `null`. */
+  readonly spellcasting: string | null;
+  readonly spells: readonly string[];
+}
+
+/** A d20 floor on ability checks (`Grants.d20_floors`), with the feature that gives it. */
+export interface D20FloorLine {
+  readonly min: number;
+  readonly label: string;
+  readonly skills: readonly string[] | null;
+  readonly abilities: readonly Ability[] | null;
+  readonly proficient: boolean;
 }
 
 export interface ClassLine {
@@ -188,6 +213,8 @@ export interface UsesLine {
   readonly max: number;
   readonly recharge: "short" | "long";
   readonly short_rest_regain: number | null;
+  /** What else a use can be spent on (`ResourceDef.spend_for`), when anything. */
+  readonly spend_for?: readonly ("d20_advantage" | "impose_disadvantage")[];
 }
 
 /** An item the character carries (play state), resolved against the catalog. */
@@ -296,6 +323,15 @@ export interface DerivedSheet {
   readonly spells: readonly SpellLine[];
   /** Spells in your spellbook (Wizard), prepared or not. */
   readonly spellbook: readonly string[];
+  /** Spells you can cast without a slot by spending a use (Magic Initiate). */
+  readonly free_casts: readonly FreeCastLine[];
+  /** d20 floors on ability checks from features (besides the named rule Reliable Talent). */
+  readonly d20_floors: readonly D20FloorLine[];
+  /**
+   * In play, the armor worn without its training (`Chain Mail`): Disadvantage on Strength and
+   * Dexterity D20 Tests and no spellcasting (SRD "Armor Training"); `null` otherwise.
+   */
+  readonly armor_untrained: string | null;
   readonly resources: readonly ResourceLine[];
   /** Limited uses (Rage, Second Wind…) and how they recharge. */
   readonly limited_uses: readonly UsesLine[];
@@ -459,9 +495,11 @@ export function computeSheet(
 
   // Armor Class: the best of every legal way to compute it (see `bestArmorClass`).
   const ac = bestArmorClass(equipment, training, res, catalog, mod, effectsFor, play);
-  if (play && ac.armor && !training.includes(ac.armor.category)) {
+  const armorUntrained =
+    play && ac.armor && !training.includes(ac.armor.category) ? ac.armor.name : null;
+  if (armorUntrained) {
     warnings.push(
-      `You aren't trained with ${ac.armor.name}: Disadvantage on Str and Dex tests and attacks, and no spellcasting.`,
+      `You aren't trained with ${armorUntrained}: Disadvantage on Str and Dex tests and attacks, and no spellcasting.`,
     );
   }
   const { armor, shield } = ac;
@@ -686,6 +724,7 @@ export function computeSheet(
       const scope = classScope(src);
       return total + (scope === null || scope === classId ? value : 0);
     }, 0);
+  const uses = limitedUses(res, catalog, mod, pb, classLevels);
   const magic = spellcastingSummary(
     res,
     catalog,
@@ -782,6 +821,11 @@ export function computeSheet(
         const die = a.inspiration
           ? /(\d+)$/.exec(String(column(a.inspiration.progression)))?.[1]
           : null;
+        const rollDie = (roll: NonNullable<typeof a.roll>): string | null => {
+          if ("dice" in roll) return roll.dice;
+          const sides = /(\d+)$/.exec(String(column(roll.progression)))?.[1];
+          return sides ? `1d${sides}` : null;
+        };
         return {
           key: `${scope}:${a.id}`,
           name: a.name,
@@ -829,6 +873,9 @@ export function computeSheet(
           },
           inspiration_die: die ? Number(die) : null,
           halves_attack_damage: a.halves_attack_damage,
+          ...(a.restores ? { restores: `${scope}:${a.restores}` } : {}),
+          ...(a.slot_payment ? { slot_payment: a.slot_payment } : {}),
+          ...(a.roll ? { roll_die: rollDie(a.roll) } : {}),
         };
       }),
     ),
@@ -863,7 +910,21 @@ export function computeSheet(
     spells: magic.spells,
     spellbook: magic.spellbook,
     resources,
-    limited_uses: limitedUses(res, catalog, mod, pb, classLevels),
+    limited_uses: uses,
+    free_casts: magic.free_casts.map((f) => ({
+      ...f,
+      name: uses.find((u) => u.key === f.use)?.name ?? f.use,
+    })),
+    d20_floors: res.sources.flatMap((src) =>
+      (src.grants.d20_floors ?? []).map((f) => ({
+        min: f.min,
+        label: f.label ?? src.name,
+        skills: f.skills ?? null,
+        abilities: f.abilities ?? null,
+        proficient: f.proficient ?? false,
+      })),
+    ),
+    armor_untrained: armorUntrained,
     armor_training: training,
     weapon_proficiencies: weaponProfs,
     feats: res.featSources().map((s) => s.name),
@@ -1094,6 +1155,7 @@ function limitedUses(
             max,
             recharge: r.recharge,
             short_rest_regain: r.short_rest_regain,
+            ...(r.spend_for?.length ? { spend_for: r.spend_for } : {}),
           },
           level: src.level,
         });
@@ -1130,6 +1192,7 @@ function spellcastingSummary(
   pact: DerivedSheet["pact_magic"];
   spells: SpellLine[];
   spellbook: string[];
+  free_casts: Omit<FreeCastLine, "name">[];
 } {
   const spellcasting: SpellcastingLine[] = [];
   let casterLevel = 0;
@@ -1203,7 +1266,20 @@ function spellcastingSummary(
     }
   }
   const sorted = [...spells.values()].sort((a, b) => a.level - b.level);
-  return { spellcasting, slots, pact, spells: sorted, spellbook };
+  // Free casts: the spells named, or picked in the source's own choice, with the source's line.
+  const free_casts = res.sources.flatMap((src) =>
+    (src.grants.free_casts ?? []).map((f) => {
+      const choice = f.choice
+        ? res.choices.find((c) => c.source.key === src.key && c.definition.id === f.choice)
+        : undefined;
+      return {
+        use: `${usesScope(src)}:${f.uses}`,
+        spellcasting: castWith(src),
+        spells: [...(f.spells ?? []), ...(choice ? res.contributed(choice) : [])],
+      };
+    }),
+  );
+  return { spellcasting, slots, pact, spells: sorted, spellbook, free_casts };
 }
 
 interface AttackContext {

@@ -309,6 +309,43 @@
             },
             "manual": {
               "type": "boolean"
+            },
+            "payment": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "slot"
+                    },
+                    "level": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "level"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "pact"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                }
+              ]
+            },
+            "force": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -399,6 +436,18 @@
           "required": [
             "type",
             "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "spend_inspiration"
+            }
+          },
+          "required": [
+            "type"
           ]
         },
         {
