@@ -7341,6 +7341,27 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "store"
+            },
+            "id": {
+              "type": "string"
+            },
+            "stored": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "stored"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "attune"
             },
             "id": {

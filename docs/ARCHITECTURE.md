@@ -1236,7 +1236,11 @@ builder, a VTT client, an edge function and a server.
 - **Document versions.** Builds, play states and encounters have a `version`
   (`DOCUMENT_VERSION`, in `models/version.ts`). A document without one is version 1; parsing
   refuses a newer one. A format change raises the version and migrates older documents on
-  parse, so saved documents keep loading.
+  parse, so saved documents keep loading. Format 2 is a play state with a stored item
+  (`ItemInstance.location: "stored"`, kenli F-005 DEC-01): `parseState` writes 2 exactly when an
+  item is stored (`stateVersion`), so an older engine refuses it instead of dropping `location`
+  and counting the item as carried; every other state, build and encounter stays version 1,
+  byte for byte.
 - **HTTP.** A Web-standard `fetch` handler with no router dependency. Request bodies are
   validated with the same Zod schemas (422 on failure). The Node adapter limits bodies to
   1 MB, and dice expressions are limited to 1000 dice of up to 1000 sides.

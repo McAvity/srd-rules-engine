@@ -553,7 +553,10 @@ export function strikeDice(
     ) {
       fail(message("refusal.cunning_strike_used_when"));
     }
-    if (cunning.includes("poison") && !state.inventory.some((i) => i.item === "poisoners-kit")) {
+    if (
+      cunning.includes("poison") &&
+      !state.inventory.some((i) => i.item === "poisoners-kit" && !i.location)
+    ) {
       fail(message("refusal.cunning_strike_poison_needs", { name }));
     }
     out.forgo.push({ rider: "sneak-attack", dice: cunning.length });

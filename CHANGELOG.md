@@ -7,6 +7,22 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — stored items (kenli F-005 DEC-01, variant A)
+- `ItemInstance.location?: "stored"`: an item put away, still owned but not carried: no weight
+  (`carried_weight`), no attack line, armor or magic (its attunement is kept, without effect);
+  `PlaySheet.play.inventory[].location`. Optional, never written for a carried item.
+- The play action `store` (`{id, stored}`): putting away needs the item taken off
+  (`refusal.unequip_first`); a stored item can't be equipped, attuned to or used
+  (`refusal.item_stored`) until it's taken back; `sell` and `remove_item` work; `add_item`/`buy`
+  are carried and never merge into a stored stack. Messages `play.item_stored`,
+  `play.item_retrieved`, `state.stored_equipped` (`reconcileState` takes such an item off).
+- Document format 2: a play state with a stored item is written as `version: 2`
+  (`stateVersion`, `STORED_STATE_VERSION`; `DOCUMENT_VERSION` is now 2, the newest read), so an
+  older engine refuses it ("saved by a newer srd-rules-engine") instead of silently dropping
+  `location`. States without one stay version 1 with the same bytes; builds and encounters stay
+  version 1 (a version 2 build or encounter is refused). `StateVersionSchema` is new;
+  `DocumentVersionSchema` now reads builds and encounters only.
+
 ### Changed
 - Armor worn without its training (kenli F-005 D-03): no spellcasting (`castSpell` refuses,
   `refusal.armor_untrained_no_spellcasting`; the combatant's `no_spells`; `DerivedSheet.

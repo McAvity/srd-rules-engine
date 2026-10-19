@@ -2054,7 +2054,7 @@
                     "default": 1,
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 1
+                    "maximum": 2
                   },
                   "hp": {
                     "default": {},
@@ -2239,6 +2239,10 @@
                         "notes": {
                           "default": "",
                           "type": "string"
+                        },
+                        "location": {
+                          "type": "string",
+                          "const": "stored"
                         }
                       },
                       "required": [
@@ -5409,6 +5413,26 @@
             "type",
             "id",
             "equipped"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "store"
+            },
+            "id": {
+              "type": "string"
+            },
+            "stored": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "stored"
           ]
         },
         {

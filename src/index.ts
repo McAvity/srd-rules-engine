@@ -267,8 +267,14 @@ export {
   type PlayAction,
   PlayActionSchema,
   parseState,
+  stateVersion,
 } from "./models/state";
-export { DOCUMENT_VERSION, DocumentVersionSchema } from "./models/version";
+export {
+  DOCUMENT_VERSION,
+  DocumentVersionSchema,
+  STORED_STATE_VERSION,
+  StateVersionSchema,
+} from "./models/version";
 // Rules
 export {
   type AbilityRoll,

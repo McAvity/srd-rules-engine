@@ -5113,6 +5113,26 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "store"
+            },
+            "id": {
+              "type": "string"
+            },
+            "stored": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "stored"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "attune"
             },
             "id": {

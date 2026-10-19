@@ -245,6 +245,8 @@ export const MESSAGES_EN = {
   "play.exhaustion_dies": "Exhaustion 6: the character dies.",
   "play.starting_equipment": "Starting equipment added: {items}.",
   "play.took_off": "Took off {item}.",
+  "play.item_stored": "{item} put away (stored: not carried).",
+  "play.item_retrieved": "{item} taken back (carried).",
   "play.attuning": "Attuning takes a Short Rest focused on the item.",
   "play.item_heals": "{item}: {amount} Hit Points.",
   "play.conscious": "Conscious again (still Prone).",
@@ -504,6 +506,8 @@ export const MESSAGES_EN = {
   "refusal.item_choose_variant": "{item}: choose its kind ({variants})",
   "refusal.no_attunement": "{item} doesn't require Attunement",
   "refusal.not_consumable": "{item} isn't used up",
+  "refusal.item_stored": "{item} is stored: take it back first",
+  "refusal.unequip_first": "Take off {item} before putting it away",
   "refusal.charges_range": "Charges go from 0 to {max}",
   "refusal.not_enough_coins": "{item} costs {price}: not enough coins ({purse})",
   "refusal.not_enough_currency":
@@ -718,6 +722,7 @@ export const MESSAGES_EN = {
   "state.slots_spent": "{spent} level {level} slots spent, only {total}",
   "state.item_cant_be": "{item} can't be a {base}",
   "state.item_choose_variant": "{item}: choose its kind ({variants})",
+  "state.stored_equipped": "{item} is stored but marked as worn",
   "state.worn_twice": "Wearing more than one {kind, select, armor {suit of armor} other {Shield}}",
   "state.item_why": "{item}: {why}",
   // Option labels and notes (`combatantOptions`).

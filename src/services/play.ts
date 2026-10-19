@@ -126,10 +126,12 @@ export interface PlaySheet extends DerivedSheet {
       charges: number | null;
       charges_spent: number;
       weight: number | null;
+      /** `stored`: put away, not carried (not in `carried_weight`); missing when carried. */
+      location?: "stored";
     }[];
     readonly attuned: number;
     readonly currency: CharacterState["currency"];
-    /** Known weights only (gear without a listed weight isn't counted). */
+    /** Known weights only (gear without a listed weight isn't counted); stored items aren't carried. */
     readonly carried_weight: number;
     readonly carrying_capacity: number;
     /** Choice keys whose picks come from the state (today's prepared spells…). */
@@ -166,9 +168,12 @@ export function carriedItems(state: CharacterState, catalog: Catalog): CarriedIt
   return state.inventory.map((i) => {
     const magic = lookup(catalog.magic_items, i.item) ?? null;
     const base = magic ? (i.base ?? onlyBase(magic)) : i.item;
-    const active = magic
-      ? (magic.active_when === "carried" || i.equipped) && (!magic.attunement || i.attuned)
-      : false;
+    const stored = i.location === "stored";
+    // A stored item's magic doesn't work (its attunement is kept, without effect).
+    const active =
+      magic && !stored
+        ? (magic.active_when === "carried" || i.equipped) && (!magic.attunement || i.attuned)
+        : false;
     return {
       id: i.id,
       name: itemName(catalog, i, magic, base),
@@ -179,6 +184,7 @@ export function carriedItems(state: CharacterState, catalog: Catalog): CarriedIt
       active,
       attuned: i.attuned,
       variant: i.variant,
+      ...(stored ? { stored } : {}),
     };
   });
 }
@@ -236,7 +242,8 @@ export function computePlaySheet(
   const items = carriedItems(state, catalog);
   const conditions = activeConditions(state, catalog);
   const context: PlayContext = {
-    items,
+    // Stored items aren't on the character: no attack line, armor, magic or equipment.
+    items: items.filter((i) => !i.stored),
     conditions: new Set(conditions.keys()),
     exhaustion: state.exhaustion,
     active: new Set(state.active),
@@ -272,6 +279,7 @@ export function computePlaySheet(
       charges: magic?.charges ?? null,
       charges_spent: i.charges_spent,
       weight: weightOf(carried.base),
+      ...(i.location ? { location: i.location } : {}),
     };
   });
   const play: PlaySheet["play"] = {
@@ -309,7 +317,9 @@ export function computePlaySheet(
     inventory,
     attuned: state.inventory.filter((i) => i.attuned).length,
     currency: { ...state.currency },
-    carried_weight: inventory.reduce((sum, i) => sum + (i.weight ?? 0) * i.qty, 0),
+    carried_weight: inventory
+      .filter((i) => !i.location)
+      .reduce((sum, i) => sum + (i.weight ?? 0) * i.qty, 0),
     carrying_capacity: sheet.scores.str * 15,
     rest_choices: Object.keys(state.choices).filter((k) => restChoiceKeys(res).has(k)),
     starting_equipment_taken: startingEquipmentTaken(state),
@@ -682,6 +692,8 @@ export function validateState(
       if (magic.charges !== null && i.charges_spent > magic.charges)
         error(message("state.too_many_charges_spent", { carried: carried.name }));
     }
+    if (i.location === "stored" && i.equipped)
+      error(message("state.stored_equipped", { item: carried.name }));
     if (i.attuned && !magic?.attunement)
       error(message("state.doesnt_need_attunement", { carried: carried.name }));
     if (i.attuned && magic) {
@@ -764,6 +776,13 @@ export function reconcileState(
   s.uses_spent = uses;
   let attuned = 0;
   for (const i of s.inventory) {
+    // A stored item isn't worn (an edited or older document may say so): take it off.
+    if (i.location === "stored" && i.equipped) {
+      i.equipped = false;
+      notes.push(
+        message("play.took_off", { item: lookup(catalog.magic_items, i.item)?.name ?? i.item }),
+      );
+    }
     const magic = lookup(catalog.magic_items, i.item);
     const blocked =
       i.attuned &&
@@ -859,6 +878,11 @@ export function applyAction(
   };
   const needItem = (id: string) =>
     s.inventory.find((i) => i.id === id) ?? fail(message("refusal.no_item_inventory", { id }));
+  const nameOf = (item: ItemInstance) =>
+    carriedItems(s, catalog).find((c) => c.id === item.id)?.name ?? item.item;
+  /** Refused for a stored item until it's taken back (`store` with `stored: false`). */
+  const storedRefusal = (item: ItemInstance) =>
+    message("refusal.item_stored", { item: nameOf(item) });
   const conditionsNow = new Set(p.conditions.map((c) => c.id));
   const dropConcentration = (why: Message) => {
     if (s.concentration) {
@@ -1274,7 +1298,8 @@ export function applyAction(
           }),
         );
       }
-      const same = !magic && s.inventory.find((i) => i.item === action.item && !i.equipped);
+      const same =
+        !magic && s.inventory.find((i) => i.item === action.item && !i.equipped && !i.location);
       if (same) same.qty += qty;
       else {
         s.inventory.push({
@@ -1300,6 +1325,7 @@ export function applyAction(
     }
     case "equip": {
       const item = needItem(action.id);
+      if (action.equipped && item.location === "stored") fail(storedRefusal(item));
       item.equipped = action.equipped;
       const kind = wornKind(
         catalog,
@@ -1322,9 +1348,22 @@ export function applyAction(
       }
       break;
     }
+    case "store": {
+      const item = needItem(action.id);
+      if (action.stored) {
+        if (item.equipped) fail(message("refusal.unequip_first", { item: nameOf(item) }));
+        item.location = "stored";
+        notes.push(message("play.item_stored", { item: nameOf(item) }));
+      } else {
+        delete item.location;
+        notes.push(message("play.item_retrieved", { item: nameOf(item) }));
+      }
+      break;
+    }
     case "attune": {
       const item = needItem(action.id);
       const magic = lookup(catalog.magic_items, item.item);
+      if (action.attuned && item.location === "stored") fail(storedRefusal(item));
       if (action.attuned) {
         if (!magic?.attunement)
           fail(message("refusal.no_attunement", { item: magic?.name ?? item.item }));
@@ -1340,6 +1379,7 @@ export function applyAction(
     }
     case "use_item": {
       const item = needItem(action.id);
+      if (item.location === "stored") fail(storedRefusal(item));
       const magic = lookup(catalog.magic_items, item.item);
       if (magic?.charges != null) {
         if (item.charges_spent >= magic.charges)

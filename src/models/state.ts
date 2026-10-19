@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import { DocumentVersionSchema } from "./version";
+import { STORED_STATE_VERSION, StateVersionSchema } from "./version";
 
 export const ItemInstanceSchema = z.object({
   /** Stable id within this state's inventory (`i1`, `i2`…). */
@@ -23,6 +23,13 @@ export const ItemInstanceSchema = z.object({
   attuned: z.boolean().default(false),
   charges_spent: z.int().min(0).default(0),
   notes: z.string().default(""),
+  /**
+   * Put away, not on the character (left at camp, in a bag of holding at home…): still owned,
+   * but not carried (no weight), no attack line and its magic inactive; it can't be equipped
+   * or used until it's taken back (the `store` action). Missing means carried; never written
+   * for a carried item, so existing states keep their bytes. A state with one is version 2.
+   */
+  location: z.literal("stored").optional(),
 });
 export type ItemInstance = z.infer<typeof ItemInstanceSchema>;
 
@@ -30,8 +37,11 @@ export const CURRENCIES = ["cp", "sp", "ep", "gp", "pp"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
 export const CharacterStateSchema = z.object({
-  /** The document format (`DOCUMENT_VERSION`); missing means 1. */
-  version: DocumentVersionSchema,
+  /**
+   * The document format: 1, or 2 when an item is stored (`stateVersion`; `parseState` sets it).
+   * Missing means 1.
+   */
+  version: StateVersionSchema,
   hp: z
     .object({
       /** Current Hit Points; `null` means at the maximum (it follows the maximum if it changes). */
@@ -92,7 +102,19 @@ export type CharacterState = z.infer<typeof CharacterStateSchema>;
 /** Parse a state, e.g. one loaded from JSON. Throws a `ZodError` if invalid. */
 export function parseState(input: unknown): CharacterState {
   const state = CharacterStateSchema.parse(input);
-  return { ...state, starting_equipment: startingEquipmentTaken(state) };
+  return {
+    ...state,
+    version: stateVersion(state),
+    starting_equipment: startingEquipmentTaken(state),
+  };
+}
+
+/**
+ * The format a state is written in: 2 if an item is stored (an older engine must refuse it,
+ * not read the item as carried), else 1. `parseState`, and so every action, sets it.
+ */
+export function stateVersion(state: Pick<CharacterState, "inventory">): 1 | 2 {
+  return state.inventory.some((i) => i.location === "stored") ? STORED_STATE_VERSION : 1;
 }
 
 /**
@@ -200,6 +222,11 @@ export const PlayActionSchema = z
      */
     z.object({ type: z.literal("take_starting_equipment") }),
     z.object({ type: z.literal("equip"), id, equipped: z.boolean() }),
+    /**
+     * Put an item away (`stored: true`: still owned, not carried; take it off first) or take it
+     * back (`stored: false`). A stored item can't be equipped, attuned to or used.
+     */
+    z.object({ type: z.literal("store"), id, stored: z.boolean() }),
     z.object({ type: z.literal("attune"), id, attuned: z.boolean() }),
     /** Drink a potion, spend a charge… `roll` overrides the healing roll. */
     z.object({ type: z.literal("use_item"), id, roll: n.min(0).optional() }),

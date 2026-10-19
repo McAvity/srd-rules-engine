@@ -231,6 +231,8 @@ export interface CarriedItem {
   readonly active: boolean;
   readonly attuned: boolean;
   readonly variant: string | null;
+  /** Put away (`ItemInstance.location`): not carried, so not on the sheet's context at all. */
+  readonly stored?: boolean;
 }
 
 /** What play state changes on the sheet: carried items, conditions, Exhaustion. */

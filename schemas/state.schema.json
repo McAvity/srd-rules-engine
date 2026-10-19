@@ -6,7 +6,7 @@
       "default": 1,
       "type": "integer",
       "minimum": 1,
-      "maximum": 1
+      "maximum": 2
     },
     "hp": {
       "default": {},
@@ -191,6 +191,10 @@
           "notes": {
             "default": "",
             "type": "string"
+          },
+          "location": {
+            "type": "string",
+            "const": "stored"
           }
         },
         "required": [
