@@ -1065,3 +1065,107 @@ describe("armor without training in an encounter (D-03)", () => {
     ).toThrow(/without training/);
   });
 });
+
+describe("review 03 regressions (R03-01..03)", () => {
+  const f = fighter();
+
+  it("R03-01: a bonus die's reroll keeps its expression's modifier and sign", () => {
+    const plus = rollCheck(
+      f.build,
+      f.state,
+      srd,
+      { skill: "athletics" },
+      {
+        rng: scriptedRng([10, 2]),
+        bonus_dice: [{ dice: "1d4+2", label: "DM" }],
+      },
+    );
+    expect(plus.bonus_dice[0]?.total).toBe(4);
+    const same = rerollDie({ kind: "bonus_die", roll: plus, group: 0, die: 0 }, { value: 2 });
+    expect(same.bonus_dice[0]?.total).toBe(4);
+    expect(same.total).toBe(plus.total);
+    const up = rerollDie({ kind: "bonus_die", roll: plus, group: 0, die: 0 }, { value: 4 });
+    expect([up.bonus_dice[0]?.total, up.total]).toEqual([6, plus.total + 2]);
+    const minus = rollCheck(
+      f.build,
+      f.state,
+      srd,
+      { skill: "athletics" },
+      {
+        rng: scriptedRng([10, 2]),
+        bonus_dice: [{ dice: "1d4+1", label: "Bane", sign: -1 }],
+      },
+    );
+    expect(minus.bonus_dice[0]?.total).toBe(-3);
+    const again = rerollDie({ kind: "bonus_die", roll: minus, group: 0, die: 0 }, { value: 4 });
+    expect([again.bonus_dice[0]?.total, again.total]).toEqual([-5, minus.total - 2]);
+  });
+
+  it("R03-02: a bonus die's reroll leaves the d20, the Critical Hit (set or not) and the damage as they are", () => {
+    const rolled = byHand(
+      f,
+      {
+        type: "attack",
+        attack: "Greatsword",
+        dm: { bonus_dice: [{ dice: "1d4", label: "Bless" }] },
+      },
+      [10, 2, 3, 4],
+    ).rolls.attacks[0] as AttackDice;
+    const crit = setCritical(rolled, true, { values: [5, 6] });
+    expect([crit.critical_hit, crit.damage?.total]).toEqual([true, 21]);
+    const x = rerollDie({ kind: "bonus_die", roll: crit, group: 0, die: 0 }, { value: 2 });
+    expect([x.critical_hit, x.damage?.total, x.roll]).toEqual([true, 21, crit.roll]);
+    expect(x.damage).toEqual(crit.damage);
+    expect(x.total).toBe(crit.total);
+    const natural20 = byHand(
+      f,
+      {
+        type: "attack",
+        attack: "Greatsword",
+        dm: { bonus_dice: [{ dice: "1d4", label: "Bless" }] },
+      },
+      [20, 2, 3, 5, 2, 6],
+    ).rolls.attacks[0] as AttackDice;
+    const off = setCritical(natural20, false, { values: [] });
+    const y = rerollDie({ kind: "bonus_die", roll: off, group: 0, die: 0 }, { value: 4 });
+    expect([y.critical_hit, y.damage]).toEqual([false, off.damage]);
+    expect(y.total).toBe(off.total + 2);
+  });
+
+  it("R03-03: an index that isn't a whole number in range is refused (die, group, part)", () => {
+    const a = byHand(
+      f,
+      {
+        type: "attack",
+        attack: "Greatsword",
+        dm: { bonus_dice: [{ dice: "1d4", label: "Bless" }] },
+      },
+      [10, 2, 3, 4],
+    ).rolls.attacks[0] as AttackDice;
+    for (const bad of [0.5, Number.NaN, Number.POSITIVE_INFINITY, -1, 1]) {
+      expect(code(() => rerollDie({ kind: "d20", roll: a, die: bad }, { value: 1 }))).toBe(
+        "refusal.reroll_die_unknown",
+      );
+      expect(
+        code(() => rerollDie({ kind: "bonus_die", roll: a, group: bad, die: 0 }, { value: 1 })),
+      ).toBe("refusal.reroll_die_unknown");
+      expect(
+        code(() => rerollDie({ kind: "bonus_die", roll: a, group: 0, die: bad }, { value: 1 })),
+      ).toBe("refusal.reroll_die_unknown");
+      expect(
+        code(() => rerollDie({ kind: "damage", roll: a, part: bad, die: 0 }, { value: 1 })),
+      ).toBe("refusal.reroll_die_unknown");
+      expect(
+        code(() =>
+          rerollDie(
+            { kind: "single", roll: roll("1d8", scriptedRng([3])), die: bad },
+            { value: 1 },
+          ),
+        ),
+      ).toBe("refusal.reroll_die_unknown");
+    }
+    expect(
+      code(() => rerollDie({ kind: "damage", roll: a, part: 0, die: 2.5 }, { value: 1 })),
+    ).toBe("refusal.reroll_die_unknown");
+  });
+});

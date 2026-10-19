@@ -68,6 +68,12 @@ const unknownDie = (): never => {
   throw new RuleError(message("refusal.reroll_die_unknown"));
 };
 
+/** An index into a list of `length`: a whole number in range, else `refusal.reroll_die_unknown`. */
+function index(i: number, length: number): number {
+  if (!Number.isInteger(i) || i < 0 || i >= length) unknownDie();
+  return i;
+}
+
 /** The kept die of `rolls` for `mode` (first of a tie), or the one forced (a late normal roll). */
 function keptOf(rolls: readonly number[], mode: RollMode, forced?: number): number {
   if (forced !== undefined) return forced;
@@ -227,7 +233,7 @@ export function rerollDie<T extends RerollTarget>(
       const r = target.roll;
       if (r.resolution.automatic_failure)
         throw new RuleError(message("refusal.roll_not_applicable"));
-      if (target.die < 0 || target.die >= r.roll.rolls.length) unknownDie();
+      index(target.die, r.roll.rolls.length);
       const value = newValue(source, 20);
       const rolls = r.roll.rolls.map((v, i) => (i === target.die ? value : v));
       // A late normal roll (Disadvantage cancelled) keeps its first die; otherwise pick again.
@@ -237,23 +243,36 @@ export function rerollDie<T extends RerollTarget>(
       return settle(r, roll, r.resolution, extra) as RerollResult<T>;
     }
     case "bonus_die": {
+      // Only that bonus die: the d20, the Critical Hit (rolled or set by the table) and the
+      // damage stay as they are; the group keeps its expression's modifier and sign.
       const r = target.roll;
-      const g = r.bonus_dice[target.group];
-      if (!g || target.die < 0 || target.die >= g.rolls.length) return unknownDie();
-      const value = newValue(source, parseDiceExpression(g.dice).sides);
-      const rolls = g.rolls.map((v, i) => (i === target.die ? value : v));
+      const g = r.bonus_dice[index(target.group, r.bonus_dice.length)] as RolledBonusDie;
+      const die = index(target.die, g.rolls.length);
+      const expr = parseDiceExpression(g.dice);
+      const value = newValue(source, expr.sides);
+      const rolls = g.rolls.map((v, i) => (i === die ? value : v));
       const bonus_dice: RolledBonusDie[] = r.bonus_dice.map((b, i) =>
-        i === target.group ? { ...b, rolls, total: b.sign * sum(rolls) } : b,
+        i === target.group ? { ...b, rolls, total: b.sign * (sum(rolls) + expr.modifier) } : b,
       );
-      const next = { ...r, bonus_dice };
-      return settle(next, r.roll, r.resolution, undefined) as RerollResult<T>;
+      const total =
+        r.total - sum(r.bonus_dice.map((b) => b.total)) + sum(bonus_dice.map((b) => b.total));
+      if (isAttackDice(r)) return { ...r, bonus_dice, total } as RerollResult<T>;
+      const t = r as D20TestResult;
+      const success =
+        t.dc === null
+          ? null
+          : t.resolution.kind === "attack"
+            ? t.critical || (!t.critical_miss && total >= t.dc)
+            : total >= t.dc;
+      return { ...t, bonus_dice, total, success } as RerollResult<T>;
     }
     case "damage": {
       const r = target.roll;
       const damage = "parts" in r ? r : r.damage;
-      const p = damage?.parts[target.part];
-      if (!damage || !p?.dice || target.die < 0 || target.die >= p.rolls.length)
-        return unknownDie();
+      if (!damage) return unknownDie();
+      const p = damage.parts[index(target.part, damage.parts.length)] as RolledDamagePart;
+      if (!p.dice) return unknownDie();
+      index(target.die, p.rolls.length);
       const value = newValue(source, parseDiceExpression(p.dice).sides);
       const parts = damage.parts.map((q, i) => {
         if (i !== target.part) return q;
@@ -265,7 +284,7 @@ export function rerollDie<T extends RerollTarget>(
     }
     case "single": {
       const r = target.roll;
-      if (target.die < 0 || target.die >= r.rolls.length) return unknownDie();
+      index(target.die, r.rolls.length);
       const value = newValue(source, parseDiceExpression(r.dice_expression).sides);
       const rolls = r.rolls.map((v, i) => (i === target.die ? value : v));
       return { ...r, rolls, total: sum(rolls) + r.modifier } as RerollResult<T>;
