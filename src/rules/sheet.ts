@@ -233,6 +233,8 @@ export interface CarriedItem {
   readonly variant: string | null;
   /** Put away (`ItemInstance.location`): not carried, so not on the sheet's context at all. */
   readonly stored?: boolean;
+  /** A custom item (kenli F-011): no rules, so never on the sheet's context either. */
+  readonly custom?: boolean;
 }
 
 /** What play state changes on the sheet: carried items, conditions, Exhaustion. */

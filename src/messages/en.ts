@@ -247,6 +247,7 @@ export const MESSAGES_EN = {
   "play.took_off": "Took off {item}.",
   "play.item_stored": "{item} put away (stored: not carried).",
   "play.item_retrieved": "{item} taken back (carried).",
+  "play.custom_item_added": "{item} added ({qty}).",
   "play.attuning": "Attuning takes a Short Rest focused on the item.",
   "play.item_heals": "{item}: {amount} Hit Points.",
   "play.conscious": "Conscious again (still Prone).",
@@ -508,6 +509,11 @@ export const MESSAGES_EN = {
   "refusal.not_consumable": "{item} isn't used up",
   "refusal.item_stored": "{item} is stored: take it back first",
   "refusal.unequip_first": "Take off {item} before putting it away",
+  "refusal.custom_item_not_usable":
+    "{item} is a custom item: it can't be {what, select, equip {worn or held} attune {attuned to} use {used} charges {charged} sell {sold} other {used}}",
+  "refusal.custom_item_name": "A custom item's name is 1 to {max} characters",
+  "refusal.custom_item_description": "A custom item's description is at most {max} characters",
+  "refusal.custom_item_weight": "A weight is a number of pounds, 0 or more, or unknown",
   "refusal.charges_range": "Charges go from 0 to {max}",
   "refusal.not_enough_coins": "{item} costs {price}: not enough coins ({purse})",
   "refusal.not_enough_currency":

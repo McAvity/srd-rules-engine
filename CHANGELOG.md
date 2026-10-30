@@ -7,6 +7,24 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — custom items (kenli F-011)
+- `ItemInstance.item` may be `null` for a custom item, with `custom: {name, description,
+  weight_lb}` (`CustomItemSchema`, `CUSTOM_ITEM_LIMITS`): a trimmed name of 1–120 characters, a
+  plain-text description of at most 4000, a weight in pounds ≥ 0 or `null` (unknown). A custom
+  item is never equipped, attuned, charged, priced or attacked with and has no base, kind or
+  notes; contradictory lines (a catalog id with `custom`, `null` without it…) are refused.
+- The play action `add_custom_item` (`{name, description, weight_lb, qty?}`): always a new line
+  with its own id, never merged by name. `remove_item` and `store` work on it; `equip`,
+  `attune`, `use_item`, `set_charges` and `sell` are refused (`refusal.custom_item_not_usable`);
+  a bad name, description or weight is `refusal.custom_item_name` / `_description` / `_weight`.
+- Play sheet: an inventory line's `item` may be `null` (category `custom`, `custom: {name,
+  description}`, `weight` = `weight_lb`); `carried_weight` adds known weights only and the new
+  `carried_weight_unknown` counts carried custom items of unknown weight. Custom items never
+  reach the sheet's context (no AC, attacks, equipment or magic).
+- Document format 3: a play state with a custom item is written as `version: 3` (`stateVersion`,
+  `CUSTOM_STATE_VERSION`; `DOCUMENT_VERSION` is now 3), so an older engine refuses it instead of
+  dropping the item. Other states keep version 1 or 2 and their bytes.
+
 ### Added — stored items (kenli F-005 DEC-01, variant A)
 - `ItemInstance.location?: "stored"`: an item put away, still owned but not carried: no weight
   (`carried_weight`), no attack line, armor or magic (its attunement is kept, without effect);

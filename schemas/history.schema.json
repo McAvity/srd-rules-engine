@@ -2054,7 +2054,7 @@
                     "default": 1,
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 2
+                    "maximum": 3
                   },
                   "hp": {
                     "default": {},
@@ -2200,7 +2200,10 @@
                           "type": "string"
                         },
                         "item": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "base": {
                           "default": null,
@@ -2243,6 +2246,29 @@
                         "location": {
                           "type": "string",
                           "const": "stored"
+                        },
+                        "custom": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "weight_lb": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "description",
+                            "weight_lb"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -5360,6 +5386,38 @@
           "required": [
             "type",
             "item"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "add_custom_item"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "weight_lb": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "qty": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "description",
+            "weight_lb"
           ]
         },
         {

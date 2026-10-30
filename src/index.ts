@@ -260,7 +260,10 @@ export {
   type CharacterState,
   CharacterStateSchema,
   CURRENCIES,
+  CUSTOM_ITEM_LIMITS,
   type Currency,
+  type CustomItem,
+  CustomItemSchema,
   type ItemInstance,
   ItemInstanceSchema,
   MAX_ATTUNED,
@@ -270,6 +273,7 @@ export {
   stateVersion,
 } from "./models/state";
 export {
+  CUSTOM_STATE_VERSION,
   DOCUMENT_VERSION,
   DocumentVersionSchema,
   STORED_STATE_VERSION,

@@ -10,11 +10,18 @@ import { z } from "zod";
  * older engine (which would drop `location` and count the item as carried) refuses it with its
  * message instead; every other state, and every build and encounter, stays version 1, byte for
  * byte as before.
+ *
+ * Version 3 (kenli F-011) is a play state with a custom item (`ItemInstance.item: null` and
+ * `custom`): an older engine refuses it instead of dropping the item. A state without one keeps
+ * version 2 or 1.
  */
-export const DOCUMENT_VERSION = 2;
+export const DOCUMENT_VERSION = 3;
 
 /** The format of a play state with a stored item (`stateVersion`). */
 export const STORED_STATE_VERSION = 2;
+
+/** The format of a play state with a custom item (`stateVersion`). */
+export const CUSTOM_STATE_VERSION = 3;
 
 const versionUpTo = (newest: number) =>
   z
@@ -28,5 +35,5 @@ const versionUpTo = (newest: number) =>
 /** A build's or an encounter's format: version 1 (newer ones refused). */
 export const DocumentVersionSchema = versionUpTo(1);
 
-/** A play state's format: version 1, or 2 with a stored item (newer ones refused). */
+/** A play state's format: 1, 2 with a stored item, 3 with a custom item (newer ones refused). */
 export const StateVersionSchema = versionUpTo(DOCUMENT_VERSION);

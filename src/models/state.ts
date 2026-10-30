@@ -6,31 +6,83 @@
  */
 
 import { z } from "zod";
-import { STORED_STATE_VERSION, StateVersionSchema } from "./version";
+import { CUSTOM_STATE_VERSION, STORED_STATE_VERSION, StateVersionSchema } from "./version";
 
-export const ItemInstanceSchema = z.object({
-  /** Stable id within this state's inventory (`i1`, `i2`…). */
-  id: z.string(),
-  /** A catalog item: a weapon, armor, gear, tool, or magic item id. */
-  item: z.string(),
-  /** For a magic item made from a mundane one (Weapon, +1): which one (`longsword`). */
-  base: z.string().nullable().default(null),
-  /** For a magic item with kinds (Ring of Resistance): which one (`fire`). */
-  variant: z.string().nullable().default(null),
-  qty: z.int().min(1).default(1),
-  /** Worn or held. */
-  equipped: z.boolean().default(false),
-  attuned: z.boolean().default(false),
-  charges_spent: z.int().min(0).default(0),
-  notes: z.string().default(""),
-  /**
-   * Put away, not on the character (left at camp, in a bag of holding at home…): still owned,
-   * but not carried (no weight), no attack line and its magic inactive; it can't be equipped
-   * or used until it's taken back (the `store` action). Missing means carried; never written
-   * for a carried item, so existing states keep their bytes. A state with one is version 2.
-   */
-  location: z.literal("stored").optional(),
+/** Limits of a custom item (kenli F-011 contracts/changes.md §6.1). */
+export const CUSTOM_ITEM_LIMITS = { name: 120, description: 4000 } as const;
+const codePoints = (s: string) => [...s].length;
+
+/**
+ * A custom item: not in the catalog (an heirloom, a found trinket, an unidentified thing). The
+ * table writes its name, a plain-text description and its weight, `null` when unknown (never read
+ * as 0). It has no rules: it is never worn, attuned to, charged, priced or attacked with.
+ */
+export const CustomItemSchema = z.strictObject({
+  /** Trimmed, 1–120 characters. */
+  name: z
+    .string()
+    .refine(
+      (v) => v === v.trim() && codePoints(v) >= 1 && codePoints(v) <= CUSTOM_ITEM_LIMITS.name,
+      {
+        error: `a custom item's name is 1–${CUSTOM_ITEM_LIMITS.name} characters, without spaces around it`,
+      },
+    ),
+  /** Plain text (never markup), up to 4000 characters. */
+  description: z.string().refine((v) => codePoints(v) <= CUSTOM_ITEM_LIMITS.description, {
+    error: `a custom item's description is at most ${CUSTOM_ITEM_LIMITS.description} characters`,
+  }),
+  /** Pounds for one; `null`: unknown (not counted, and not taken for 0). */
+  weight_lb: z
+    .number()
+    .refine((v) => Number.isFinite(v) && v >= 0, { error: "a weight is a finite number ≥ 0" })
+    .nullable(),
 });
+export type CustomItem = z.infer<typeof CustomItemSchema>;
+
+export const ItemInstanceSchema = z
+  .object({
+    /** Stable id within this state's inventory (`i1`, `i2`…). */
+    id: z.string(),
+    /**
+     * A catalog item: a weapon, armor, gear, tool, or magic item id; `null` for a custom item, which
+     * has `custom` instead (kenli F-011).
+     */
+    item: z.string().nullable(),
+    /** For a magic item made from a mundane one (Weapon, +1): which one (`longsword`). */
+    base: z.string().nullable().default(null),
+    /** For a magic item with kinds (Ring of Resistance): which one (`fire`). */
+    variant: z.string().nullable().default(null),
+    qty: z.int().min(1).default(1),
+    /** Worn or held. */
+    equipped: z.boolean().default(false),
+    attuned: z.boolean().default(false),
+    charges_spent: z.int().min(0).default(0),
+    notes: z.string().default(""),
+    /**
+     * Put away, not on the character (left at camp, in a bag of holding at home…): still owned,
+     * but not carried (no weight), no attack line and its magic inactive; it can't be equipped
+     * or used until it's taken back (the `store` action). Missing means carried; never written
+     * for a carried item, so existing states keep their bytes. A state with one is version 2.
+     */
+    location: z.literal("stored").optional(),
+    /**
+     * A custom item's name, description and weight (with `item: null`). Never on a catalog item; a
+     * custom item is never equipped, attuned or charged and has no base, kind or notes of its own. A
+     * state with one is version 3.
+     */
+    custom: CustomItemSchema.optional(),
+  })
+  .superRefine((i, ctx) => {
+    const issue = (message: string) => ctx.addIssue({ code: "custom", message, input: i });
+    if (i.item === null && !i.custom) issue("an item without a catalog id needs its custom fields");
+    if (i.item !== null && i.custom) issue("a catalog item can't have custom fields");
+    if (i.custom) {
+      if (i.base !== null || i.variant !== null) issue("a custom item has no base or kind");
+      if (i.equipped || i.attuned || i.charges_spent !== 0)
+        issue("a custom item is never worn, attuned or charged");
+      if (i.notes !== "") issue("a custom item's text is its description, not notes");
+    }
+  });
 export type ItemInstance = z.infer<typeof ItemInstanceSchema>;
 
 export const CURRENCIES = ["cp", "sp", "ep", "gp", "pp"] as const;
@@ -110,10 +162,12 @@ export function parseState(input: unknown): CharacterState {
 }
 
 /**
- * The format a state is written in: 2 if an item is stored (an older engine must refuse it,
- * not read the item as carried), else 1. `parseState`, and so every action, sets it.
+ * The format a state is written in: 3 if it has a custom item (an older engine must refuse it,
+ * not drop the item), 2 if an item is stored (not read as carried), else 1. `parseState`, and so
+ * every action, sets it.
  */
-export function stateVersion(state: Pick<CharacterState, "inventory">): 1 | 2 {
+export function stateVersion(state: Pick<CharacterState, "inventory">): 1 | 2 | 3 {
+  if (state.inventory.some((i) => i.custom)) return CUSTOM_STATE_VERSION;
   return state.inventory.some((i) => i.location === "stored") ? STORED_STATE_VERSION : 1;
 }
 
@@ -214,6 +268,17 @@ export const PlayActionSchema = z
       qty: n.min(1).optional(),
       base: id.optional(),
       variant: id.optional(),
+    }),
+    /**
+     * A custom item (kenli F-011): its name (trimmed), plain-text description and weight in pounds
+     * (`null`: unknown). Always a new line, never merged with one of the same name.
+     */
+    z.object({
+      type: z.literal("add_custom_item"),
+      name: z.string(),
+      description: z.string(),
+      weight_lb: z.number().nullable(),
+      qty: n.min(1).optional(),
     }),
     z.object({ type: z.literal("remove_item"), id, qty: n.min(1).optional() }),
     /**

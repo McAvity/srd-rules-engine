@@ -3046,6 +3046,38 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "add_custom_item"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "weight_lb": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "qty": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "description",
+            "weight_lb"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "remove_item"
             },
             "id": {

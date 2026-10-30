@@ -16,6 +16,7 @@ import type { OptionReason } from "../models/options";
 import {
   type CharacterState,
   CURRENCIES,
+  CUSTOM_ITEM_LIMITS,
   type ItemInstance,
   MAX_ATTUNED,
   type PlayAction,
@@ -115,7 +116,8 @@ export interface PlaySheet extends DerivedSheet {
     }[];
     readonly inventory: readonly {
       id: string;
-      item: string;
+      /** The catalog id; `null` for a custom item (kenli F-011), which has `custom`. */
+      item: string | null;
       name: string;
       category: string;
       qty: number;
@@ -125,14 +127,22 @@ export interface PlaySheet extends DerivedSheet {
       active: boolean;
       charges: number | null;
       charges_spent: number;
+      /** Pounds for one; `null`: not listed (catalog) or unknown (custom), not counted. */
       weight: number | null;
       /** `stored`: put away, not carried (not in `carried_weight`); missing when carried. */
       location?: "stored";
+      /** A custom item's own text (kenli F-011); its weight is `weight`. */
+      custom?: { name: string; description: string };
     }[];
     readonly attuned: number;
     readonly currency: CharacterState["currency"];
     /** Known weights only (gear without a listed weight isn't counted); stored items aren't carried. */
     readonly carried_weight: number;
+    /**
+     * Carried custom items whose weight is unknown (kenli F-011): `carried_weight` leaves them
+     * out, so the total is incomplete while this is above 0.
+     */
+    readonly carried_weight_unknown: number;
     readonly carrying_capacity: number;
     /** Choice keys whose picks come from the state (today's prepared spells…). */
     readonly rest_choices: readonly string[];
@@ -166,6 +176,21 @@ function restChoiceKeys(res: Resolution): Set<string> {
 /** Resolve inventory entries against the catalog: names, bases, whether their magic works. */
 export function carriedItems(state: CharacterState, catalog: Catalog): CarriedItem[] {
   return state.inventory.map((i) => {
+    // A custom item has no rules: no base, no magic, never active; it never reaches the sheet.
+    if (i.custom)
+      return {
+        id: i.id,
+        name: i.custom.name,
+        base: null,
+        magic: null,
+        qty: i.qty,
+        equipped: false,
+        active: false,
+        attuned: false,
+        variant: null,
+        custom: true,
+        ...(i.location === "stored" ? { stored: true } : {}),
+      };
     const magic = lookup(catalog.magic_items, i.item) ?? null;
     const base = magic ? (i.base ?? onlyBase(magic)) : i.item;
     const stored = i.location === "stored";
@@ -199,7 +224,7 @@ function itemName(
   magic: MagicItemDef | null,
   base: string | null,
 ): string {
-  if (!magic) return mundaneName(catalog, i.item) ?? i.item;
+  if (!magic) return mundaneName(catalog, i.item ?? "") ?? labelOf(i);
   const baseName = base ? mundaneName(catalog, base) : null;
   // "Weapon, +1" on a Longsword reads "Longsword, +1".
   let name = magic.name;
@@ -208,6 +233,11 @@ function itemName(
   else if (baseName && magic.base && !magic.base.ids) name = `${magic.name} (${baseName})`;
   const variant = magic.variants.find((v) => v.id === i.variant);
   return variant ? `${name} (${variant.name})` : name;
+}
+
+/** What to call an inventory line in a message without the catalog: its custom name or its id. */
+function labelOf(i: ItemInstance): string {
+  return i.custom?.name ?? i.item ?? i.id;
 }
 
 function mundaneName(catalog: Catalog, id: string): string | undefined {
@@ -242,8 +272,8 @@ export function computePlaySheet(
   const items = carriedItems(state, catalog);
   const conditions = activeConditions(state, catalog);
   const context: PlayContext = {
-    // Stored items aren't on the character: no attack line, armor, magic or equipment.
-    items: items.filter((i) => !i.stored),
+    // Stored and custom items aren't on the sheet: no attack line, armor, magic or equipment.
+    items: items.filter((i) => !i.stored && !i.custom),
     conditions: new Set(conditions.keys()),
     exhaustion: state.exhaustion,
     active: new Set(state.active),
@@ -266,11 +296,28 @@ export function computePlaySheet(
   const inventory = state.inventory.map((i, n) => {
     const carried = items[n] as CarriedItem;
     const magic = carried.magic;
+    if (i.custom)
+      return {
+        id: i.id,
+        item: null,
+        name: i.custom.name,
+        category: "custom",
+        qty: i.qty,
+        equipped: false,
+        attuned: false,
+        requires_attunement: false,
+        active: false,
+        charges: null,
+        charges_spent: 0,
+        weight: i.custom.weight_lb,
+        ...(i.location ? { location: i.location } : {}),
+        custom: { name: i.custom.name, description: i.custom.description },
+      };
     return {
       id: i.id,
       item: i.item,
       name: carried.name,
-      category: magic ? magic.category : itemCategory(catalog, i.item),
+      category: magic ? magic.category : itemCategory(catalog, i.item ?? ""),
       qty: i.qty,
       equipped: i.equipped,
       attuned: i.attuned,
@@ -320,6 +367,9 @@ export function computePlaySheet(
     carried_weight: inventory
       .filter((i) => !i.location)
       .reduce((sum, i) => sum + (i.weight ?? 0) * i.qty, 0),
+    carried_weight_unknown: state.inventory.filter(
+      (i) => !i.location && i.custom && i.custom.weight_lb === null,
+    ).length,
     carrying_capacity: sheet.scores.str * 15,
     rest_choices: Object.keys(state.choices).filter((k) => restChoiceKeys(res).has(k)),
     starting_equipment_taken: startingEquipmentTaken(state),
@@ -585,10 +635,10 @@ function startingKit(
   build: CharacterBuild,
   catalog: Catalog,
   first: number,
-): { inventory: ItemInstance[]; gp: number } {
+): { inventory: (ItemInstance & { item: string })[]; gp: number } {
   const sheet = computeSheet(build, catalog);
   const worn = new Set(sheet.armor_class.parts.map((part) => part.source));
-  const inventory: ItemInstance[] = [];
+  const inventory: (ItemInstance & { item: string })[] = [];
   let n = first;
   for (const [item, qty] of Object.entries(sheet.equipment)) {
     const armor = lookup(catalog.armor, item);
@@ -668,7 +718,7 @@ export function validateState(
   for (const [n, i] of state.inventory.entries()) {
     const carried = items[n] as CarriedItem;
     const magic = carried.magic;
-    if (!magic && !mundaneName(catalog, i.item))
+    if (i.item !== null && !magic && !mundaneName(catalog, i.item))
       error(message("state.unknown_item", { item: i.item }));
     if (magic) {
       if (magic.base && !carried.base)
@@ -780,7 +830,7 @@ export function reconcileState(
     if (i.location === "stored" && i.equipped) {
       i.equipped = false;
       notes.push(
-        message("play.took_off", { item: lookup(catalog.magic_items, i.item)?.name ?? i.item }),
+        message("play.took_off", { item: lookup(catalog.magic_items, i.item)?.name ?? labelOf(i) }),
       );
     }
     const magic = lookup(catalog.magic_items, i.item);
@@ -789,7 +839,7 @@ export function reconcileState(
       (!magic?.attunement || (magic && attunementBlocker(res, magic)) || attuned >= MAX_ATTUNED);
     if (blocked) {
       i.attuned = false;
-      notes.push(message("play.unattuned", { item: magic?.name ?? i.item }));
+      notes.push(message("play.unattuned", { item: magic?.name ?? labelOf(i) }));
     } else if (i.attuned) attuned++;
   }
   s = parseState(s);
@@ -879,10 +929,13 @@ export function applyAction(
   const needItem = (id: string) =>
     s.inventory.find((i) => i.id === id) ?? fail(message("refusal.no_item_inventory", { id }));
   const nameOf = (item: ItemInstance) =>
-    carriedItems(s, catalog).find((c) => c.id === item.id)?.name ?? item.item;
+    carriedItems(s, catalog).find((c) => c.id === item.id)?.name ?? labelOf(item);
   /** Refused for a stored item until it's taken back (`store` with `stored: false`). */
   const storedRefusal = (item: ItemInstance) =>
     message("refusal.item_stored", { item: nameOf(item) });
+  /** A custom item has no rules: it can't be worn, attuned to, used, charged or sold (kenli F-011). */
+  const customRefusal = (item: ItemInstance, what: string) =>
+    message("refusal.custom_item_not_usable", { item: nameOf(item), what });
   const conditionsNow = new Set(p.conditions.map((c) => c.id));
   const dropConcentration = (why: Message) => {
     if (s.concentration) {
@@ -1316,6 +1369,33 @@ export function applyAction(
       }
       break;
     }
+    case "add_custom_item": {
+      const qty = action.qty ?? 1;
+      const name = action.name.trim();
+      const chars = (v: string) => [...v].length;
+      if (chars(name) < 1 || chars(name) > CUSTOM_ITEM_LIMITS.name)
+        fail(message("refusal.custom_item_name", { max: CUSTOM_ITEM_LIMITS.name }));
+      if (chars(action.description) > CUSTOM_ITEM_LIMITS.description)
+        fail(message("refusal.custom_item_description", { max: CUSTOM_ITEM_LIMITS.description }));
+      const w = action.weight_lb;
+      if (w !== null && !(Number.isFinite(w) && w >= 0))
+        fail(message("refusal.custom_item_weight"));
+      // Always a line of its own: two custom items of the same name are still two things.
+      s.inventory.push({
+        id: `i${s.next_item++}`,
+        item: null,
+        custom: { name, description: action.description, weight_lb: w },
+        base: null,
+        variant: null,
+        qty,
+        equipped: false,
+        attuned: false,
+        charges_spent: 0,
+        notes: "",
+      });
+      notes.push(message("play.custom_item_added", { item: name, qty }));
+      break;
+    }
     case "remove_item": {
       const item = needItem(action.id);
       const qty = action.qty ?? item.qty;
@@ -1325,6 +1405,7 @@ export function applyAction(
     }
     case "equip": {
       const item = needItem(action.id);
+      if (item.custom && action.equipped) fail(customRefusal(item, "equip"));
       if (action.equipped && item.location === "stored") fail(storedRefusal(item));
       item.equipped = action.equipped;
       const kind = wornKind(
@@ -1340,7 +1421,7 @@ export function applyAction(
             other.equipped = false;
             notes.push(
               message("play.took_off", {
-                item: carried.find((c) => c.id === other.id)?.name ?? other.item,
+                item: carried.find((c) => c.id === other.id)?.name ?? labelOf(other),
               }),
             );
           }
@@ -1362,11 +1443,12 @@ export function applyAction(
     }
     case "attune": {
       const item = needItem(action.id);
+      if (item.custom && action.attuned) fail(customRefusal(item, "attune"));
       const magic = lookup(catalog.magic_items, item.item);
       if (action.attuned && item.location === "stored") fail(storedRefusal(item));
       if (action.attuned) {
         if (!magic?.attunement)
-          fail(message("refusal.no_attunement", { item: magic?.name ?? item.item }));
+          fail(message("refusal.no_attunement", { item: magic?.name ?? labelOf(item) }));
         const reason = attunementBlocker(resolve(build, catalog), magic as MagicItemDef);
         if (reason) fail(reason);
         const count = s.inventory.filter((i) => i.attuned && i.id !== item.id).length;
@@ -1379,6 +1461,7 @@ export function applyAction(
     }
     case "use_item": {
       const item = needItem(action.id);
+      if (item.custom) fail(customRefusal(item, "use"));
       if (item.location === "stored") fail(storedRefusal(item));
       const magic = lookup(catalog.magic_items, item.item);
       if (magic?.charges != null) {
@@ -1388,7 +1471,7 @@ export function applyAction(
         break;
       }
       if (!magic?.consumable)
-        fail(message("refusal.not_consumable", { item: magic?.name ?? item.item }));
+        fail(message("refusal.not_consumable", { item: magic?.name ?? labelOf(item) }));
       const def = magic as MagicItemDef;
       if (def.heal) {
         const healed = action.roll ?? roll(def.heal, rng).total;
@@ -1404,6 +1487,7 @@ export function applyAction(
     }
     case "set_charges": {
       const item = needItem(action.id);
+      if (item.custom) fail(customRefusal(item, "charges"));
       const magic = lookup(catalog.magic_items, item.item);
       if (magic?.charges == null) fail(message("refusal.item_no_charges"));
       if (action.spent < 0 || action.spent > (magic?.charges ?? 0))
@@ -1450,6 +1534,7 @@ export function applyAction(
       const entry =
         s.inventory.find((i) => i.id === action.id) ??
         fail(message("refusal.no_item", { id: action.id }));
+      if (entry.custom || entry.item === null) return fail(customRefusal(entry, "sell"));
       const qty = action.qty ?? entry.qty;
       if (qty > entry.qty) fail(message("refusal.sell", { qty: entry.qty }));
       const def = itemPrice(catalog, entry.item);
