@@ -322,5 +322,61 @@ describe("custom items: the document", () => {
     expect(stateOk(JSON.parse(json(state))), JSON.stringify(stateOk.errors)).toBe(true);
     const actionOk = schema("play-action.schema.json");
     expect(actionOk(add("Idol", null))).toBe(true);
+    // review03 R03-01: the schema is as strict as the reader on custom lines.
+    const bad = (l: Record<string, unknown>) => ({ ...JSON.parse(json(state)), inventory: [l] });
+    expect(stateOk(bad({ ...line, extra: 1 }))).toBe(false);
+    expect(stateOk(bad({ ...line, item: "rope" }))).toBe(false);
+    expect(stateOk(bad({ id: "i1", item: "rope", extra: 1 }))).toBe(true); // catalog: as before
+  });
+
+  // review03 R03-01: a custom line is refused with any unknown key, never read with it dropped.
+  it("parseState refuses an unknown field on a custom line, at its top level and inside custom", () => {
+    const custom = {
+      id: "i1",
+      item: null,
+      custom: { name: "Idol", description: "", weight_lb: null },
+    };
+    const unknown = (l: unknown) => () => parseState({ version: 3, inventory: [l] });
+    expect(unknown({ ...custom, extra: "must not disappear" })).toThrow(
+      /unrecognized_keys[\s\S]*"extra"/,
+    );
+    expect(unknown({ ...custom, custom: { ...custom.custom, url: "x" } })).toThrow(
+      /unrecognized_keys[\s\S]*"url"/,
+    );
+    expect(unknown({ ...custom, location: "stored", origin: "x" })).toThrow(
+      /unrecognized_keys[\s\S]*"origin"/,
+    );
+    expect(parseState({ version: 3, inventory: [custom] }).inventory[0]).toEqual({
+      ...custom,
+      base: null,
+      variant: null,
+      qty: 1,
+      equipped: false,
+      attuned: false,
+      charges_spent: 0,
+      notes: "",
+    });
+  });
+
+  it("a catalog line keeps its old reading: unknown keys dropped as before, v1/v2 bytes unchanged", () => {
+    const read = parseState({ inventory: [{ id: "i1", item: "rope", extra: 1, qty: 2 }] });
+    expect(read.version).toBe(1);
+    expect(json(read.inventory[0])).toBe(
+      json({
+        id: "i1",
+        item: "rope",
+        base: null,
+        variant: null,
+        qty: 2,
+        equipped: false,
+        attuned: false,
+        charges_spent: 0,
+        notes: "",
+      }),
+    );
+    const sword = fresh.inventory.find((i) => i.item === "greatsword")?.id as string;
+    const v2 = act(fresh, { type: "store", id: sword, stored: true }).state;
+    expect(json(parseState(JSON.parse(json(v2))))).toBe(json(v2));
+    expect(json(parseState(JSON.parse(json(fresh))))).toBe(json(fresh));
   });
 });

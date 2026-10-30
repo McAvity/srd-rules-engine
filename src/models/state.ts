@@ -39,50 +39,54 @@ export const CustomItemSchema = z.strictObject({
 });
 export type CustomItem = z.infer<typeof CustomItemSchema>;
 
-export const ItemInstanceSchema = z
-  .object({
-    /** Stable id within this state's inventory (`i1`, `i2`…). */
-    id: z.string(),
-    /**
-     * A catalog item: a weapon, armor, gear, tool, or magic item id; `null` for a custom item, which
-     * has `custom` instead (kenli F-011).
-     */
-    item: z.string().nullable(),
-    /** For a magic item made from a mundane one (Weapon, +1): which one (`longsword`). */
-    base: z.string().nullable().default(null),
-    /** For a magic item with kinds (Ring of Resistance): which one (`fire`). */
-    variant: z.string().nullable().default(null),
-    qty: z.int().min(1).default(1),
-    /** Worn or held. */
-    equipped: z.boolean().default(false),
-    attuned: z.boolean().default(false),
-    charges_spent: z.int().min(0).default(0),
-    notes: z.string().default(""),
-    /**
-     * Put away, not on the character (left at camp, in a bag of holding at home…): still owned,
-     * but not carried (no weight), no attack line and its magic inactive; it can't be equipped
-     * or used until it's taken back (the `store` action). Missing means carried; never written
-     * for a carried item, so existing states keep their bytes. A state with one is version 2.
-     */
-    location: z.literal("stored").optional(),
-    /**
-     * A custom item's name, description and weight (with `item: null`). Never on a catalog item; a
-     * custom item is never equipped, attuned or charged and has no base, kind or notes of its own. A
-     * state with one is version 3.
-     */
-    custom: CustomItemSchema.optional(),
-  })
-  .superRefine((i, ctx) => {
-    const issue = (message: string) => ctx.addIssue({ code: "custom", message, input: i });
-    if (i.item === null && !i.custom) issue("an item without a catalog id needs its custom fields");
-    if (i.item !== null && i.custom) issue("a catalog item can't have custom fields");
-    if (i.custom) {
-      if (i.base !== null || i.variant !== null) issue("a custom item has no base or kind");
-      if (i.equipped || i.attuned || i.charges_spent !== 0)
-        issue("a custom item is never worn, attuned or charged");
-      if (i.notes !== "") issue("a custom item's text is its description, not notes");
-    }
-  });
+/** A catalog line: exactly as before custom items (unknown keys dropped, bytes of v1/v2 kept). */
+const CatalogItemSchema = z.object({
+  /** Stable id within this state's inventory (`i1`, `i2`…). */
+  id: z.string(),
+  /** A catalog item: a weapon, armor, gear, tool, or magic item id. */
+  item: z.string(),
+  /** For a magic item made from a mundane one (Weapon, +1): which one (`longsword`). */
+  base: z.string().nullable().default(null),
+  /** For a magic item with kinds (Ring of Resistance): which one (`fire`). */
+  variant: z.string().nullable().default(null),
+  qty: z.int().min(1).default(1),
+  /** Worn or held. */
+  equipped: z.boolean().default(false),
+  attuned: z.boolean().default(false),
+  charges_spent: z.int().min(0).default(0),
+  notes: z.string().default(""),
+  /**
+   * Put away, not on the character (left at camp, in a bag of holding at home…): still owned,
+   * but not carried (no weight), no attack line and its magic inactive; it can't be equipped
+   * or used until it's taken back (the `store` action). Missing means carried; never written
+   * for a carried item, so existing states keep their bytes. A state with one is version 2.
+   */
+  location: z.literal("stored").optional(),
+  /** Never on a catalog line: a catalog id with custom fields is refused, not read as either. */
+  custom: z.never().optional(),
+});
+
+/**
+ * A custom line (kenli F-011): `item: null` with `custom`, never equipped, attuned or charged, no
+ * base, kind or notes of its own. Strict: any other key is refused, never dropped. A state with one
+ * is version 3.
+ */
+const CustomLineSchema = z.strictObject({
+  id: z.string(),
+  item: z.null(),
+  custom: CustomItemSchema,
+  base: z.null().default(null),
+  variant: z.null().default(null),
+  qty: z.int().min(1).default(1),
+  equipped: z.literal(false).default(false),
+  attuned: z.literal(false).default(false),
+  charges_spent: z.literal(0).default(0),
+  notes: z.literal("").default(""),
+  location: z.literal("stored").optional(),
+});
+
+/** An inventory line: a catalog item, or a custom one (`item: null`). */
+export const ItemInstanceSchema = z.union([CatalogItemSchema, CustomLineSchema]);
 export type ItemInstance = z.infer<typeof ItemInstanceSchema>;
 
 export const CURRENCIES = ["cp", "sp", "ep", "gp", "pp"] as const;

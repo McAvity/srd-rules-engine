@@ -12,7 +12,8 @@ migrated when it's loaded.
   weight_lb}` (`CustomItemSchema`, `CUSTOM_ITEM_LIMITS`): a trimmed name of 1–120 characters, a
   plain-text description of at most 4000, a weight in pounds ≥ 0 or `null` (unknown). A custom
   item is never equipped, attuned, charged, priced or attacked with and has no base, kind or
-  notes; contradictory lines (a catalog id with `custom`, `null` without it…) are refused.
+  notes; contradictory lines (a catalog id with `custom`, `null` without it…) are refused, and a
+  custom line with any unknown key is refused (catalog lines keep dropping unknown keys, as before).
 - The play action `add_custom_item` (`{name, description, weight_lb, qty?}`): always a new line
   with its own id, never merged by name. `remove_item` and `store` work on it; `equip`,
   `attune`, `use_item`, `set_charges` and `sell` are refused (`refusal.custom_item_not_usable`);
