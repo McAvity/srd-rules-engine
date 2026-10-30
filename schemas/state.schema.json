@@ -143,148 +143,88 @@
       }
     },
     "inventory": {
-      "default": [],
       "type": "array",
       "items": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "item": {
-                "type": "string"
-              },
-              "base": {
-                "default": null,
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "variant": {
-                "default": null,
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "qty": {
-                "default": 1,
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 9007199254740991
-              },
-              "equipped": {
-                "default": false,
-                "type": "boolean"
-              },
-              "attuned": {
-                "default": false,
-                "type": "boolean"
-              },
-              "charges_spent": {
-                "default": 0,
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
-              },
-              "notes": {
-                "default": "",
-                "type": "string"
-              },
-              "location": {
-                "type": "string",
-                "const": "stored"
-              },
-              "custom": {
-                "not": {}
-              }
-            },
-            "required": [
-              "id",
-              "item"
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item": {
+            "type": [
+              "string",
+              "null"
             ]
           },
-          {
+          "base": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "variant": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qty": {
+            "default": 1,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "equipped": {
+            "default": false,
+            "type": "boolean"
+          },
+          "attuned": {
+            "default": false,
+            "type": "boolean"
+          },
+          "charges_spent": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "notes": {
+            "default": "",
+            "type": "string"
+          },
+          "location": {
+            "type": "string",
+            "const": "stored"
+          },
+          "custom": {
             "type": "object",
             "properties": {
-              "id": {
+              "name": {
                 "type": "string"
               },
-              "item": {
-                "type": "null"
+              "description": {
+                "type": "string"
               },
-              "custom": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string"
-                  },
-                  "weight_lb": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "name",
-                  "description",
-                  "weight_lb"
-                ],
-                "additionalProperties": false
-              },
-              "base": {
-                "default": null,
-                "type": "null"
-              },
-              "variant": {
-                "default": null,
-                "type": "null"
-              },
-              "qty": {
-                "default": 1,
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 9007199254740991
-              },
-              "equipped": {
-                "default": false,
-                "type": "boolean",
-                "const": false
-              },
-              "attuned": {
-                "default": false,
-                "type": "boolean",
-                "const": false
-              },
-              "charges_spent": {
-                "default": 0,
-                "type": "number",
-                "const": 0
-              },
-              "notes": {
-                "default": "",
-                "type": "string",
-                "const": ""
-              },
-              "location": {
-                "type": "string",
-                "const": "stored"
+              "weight_lb": {
+                "type": [
+                  "number",
+                  "null"
+                ]
               }
             },
             "required": [
-              "id",
-              "item",
-              "custom"
+              "name",
+              "description",
+              "weight_lb"
             ],
             "additionalProperties": false
           }
+        },
+        "required": [
+          "id",
+          "item"
         ]
       }
     },

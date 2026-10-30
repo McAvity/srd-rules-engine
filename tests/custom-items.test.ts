@@ -322,10 +322,10 @@ describe("custom items: the document", () => {
     expect(stateOk(JSON.parse(json(state))), JSON.stringify(stateOk.errors)).toBe(true);
     const actionOk = schema("play-action.schema.json");
     expect(actionOk(add("Idol", null))).toBe(true);
-    // review03 R03-01: the schema is as strict as the reader on custom lines.
+    // review03 R03-01: `custom` itself is closed in the schema too; the line-level rule (no unknown
+    // key beside `item: null`) is the reader's (parseState), the schema's line stays as before.
     const bad = (l: Record<string, unknown>) => ({ ...JSON.parse(json(state)), inventory: [l] });
-    expect(stateOk(bad({ ...line, extra: 1 }))).toBe(false);
-    expect(stateOk(bad({ ...line, item: "rope" }))).toBe(false);
+    expect(stateOk(bad({ ...line, custom: { ...(line.custom as object), url: "x" } }))).toBe(false);
     expect(stateOk(bad({ id: "i1", item: "rope", extra: 1 }))).toBe(true); // catalog: as before
   });
 
@@ -378,5 +378,9 @@ describe("custom items: the document", () => {
     const v2 = act(fresh, { type: "store", id: sword, stored: true }).state;
     expect(json(parseState(JSON.parse(json(v2))))).toBe(json(v2));
     expect(json(parseState(JSON.parse(json(fresh))))).toBe(json(fresh));
+    // Its errors stay specific (a union would say only "Invalid input" at the line).
+    expect(() => parseState({ inventory: [{ id: "i1", item: "rope", location: "home" }] })).toThrow(
+      /"invalid_value"[\s\S]*"location"[\s\S]*expected/,
+    );
   });
 });
