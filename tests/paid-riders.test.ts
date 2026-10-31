@@ -12,6 +12,7 @@ import {
   createState,
   type Encounter,
   type EncounterAction,
+  fixedRng,
   type RollWhat,
   rollByHand,
   scriptedRng,
@@ -112,32 +113,43 @@ describe("paid damage riders", () => {
     expect(plain.costs).toEqual([]);
   });
 
-  it("in an encounter, a paid rider is refused (roll it by hand to spend the use)", () => {
+  it("in an encounter, a hit with a paid rider spends the use from the character's state", () => {
     const build = brakka();
     const characters: Record<string, { build: CharacterBuild; state: CharacterState }> = {
       brakka: { build, state: createState(build, catalog) },
     };
     let encounter: Encounter = createEncounter();
     const act = (action: EncounterAction) => {
-      encounter = applyEncounterAction(encounter, action, {
-        catalog,
-        characters,
-        rng: scriptedRng([]),
-      }).encounter;
+      const r = applyEncounterAction(encounter, action, { catalog, characters, rng: fixedRng(10) });
+      encounter = r.encounter;
+      for (const [k, st] of Object.entries(r.states)) {
+        const c = characters[k];
+        if (c) characters[k] = { ...c, state: st };
+      }
+      return r;
     };
     act({ type: "add_character", character: "brakka" });
     act({ type: "add_monster", monster: "ogre" });
     act({ type: "set_initiative", id: "brakka", value: 20 });
     act({ type: "set_initiative", id: "ogre", value: 10 });
     act({ type: "start" });
-    expect(() =>
-      act({
-        type: "attack",
-        id: "brakka",
-        target: "ogre",
-        attack: "Greatsword",
-        riders: [{ rider: "test-focus-strike" }],
-      }),
-    ).toThrow("roll the attack by hand");
+    const swing: EncounterAction = {
+      type: "attack",
+      id: "brakka",
+      target: "ogre",
+      attack: "Greatsword",
+      riders: [{ rider: "test-focus-strike" }],
+    };
+    expect(act(swing).result).toMatchObject({ hit: true, riders: ["Test Focus Strike"] });
+    expect(characters.brakka?.state.uses_spent[key]).toBe(1);
+    act({ type: "next_turn" });
+    act({ type: "next_turn" });
+    act(swing);
+    expect(characters.brakka?.state.uses_spent[key]).toBe(2);
+    act({ type: "next_turn" });
+    act({ type: "next_turn" });
+    const before = encounter;
+    expect(() => act(swing)).toThrow("Test Focus: 0 left");
+    expect(encounter).toBe(before);
   });
 });

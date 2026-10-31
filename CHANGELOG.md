@@ -12,8 +12,9 @@ migrated when it's loaded.
   `uses`) that applying an optional rider spends, one use per application. The attack line lists
   it as `AttackRider.uses` (the full `uses` key). `rollByHand` refuses the attack before rolling
   when none is left (`refusal.uses_left_count`) and otherwise returns `{type: "play", action:
-  {type: "use", key}}` as a cost to apply. An encounter attack asked with a paid rider is refused
-  (`refusal.paid_rider_by_hand`): roll it by hand. Content without `uses` parses to the same
+  {type: "use", key}}` as a cost to apply. An encounter attack with a paid rider spends the use from
+  the attacking character's state when it hits (none left: refused as the play action `use` is,
+  nothing applied); no new message. Content without `uses` parses to the same
   object and behaves as before; JSON Schemas regenerated.
 
 ### Added — custom items (kenli F-011)

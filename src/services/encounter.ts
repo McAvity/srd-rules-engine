@@ -1500,13 +1500,14 @@ function run(
     });
     const again = onceIds.find((id) => c.riders_used.includes(id));
     if (again) refuse(message("refusal.already_used_turn", { name: c.name, again }));
+    const paidUses: string[] = [];
     for (const r of riders) {
       const rider = line?.riders.find((x) => x.id === r.rider || x.name === r.rider);
       if (rider?.own_turn && current()?.id !== c.id) {
         fail(message("refusal.used_own_turns", { rider: rider.name, name: c.name }));
       }
-      // A rider paid with a limited use is rolled by hand (`rollByHand`), which spends it.
-      if (rider?.uses) fail(message("refusal.paid_rider_by_hand", { rider: rider.name }));
+      // A rider paid with a limited use spends one of the attacker's, on a hit (below).
+      if (rider?.uses && c.character !== null) paidUses.push(rider.uses);
     }
     const target = withCover(encounterCombatant(e, t.id, ctx), coverFor(c, t, options.cover));
     // Help: Advantage on the next attack roll by one of the helper's allies against the target.
@@ -1583,6 +1584,8 @@ function run(
       );
     } else {
       c.riders_used.push(...onceIds);
+      // Paid riders: one use each, from the character's state (refused, nothing applied, if none).
+      for (const key of paidUses) play(c, { type: "use", key });
       c.hits.push(t.id);
       c.last_hit = {
         target: t.id,

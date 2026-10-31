@@ -211,7 +211,7 @@ Slayer) is checked by `makeAttack`; `once_per_turn` is enforced in encounters (o
 caller tracks it), and `own_turn` only on the attacker's turns (Divine Strike).
 `uses: <resource id>` makes an optional rider paid: each application spends one use of that
 resource (same source scope as a feature action's `uses`); `rollByHand` returns the use as a cost
-and refuses when none is left, and an encounter attack refuses it (roll it by hand).
+and refuses when none is left; an encounter attack spends it from the character's state on a hit.
 `while_active: [rage, reckless-attack]` offers it only while those toggles are
 on (Frenzy), and `damage: {progression: Rage Damage, die: 6}` rolls that many dice. A later rider
 with the same `id` replaces an earlier one (Divine Strike at Cleric 14: `at_class_level` gives the
