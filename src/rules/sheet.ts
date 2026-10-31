@@ -170,6 +170,8 @@ export interface FreeCastLine {
   /** The spellcasting feature it's cast with (`SpellcastingLine.source`), or `null`. */
   readonly spellcasting: string | null;
   readonly spells: readonly string[];
+  /** kenli F-011: the source instance that grants it (`SpellGrant.key`); read-only provenance. */
+  readonly source_key: string;
 }
 
 /** A d20 floor on ability checks (`Grants.d20_floors`), with the feature that gives it. */
@@ -387,6 +389,14 @@ type Conditions = ReadonlyMap<EffectCondition, boolean>;
 export interface SpellcastingLine {
   /** The feature's source, e.g. `Wizard` or `Magic Initiate`. */
   readonly source: string;
+  /**
+   * kenli F-011: the source instance's key (`feat:magic-initiate@species:human#versatile`): two
+   * features of the same name (a repeatable feat) stay apart. Read-only provenance; casting still
+   * names the feature by `source`.
+   */
+  readonly key: string;
+  /** kenli F-011: the source that granted this one (a feat's origin: `Human`, `Sage`), or `""`. */
+  readonly granted_by: string;
   /** kenli K-001: the class whose Spellcasting this is (its spells are that class's spells), `null` for a feat. */
   readonly class_id: string | null;
   /** Spell list id; `null` for a fixed set of spells or while it depends on an unanswered choice. */
@@ -412,6 +422,27 @@ export interface SpellLine {
    * as `spellcasting` to cast through it.
    */
   readonly spellcasting: readonly string[];
+  /**
+   * kenli F-011: every source instance that grants the spell, in resolution order — the line's
+   * `source` is the first one's name. Read-only provenance (the same spell from Elf and Sage, two
+   * Magic Initiates with the same name); nothing here changes how the spell is cast or paid.
+   */
+  readonly grants: readonly SpellGrant[];
+}
+
+/** kenli F-011: one source instance granting a spell (see `SpellLine.grants`). */
+export interface SpellGrant {
+  /** The granting source's key (stable, unique in the build). */
+  readonly key: string;
+  /** Its name, as `SpellLine.source` shows it. */
+  readonly source: string;
+  /** The source that granted the granting source (a feat's origin), or `""`. */
+  readonly granted_by: string;
+  /** The spellcasting feature it's cast with through this grant (`SpellcastingLine.source`), or `null`. */
+  readonly spellcasting: string | null;
+  /** That spellcasting feature's instance (`SpellcastingLine.key`), or `null`. */
+  readonly spellcasting_key: string | null;
+  readonly always_prepared: boolean;
 }
 
 export function computeSheet(
@@ -1208,6 +1239,8 @@ function spellcastingSummary(
     const classId = classScope(src);
     spellcasting.push({
       source: src.name,
+      key: src.key,
+      granted_by: src.granted_by,
       class_id: classId,
       list: sc.list === null ? null : res.resolveRef(src, sc.list),
       ability,
@@ -1228,18 +1261,28 @@ function spellcastingSummary(
 
   // The spellcasting feature a source's spells are cast with: its own, else its class's (a subclass or a class level
   // feature); a feat, species, background or item without its own has none.
+  const castLine = (src: (typeof res.sources)[number]): SpellcastingLine | null => {
+    if (src.grants.spellcasting) return spellcasting.find((l) => l.key === src.key) ?? null;
+    const classId = classScope(src);
+    return classId === null ? null : (spellcasting.find((l) => l.class_id === classId) ?? null);
+  };
   const castWith = (src: (typeof res.sources)[number]): string | null => {
     if (src.grants.spellcasting) return src.name;
-    const classId = classScope(src);
-    return classId === null
-      ? null
-      : (spellcasting.find((l) => l.class_id === classId)?.source ?? null);
+    return castLine(src)?.source ?? null;
   };
   const spells = new Map<string, SpellLine>();
   const add = (id: string, src: (typeof res.sources)[number], always: boolean) => {
     const spell = lookup(catalog.spells, id);
     if (!spell) return;
     const line = castWith(src);
+    const grant: SpellGrant = {
+      key: src.key,
+      source: src.name,
+      granted_by: src.granted_by,
+      spellcasting: line,
+      spellcasting_key: castLine(src)?.key ?? null,
+      always_prepared: always,
+    };
     const known = spells.get(id);
     if (!known) {
       spells.set(id, {
@@ -1249,10 +1292,19 @@ function spellcastingSummary(
         source: src.name,
         always_prepared: always,
         spellcasting: line === null ? [] : [line],
+        grants: [grant],
       });
-    } else if (line !== null && !known.spellcasting.includes(line)) {
-      spells.set(id, { ...known, spellcasting: [...known.spellcasting, line] });
+      return;
     }
+    const grants = known.grants.some((g) => g.key === grant.key)
+      ? known.grants
+      : [...known.grants, grant];
+    const casting =
+      line !== null && !known.spellcasting.includes(line)
+        ? [...known.spellcasting, line]
+        : known.spellcasting;
+    if (grants !== known.grants || casting !== known.spellcasting)
+      spells.set(id, { ...known, spellcasting: casting, grants });
   };
   for (const src of res.sources) {
     for (const id of src.grants.cantrips) add(id, src, false);
@@ -1280,6 +1332,7 @@ function spellcastingSummary(
         use: `${usesScope(src)}:${f.uses}`,
         spellcasting: castWith(src),
         spells: [...(f.spells ?? []), ...(choice ? res.contributed(choice) : [])],
+        source_key: src.key,
       };
     }),
   );

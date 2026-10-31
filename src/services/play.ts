@@ -395,6 +395,7 @@ export function computePlaySheet(
           use: f.use,
           name: f.name,
           spellcasting: f.spellcasting,
+          source_key: f.source_key,
           left,
           available: left > 0,
           reason:
@@ -426,6 +427,8 @@ export interface FreeCastChoice {
   readonly name: string;
   /** The spellcasting feature it's cast with. */
   readonly spellcasting: string | null;
+  /** kenli F-011: the source instance that grants it (`SpellGrant.key`); read-only provenance. */
+  readonly source_key: string;
   readonly left: number;
   readonly available: boolean;
   /** Why not (`refusal.free_cast_spent`); `null` when available. */

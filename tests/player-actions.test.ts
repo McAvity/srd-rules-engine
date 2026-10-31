@@ -366,6 +366,8 @@ describe("free casts and rituals (AC-02)", () => {
         use: mi,
         name: "Magic Initiate (free level 1 spell)",
         spellcasting: "Magic Initiate",
+        // kenli F-011: read-only provenance, the feat instance that gives the free cast.
+        source_key: mi.slice(0, -":free-cast".length),
         left: 1,
         available: true,
         reason: null,
