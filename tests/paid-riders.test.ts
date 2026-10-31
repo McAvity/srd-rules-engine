@@ -12,6 +12,7 @@ import {
   createState,
   type Encounter,
   type EncounterAction,
+  type RollWhat,
   rollByHand,
   scriptedRng,
 } from "../src/index";
@@ -76,11 +77,11 @@ describe("paid damage riders", () => {
   it("rolled by hand: the use is a cost to apply, once per application; none left refuses", () => {
     const build = brakka();
     let state: CharacterState = createState(build, catalog);
-    const attack = {
+    const attack: RollWhat = {
       type: "attack",
       attack: "Greatsword",
       riders: [{ rider: "test-focus-strike" }],
-    } as const;
+    };
     for (let i = 0; i < 2; i++) {
       const me = combatantFromCharacter(build, state, catalog);
       const r = rollByHand(me, attack, {
