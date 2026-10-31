@@ -307,6 +307,7 @@ export const MESSAGES_EN = {
   "refusal.feet_away_out_range": "{target} is {d} feet away: out of {spell}'s range ({range})",
   "refusal.already_used_turn": "{name} has already used {again} this turn",
   "refusal.used_own_turns": "{rider} is used on {name}'s own turns",
+  "refusal.paid_rider_by_hand": "{rider} spends a limited use: roll the attack by hand to spend it",
   "refusal.no_class_features": "{name} has no class features",
   "refusal.each_effect_used_once": "Each effect can be used once per attack",
   "refusal.doesnt_cunning_strike": "{name} doesn't have Cunning Strike",

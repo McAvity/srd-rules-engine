@@ -7,6 +7,15 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — damage riders paid with a limited use (kenli F-002 T02)
+- `DamageRider.uses` (optional): the resource (of the same source, scoped like a feature action's
+  `uses`) that applying an optional rider spends, one use per application. The attack line lists
+  it as `AttackRider.uses` (the full `uses` key). `rollByHand` refuses the attack before rolling
+  when none is left (`refusal.uses_left_count`) and otherwise returns `{type: "play", action:
+  {type: "use", key}}` as a cost to apply. An encounter attack asked with a paid rider is refused
+  (`refusal.paid_rider_by_hand`): roll it by hand. Content without `uses` parses to the same
+  object and behaves as before; JSON Schemas regenerated.
+
 ### Added — custom items (kenli F-011)
 - `ItemInstance.item` may be `null` for a custom item, with `custom: {name, description,
   weight_lb}` (`CustomItemSchema`, `CUSTOM_ITEM_LIMITS`): a trimmed name of 1–120 characters, a

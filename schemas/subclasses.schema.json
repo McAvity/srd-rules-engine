@@ -786,6 +786,9 @@
               "own_turn": {
                 "default": false,
                 "type": "boolean"
+              },
+              "uses": {
+                "type": "string"
               }
             },
             "required": [

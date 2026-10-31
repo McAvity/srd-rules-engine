@@ -1505,6 +1505,8 @@ function run(
       if (rider?.own_turn && current()?.id !== c.id) {
         fail(message("refusal.used_own_turns", { rider: rider.name, name: c.name }));
       }
+      // A rider paid with a limited use is rolled by hand (`rollByHand`), which spends it.
+      if (rider?.uses) fail(message("refusal.paid_rider_by_hand", { rider: rider.name }));
     }
     const target = withCover(encounterCombatant(e, t.id, ctx), coverFor(c, t, options.cover));
     // Help: Advantage on the next attack roll by one of the helper's allies against the target.

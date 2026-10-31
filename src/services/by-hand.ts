@@ -161,6 +161,30 @@ export function rollWith(
     const all = [...monster.actions, ...monster.bonus_actions, ...monster.reactions];
     return daily(action, all.find((a) => a.name === action)?.per_day, action);
   };
+  /**
+   * The uses that paid riders on this attack spend (one each), refused before anything is rolled
+   * when one has none left: costs for the table to apply, like a slot.
+   */
+  const paidRiders = (
+    attack: string,
+    riders: readonly { rider: string }[] | undefined,
+  ): RollCost[] => {
+    const s = sheetOf();
+    const line = s?.attacks.find((a) => a.name === attack);
+    return (riders ?? []).flatMap((r) => {
+      const rider = line?.riders.find((x) => x.id === r.rider || x.name === r.rider);
+      if (!rider?.uses) return [];
+      const use = s?.play.uses.find((u) => u.key === rider.uses);
+      if (!use || use.spent + 1 > use.max)
+        fail(
+          message("refusal.uses_left_count", {
+            name: use?.name ?? rider.name,
+            left: use ? use.max - use.spent : 0,
+          }),
+        );
+      return [{ type: "play", action: { type: "use", key: rider.uses } } satisfies RollCost];
+    });
+  };
   const attackDice = (attack: string, extra: AttackOptions = {}): AttackDice =>
     rollAttack(combatant, attack, { rng, ...extra });
   const saveRoll = (line: SaveActionLine, as: string): ByHandRoll =>
@@ -227,6 +251,8 @@ export function rollWith(
         { turn },
       );
       const dm = attackDm(what.dm);
+      // Paid riders are checked before any die is rolled.
+      const paid = paidRiders(what.attack, what.riders);
       const dice = attackDice(what.attack, {
         mode: what.mode,
         two_handed: what.two_handed,
@@ -244,7 +270,10 @@ export function rollWith(
           })),
         ],
       });
-      return roll({ attacks: [dice] }, { name: what.attack, costs: dailyOf(what.attack) });
+      return roll(
+        { attacks: [dice] },
+        { name: what.attack, costs: [...dailyOf(what.attack), ...paid] },
+      );
     }
     case "unarmed": {
       // "the DC equals 8 plus your Strength modifier and Proficiency Bonus"; the target picks

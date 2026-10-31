@@ -284,6 +284,12 @@ export const DamageRiderSchema = z.strictObject({
   while_active: z.array(z.string()).default([]),
   /** Only on your own turns (Divine Strike: "once on each of your turns"). */
   own_turn: z.boolean().default(false),
+  /**
+   * A limited use (a resource of the same source) that applying this optional rider spends: one
+   * per hit it's added to; refused when none is left. Optional, so older content parses to the
+   * same object.
+   */
+  uses: z.string().optional(),
 });
 export type DamageRider = z.infer<typeof DamageRiderSchema>;
 

@@ -71,6 +71,8 @@ export interface AttackRider {
   /** Only on the attacker's own turns (Divine Strike). */
   readonly own_turn?: boolean;
   readonly requires: "advantage_or_ally" | "target_damaged" | null;
+  /** The limited use (its `uses` key) one application spends, for a rider paid with a resource. */
+  readonly uses?: string;
 }
 
 export interface AttackLine {
@@ -726,7 +728,9 @@ export function computeSheet(
     for (const def of src.grants.damage_riders) {
       // Frenzy: only while Rage and Reckless Attack are both active.
       if (!def.while_active.every((id) => activeToggles.has(id))) continue;
-      const rider = resolveRider(def, src, catalog, classLevels);
+      const resolved = resolveRider(def, src, catalog, classLevels);
+      const rider =
+        resolved && def.uses ? { ...resolved, uses: `${usesScope(src)}:${def.uses}` } : resolved;
       const previous = riders.get(def.id);
       if (rider && (!previous || src.level >= previous.level)) {
         riders.set(def.id, { rider, level: src.level });
@@ -1474,6 +1478,8 @@ interface ResolvedRider {
   readonly source: string;
   readonly dice: string | null;
   readonly bonus: number;
+  /** The `uses` key a paid rider spends (its source's scope, as for a feature action). */
+  readonly uses?: string;
 }
 
 function resolveRider(
@@ -1544,6 +1550,7 @@ function withRiders(line: AttackLine, riders: readonly ResolvedRider[]): AttackL
         once_per_turn: r.def.once_per_turn,
         own_turn: r.def.own_turn,
         requires: r.def.requires,
+        ...(r.uses ? { uses: r.uses } : {}),
       });
     }
   }
