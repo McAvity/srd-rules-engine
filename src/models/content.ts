@@ -404,7 +404,34 @@ export const FeatureActionSchema = z.strictObject({
   after_hit: z.boolean().default(false),
   /** Only after taking the Attack action this turn (Pole Strike). Optional. */
   after_attack_action: z.boolean().optional(),
+  /**
+   * Only after an attack, as part of this turn's Attack action, with one of these weapons (ids)
+   * or a weapon with all of these properties (Pole Strike: Quarterstaff, Spear, Heavy + Reach).
+   * Optional.
+   */
+  after_attack_with: z
+    .strictObject({
+      weapons: z.array(z.string()).default([]),
+      properties: z.array(z.string()).default([]),
+    })
+    .optional(),
   once_per_turn: z.boolean().default(false),
+  /**
+   * Used instead of a resource under a once-per-turn alternative shared with the damage riders'
+   * `alternative` of the same `label` (Relentless: one maneuver without a die per turn, whatever
+   * its form). Optional.
+   */
+  alternative: z.strictObject({ label: z.string() }).optional(),
+  /**
+   * Its use also counts as a use of this other action (an id of the same source) this turn, for
+   * riders that need it (`requires_feature`): a die-free variant of a maneuver. Optional.
+   */
+  counts_as: z.string().optional(),
+  /**
+   * Used when one of your attack rolls misses: it hits instead (a decision after the roll, the
+   * roll kept); then not again until the start of your next turn (Peerless Aim). Optional.
+   */
+  hit_on_miss: z.boolean().optional(),
   /**
    * The target's saving throw, DC 8 + `dc_ability` modifier + Proficiency Bonus (`spell`: the
    * spell save DC of the source class's Spellcasting, Channel Divinity's): on a failure, the

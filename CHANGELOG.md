@@ -7,6 +7,25 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — shared alternative, qualifying strike, hit on a miss (kenli F-002 T02 R04, round 7)
+- `FeatureAction.alternative` (`{label}`): the action uses the once-per-turn budget shared with
+  riders' `alternative` of the same label (encounter marker `alternative:<label>` in
+  `riders_used`): an action and a rider, or two actions, can't both use it in one turn.
+- `FeatureAction.counts_as`: its use counts as another action of the same source for
+  `requires_feature`; the rider then takes its `alternative` dice without a second charge, and
+  asking the alternative on a rider whose feature was paid is refused.
+- `FeatureAction.after_attack_with` (`{weapons, properties}`, line `after_attack_with`: the
+  qualifying attack lines' names): only after such an attack in this turn's Attack action
+  (encounter markers `action:attack:<attack>` in `features_used`).
+- `FeatureAction.hit_on_miss`: in an encounter, a missed attack roll asks (decision kind
+  `hit_on_miss`, `AttackOptions.hit_on_miss`) whether it hits instead, the roll kept
+  (`AttackResult.hit_instead`); used, it's back at the start of the user's next turn
+  (`EncounterCombatant.used_until_turn`, default `[]`). Not usable as an action on its own; by
+  hand, a costless use with a note. All optional: older content and documents parse unchanged.
+- New messages: `refusal.needs_attack_with`, `refusal.rider_paid_by_feature`,
+  `refusal.offered_when_attack_misses`, `decision.hit_on_miss`, `attack.hit_instead`,
+  `feature.hit_on_miss_by_hand`.
+
 ### Changed — paid riders: costs computed, enforcement by the caller (kenli F-002 T02 R04)
 - `rollByHand` no longer refuses a paid rider itself: it returns the use as a cost, as for a
   slot, so the caller's cost check refuses before rolling or a GM rolls it forced (unpaid).

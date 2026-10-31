@@ -107,6 +107,7 @@ export const MESSAGES_EN = {
   "mastery.vex": "Vex: {name}'s next attack roll against {target} has Advantage.",
   "mastery.sap": "Sap: {target}'s next attack roll has Disadvantage.",
   "mastery.slow": "Slow: {target}'s Speed is 10 feet lower until {name}'s next turn.",
+  "attack.hit_instead": "{name} uses {feature}: the attack hits instead.",
   "attack.rider_save":
     "{rider}: {target} {success, select, true {succeeds} other {fails}} ({save}).",
   "mastery.topple": "Topple: {target} {success, select, true {succeeds} other {fails}} ({save}).",
@@ -310,6 +311,10 @@ export const MESSAGES_EN = {
   "refusal.already_used_turn": "{name} has already used {again} this turn",
   "refusal.rider_needs_feature": "{rider} needs {feature} used this turn",
   "refusal.needs_attack_action": "{feature} follows the Attack action this turn",
+  "refusal.needs_attack_with":
+    "{feature} follows an attack with {attacks, list, or} in this turn's Attack action",
+  "refusal.rider_paid_by_feature":
+    "{rider} adds the die paid with {feature} this turn: {label} doesn't apply to it",
   "refusal.used_own_turns": "{rider} is used on {name}'s own turns",
   "refusal.no_class_features": "{name} has no class features",
   "refusal.each_effect_used_once": "Each effect can be used once per attack",
@@ -427,6 +432,7 @@ export const MESSAGES_EN = {
   "refusal.no_attack_roll_resolve": "{attack} has no attack roll to resolve: see its text",
   "refusal.no_feature": "{name} has no feature '{feature}'",
   "refusal.offered_when_attack_hits": "{feature} is offered when an attack hits {name}",
+  "refusal.offered_when_attack_misses": "{feature} is offered when an attack by {name} misses",
   "refusal.used_yourself": "{feature} is used on yourself",
   "refusal.used_another_creature": "{feature} is used on another creature",
   "refusal.affects_several_creatures_give": "{feature} affects several creatures: give `targets`",
@@ -618,6 +624,8 @@ export const MESSAGES_EN = {
     "{name} fails a {what} ({total} vs DC {dc}). Reroll it with Indomitable (+{bonus})?",
   "decision.relentless_rage":
     "{name} drops to 0 Hit Points while raging. Make a DC {dc} Constitution saving throw (Relentless Rage)?",
+  "decision.hit_on_miss":
+    "{name}: {attack} misses ({total} vs AC {ac}). Use {feature} to hit instead?",
   "decision.zone_force":
     "{name}: force {target} ({why}) to make a {ability} saving throw against {label}?",
   "decision.halve":
@@ -846,6 +854,8 @@ export const MESSAGES_EN = {
   "play.feature_restores": "{feature}: one use of {use} regained",
   "play.forced": "{feature}: used anyway (the GM's override)",
   "feature.manual_effect": "{feature}: what it does is the table's to resolve",
+  "feature.hit_on_miss_by_hand":
+    "{feature}: the attack the table declared a miss hits instead, with the damage already rolled for it; not again until the start of {name}'s next turn (the table keeps track)",
   "cast.ritual": "{spell} cast as a ritual: no spell slot, 10 minutes longer",
   "cast.free": "{spell} cast with {use}: no spell slot",
   "unarmed.grapple":

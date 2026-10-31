@@ -47,7 +47,30 @@ const pack = {
             name: "Test Pole",
             economy: "bonus_action",
             after_attack_action: true,
+            after_attack_with: { properties: ["heavy", "two-handed"] },
             attacks: { attack: "Test Butt", count: 1 },
+          },
+          // Die-free variants under the shared once-per-turn alternative (Relentless-like).
+          {
+            id: "test-dash-free",
+            name: "Test Dash (Free)",
+            economy: "bonus_action",
+            also: ["dash"],
+            alternative: { label: "Test Relentless" },
+            counts_as: "test-dash",
+          },
+          {
+            id: "test-bait-free",
+            name: "Test Bait (Free)",
+            economy: "free",
+            alternative: { label: "Test Relentless" },
+            roll: { dice: "1d8" },
+          },
+          {
+            id: "test-other-free",
+            name: "Test Other (Free)",
+            economy: "free",
+            alternative: { label: "Test Relentless" },
           },
         ],
         weapon_strikes: [
@@ -91,9 +114,18 @@ const pack = {
             applies_to: { weapon: true },
             exclusive: "trick",
             requires_feature: "test-dash",
+            alternative: { dice: "1d8", label: "Test Relentless" },
           },
           { id: "test-free", name: "Test Free", damage: "1d4", applies_to: { weapon: true } },
         ],
+      },
+    },
+    {
+      id: "test-aim",
+      name: "Test Aim",
+      category: "origin",
+      grants: {
+        actions: [{ id: "test-aim", name: "Test Aim", economy: "free", hit_on_miss: true }],
       },
     },
     {
@@ -352,6 +384,186 @@ describe("in an encounter", () => {
     expect(s.characters.brakka?.state.uses_spent[key]).toBe(1);
     s.act(swing([{ rider: "test-lunge" }]));
     expect(s.characters.brakka?.state.uses_spent[key]).toBe(1); // the Dash paid for it
+  });
+});
+
+const feature = (name: string, extra: object = {}): EncounterAction =>
+  ({ type: "feature", id: "brakka", feature: name, ...extra }) as EncounterAction;
+const spent = (s: ReturnType<typeof session>) => s.characters.brakka?.state.uses_spent[key] ?? 0;
+const diceOf = (r: { result: unknown }) =>
+  ((r.result as { damage?: { parts: { dice: string }[] } }).damage?.parts ?? []).map((p) => p.dice);
+
+describe("one shared once-per-turn alternative (Relentless-like) for actions and riders", () => {
+  it("action then rider: the rider's alternative is refused; the paid rider still works", () => {
+    const s = session(brakka(), createState(brakka(), catalog));
+    s.act(feature("Test Bait (Free)"));
+    expect(() => s.act(swing([{ rider: "test-trip", alternative: true }]), noDice)).toThrow(
+      "already used Test Relentless",
+    );
+    s.act(swing([{ rider: "test-trip" }]));
+    expect(spent(s)).toBe(1);
+  });
+
+  it("rider then action, and two different actions: refused, whatever the form", () => {
+    const s = session(brakka(), createState(brakka(), catalog));
+    s.act(swing([{ rider: "test-trip", alternative: true }]));
+    expect(spent(s)).toBe(0);
+    expect(() => s.act(feature("Test Bait (Free)"), noDice)).toThrow(
+      "already used Test Relentless",
+    );
+    const t = session(brakka(), createState(brakka(), catalog));
+    t.act(feature("Test Bait (Free)"));
+    expect(() => t.act(feature("Test Other (Free)"), noDice)).toThrow(
+      "already used Test Relentless",
+    );
+  });
+
+  it("comes back on the next turn (any creature's), also off the character's own turn", () => {
+    const s = session(brakka(), createState(brakka(), catalog));
+    s.act(feature("Test Bait (Free)"));
+    s.act({ type: "next_turn" }); // the ogre's turn: a new turn
+    s.act(swing([{ rider: "test-trip", alternative: true }], { reaction: true }));
+    expect(spent(s)).toBe(0);
+    s.act({ type: "next_turn" }); // Brakka's turn again
+    s.act(feature("Test Other (Free)"));
+  });
+
+  it("a die-free variant unlocks its rider: the alternative's die, no use, no second charge", () => {
+    const s = session(brakka(), createState(brakka(), catalog));
+    s.act(feature("Test Dash (Free)"));
+    const hit = s.act(swing([{ rider: "test-lunge", alternative: true }]));
+    expect(hit.result).toMatchObject({ hit: true });
+    expect(diceOf(hit)).toContain("1d8");
+    expect(diceOf(hit)).not.toContain("1d6");
+    expect(spent(s)).toBe(0);
+    expect(s.encounter.combatants.find((c) => c.id === "brakka")?.riders_used).toEqual([
+      "alternative:Test Relentless",
+    ]);
+    // The budget is spent by the Dash: no other alternative this turn.
+    expect(() => s.act(feature("Test Bait (Free)"), noDice)).toThrow(
+      "already used Test Relentless",
+    );
+    // Without the flag, the free Dash's rider still takes the alternative's die.
+    const t = session(brakka(), createState(brakka(), catalog));
+    t.act(feature("Test Dash (Free)"));
+    expect(diceOf(t.act(swing([{ rider: "test-lunge" }])))).toContain("1d8");
+  });
+
+  it("a paid variant: the rider adds its own die; the alternative is refused on it", () => {
+    const s = session(brakka(), createState(brakka(), catalog));
+    s.act(feature("Test Dash"));
+    expect(spent(s)).toBe(1);
+    expect(() => s.act(swing([{ rider: "test-lunge", alternative: true }]), noDice)).toThrow(
+      "adds the die paid with test-dash",
+    );
+    const hit = s.act(swing([{ rider: "test-lunge" }]));
+    expect(diceOf(hit)).toContain("1d6");
+    expect(spent(s)).toBe(1);
+  });
+});
+
+describe("a strike after an attack with a qualifying weapon in the Attack action", () => {
+  it("refused after a non-qualifying attack; after a qualifying one, one granted strike", () => {
+    const s = session(brakka(), createState(brakka(), catalog));
+    s.act({ type: "attack", id: "brakka", target: "ogre", attack: "Flail" } as EncounterAction);
+    expect(() => s.act(feature("Test Pole"), noDice)).toThrow(
+      "follows an attack with Greatsword in this turn's Attack action",
+    );
+    const t = session(brakka(), createState(brakka(), catalog));
+    t.act({
+      type: "attack",
+      id: "brakka",
+      target: "ogre",
+      attack: "Unarmed Strike",
+    } as EncounterAction);
+    expect(() => t.act(feature("Test Pole"), noDice)).toThrow("follows an attack with");
+    const u = session(brakka(), createState(brakka(), catalog));
+    u.act(swing([]));
+    u.act(feature("Test Pole"));
+    const butt = {
+      type: "attack",
+      id: "brakka",
+      target: "ogre",
+      attack: "Test Butt",
+      granted: true,
+    };
+    u.act(butt as EncounterAction);
+    expect(() => u.act(butt as EncounterAction, noDice)).toThrow();
+    expect(u.encounter.combatants.find((c) => c.id === "brakka")?.used.bonus_action).toBe(true);
+  });
+
+  it("the sheet lists the qualifying lines", () => {
+    const b = brakka();
+    const pole = computePlaySheet(b, createState(b, catalog), catalog).actions.find(
+      (a) => a.name === "Test Pole",
+    );
+    expect(pole?.after_attack_with).toEqual(["Greatsword"]);
+  });
+});
+
+function aimer(): CharacterBuild {
+  const b = fighterBuild();
+  const choices = Object.fromEntries(
+    Object.entries(b.choices).filter(([k]) => !k.startsWith("feat:skilled@")),
+  );
+  return builder.setChoice({ ...b, choices }, catalog, "species:human#versatile", ["test-aim"])
+    .build;
+}
+const attackResult = (r: { result: unknown }) =>
+  r.result as { hit: boolean; hit_instead?: string; roll: { d20: number }; damage: unknown };
+
+describe("a miss that hits instead (Peerless Aim-like), until the start of the next own turn", () => {
+  it("the missed roll hits: no new d20, damage rolled; then not again until the next own turn", () => {
+    const s = session(aimer(), createState(aimer(), catalog));
+    // d20 3 misses the ogre (AC 11); then the Greatsword's 2d6.
+    const r = s.act(swing([]), scriptedRng([3, 4, 5]));
+    expect(attackResult(r)).toMatchObject({ hit: true, hit_instead: "Test Aim", roll: { d20: 3 } });
+    expect(r.notes.join(" ")).toMatch(/Brakka uses Test Aim: the attack hits instead/);
+    // Off its turn (the ogre's), a reaction miss stays a miss: not until Brakka's next turn.
+    s.act({ type: "next_turn" });
+    const off = s.act(swing([], { reaction: true }), scriptedRng([3]));
+    expect(attackResult(off).hit).toBe(false);
+    s.act({ type: "next_turn" });
+    const again = s.act(swing([]), scriptedRng([3, 4, 5]));
+    expect(attackResult(again)).toMatchObject({ hit: true, hit_instead: "Test Aim" });
+  });
+
+  it("used off-turn on a reaction miss, it comes back at the start of the own turn", () => {
+    const s = session(aimer(), createState(aimer(), catalog));
+    s.act({ type: "next_turn" });
+    const off = s.act(swing([], { reaction: true }), scriptedRng([3, 4, 5]));
+    expect(attackResult(off)).toMatchObject({ hit: true, hit_instead: "Test Aim" });
+    s.act({ type: "next_turn" });
+    expect(attackResult(s.act(swing([]), scriptedRng([3, 4, 5]))).hit_instead).toBe("Test Aim");
+  });
+
+  it("asked: declined, the miss stands and it stays available; a hit asks nothing", () => {
+    const s = session(aimer(), createState(aimer(), catalog));
+    s.act({ type: "set_decisions", id: "brakka", mode: "ask" } as EncounterAction);
+    s.act(swing([]), scriptedRng([3]));
+    expect(s.encounter.pending).toMatchObject({ kind: "hit_on_miss", combatant: "brakka" });
+    const declined = s.act({ type: "decide", use: false } as EncounterAction);
+    expect(attackResult(declined).hit).toBe(false);
+    expect(s.encounter.combatants.find((c) => c.id === "brakka")?.used_until_turn).toEqual([]);
+    s.act({ type: "next_turn" });
+    s.act(swing([], { reaction: true }), scriptedRng([3]));
+    const used = s.act({ type: "decide", use: true } as EncounterAction);
+    expect(attackResult(used)).toMatchObject({
+      hit: true,
+      hit_instead: "Test Aim",
+      roll: { d20: 3 },
+    });
+  });
+
+  it("not used on its own; by hand, a costless use the table applies to its declared miss", () => {
+    const b = aimer();
+    const s = session(b, createState(b, catalog));
+    expect(() => s.act(feature("Test Aim"), noDice)).toThrow(
+      "offered when an attack by Brakka misses",
+    );
+    const r = byHand(b, createState(b, catalog), { type: "feature", feature: "Test Aim" }, noDice);
+    expect(r.costs.every((c) => c.type === "play" && c.action.type === "use_feature")).toBe(true);
+    expect(r.messages.map((m) => m.code)).toContain("feature.hit_on_miss_by_hand");
   });
 });
 

@@ -1083,6 +1083,8 @@ function run(
       else if (play.dying) notes.push(message("turn.death_save", { name: c.name }));
     }
     for (const x of e.combatants) x.riders_used = [];
+    // Features used "until the start of your next turn" (Peerless Aim) come back.
+    c.used_until_turn = [];
     // "Only once per turn": every creature's turn is a new one.
     for (const z of e.zones) z.saved = [];
     // Toggles that last until the start of your next turn (Reckless Attack) end; those with a
@@ -1493,7 +1495,8 @@ function run(
           within_5ft: options.within_5ft,
           ally_adjacent: options.ally_adjacent,
         };
-    const riders = options.riders ?? [];
+    // The requests, copied: a rider paid by a die-free action takes its alternative's dice.
+    const riders = (options.riders ?? []).map((r) => ({ ...r }));
     const onceIds = riders.flatMap((r) => {
       const rider = line?.riders.find((x) => x.id === r.rider || x.name === r.rider);
       return rider?.once_per_turn ? [rider.id] : [];
@@ -1508,19 +1511,34 @@ function run(
       if (rider?.own_turn && current()?.id !== c.id) {
         fail(message("refusal.used_own_turns", { rider: rider.name, name: c.name }));
       }
-      // Lunging Attack's damage: only after its Dash was used this turn.
-      if (rider?.requires_feature && !c.features_used.includes(rider.requires_feature)) {
-        const feature = rider.requires_feature.slice(rider.requires_feature.lastIndexOf(":") + 1);
-        fail(message("refusal.rider_needs_feature", { rider: rider.name, feature }));
+      // Lunging Attack's damage: only after its Dash was used this turn, paid with a die or
+      // under the alternative (Relentless): then its dice are the alternative's, already counted.
+      let carried = false;
+      if (rider?.requires_feature) {
+        const needed = rider.requires_feature;
+        const feature = needed.slice(needed.lastIndexOf(":") + 1);
+        const paid = c.features_used.includes(needed);
+        const label = rider.alternative?.label;
+        const free = !!label && c.features_used.includes(alternativeMark(needed, label));
+        if (!paid && !free)
+          fail(message("refusal.rider_needs_feature", { rider: rider.name, feature }));
+        if (r.alternative && label && !free)
+          fail(message("refusal.rider_paid_by_feature", { rider: rider.name, feature, label }));
+        if (free && !paid) {
+          r.alternative = true;
+          carried = true;
+        }
       }
-      // Relentless: the alternative instead of a use, once per turn per label.
+      // Relentless: the alternative instead of a use, once per turn per label (shared with the
+      // features' `alternative`).
+      // A carried alternative was counted when its feature was used.
       if (r.alternative && rider?.alternative) {
         const again = `alternative:${rider.alternative.label}`;
-        if (c.riders_used.includes(again) || alternatives.includes(again))
+        if (!carried && (c.riders_used.includes(again) || alternatives.includes(again)))
           refuse(
             message("refusal.already_used_turn", { name: c.name, again: rider.alternative.label }),
           );
-        alternatives.push(again);
+        if (!carried) alternatives.push(again);
       } else if (rider?.uses && c.character !== null) paidUses.push(rider.uses);
       if (rider?.save) riderSaves.push({ ...rider.save, rider: rider.name });
     }
@@ -1540,6 +1558,17 @@ function run(
         }
       }
     }
+    // Peerless Aim: a character's feature that can turn a miss into a hit, if not used since the
+    // start of its last turn.
+    const aim =
+      c.character === null
+        ? undefined
+        : (() => {
+            const ref = characterRef(ctx, c);
+            return computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).actions.find(
+              (a) => a.hit_on_miss && !c.used_until_turn.includes(a.key),
+            );
+          })();
     const target = withCover(encounterCombatant(e, t.id, ctx), coverFor(c, t, options.cover));
     // Help: Advantage on the next attack roll by one of the helper's allies against the target.
     const help = e.helps.find(
@@ -1592,6 +1621,7 @@ function run(
         ],
         forgo_advantage: strikes.forgo_advantage,
         bonus: sundered ? 5 : 0,
+        ...(aim ? { hit_on_miss: aim.name } : {}),
       });
     } catch (error) {
       if (error instanceof RangeError) fail(ruleReason(error));
@@ -1614,6 +1644,10 @@ function run(
         message("attack.miss", { name: c.name, target: t.name, attack: hit.attack, roll: rollMsg }),
       );
     } else {
+      if (hit.hit_instead && aim) {
+        c.used_until_turn.push(aim.key);
+        notes.push(message("attack.hit_instead", { name: c.name, feature: aim.name }));
+      }
       c.riders_used.push(...onceIds, ...alternatives);
       // Paid riders: one use each, from the character's state (forced and unpaid: noted, not spent).
       for (const key of paidUses) play(c, { type: "use", key });
@@ -3454,6 +3488,8 @@ function run(
         }
         spendAttack(c, reaction);
         if (light && !reaction) c.light_attacks.push(action.attack);
+        // Which attacks the Attack action was made with (Pole Strike needs a qualifying one).
+        if (!reaction && releasing?.id !== c.id) c.features_used.push(attackMark(action.attack));
       }
       if (c.monster !== null)
         spendDaily(c, action.attack, dailyUses(ctx, c, action.attack), action.attack);
@@ -3652,6 +3688,9 @@ function run(
       if (f.halves_attack_damage || f.reduces_attack_damage) {
         fail(message("refusal.offered_when_attack_hits", { feature: f.name, name: c.name }));
       }
+      // Peerless Aim: offered on a missed attack roll (the attack's decision), not on its own.
+      if (f.hit_on_miss)
+        fail(message("refusal.offered_when_attack_misses", { feature: f.name, name: c.name }));
       const damageType =
         f.save?.damage &&
         (action.damage_type ??
@@ -3717,8 +3756,16 @@ function run(
       if (f.once_per_turn && c.features_used.includes(f.key)) {
         refuse(message("refusal.already_used_turn_2", { name: c.name, feature: f.name }));
       }
+      // Relentless: one alternative per turn per label, shared with the riders' (`alternative:`).
+      const alternative = f.alternative ? `alternative:${f.alternative.label}` : null;
+      if (f.alternative && alternative && c.riders_used.includes(alternative))
+        refuse(message("refusal.already_used_turn", { name: c.name, again: f.alternative.label }));
       if (f.after_attack_action && !c.features_used.includes(ATTACK_ACTION))
         fail(message("refusal.needs_attack_action", { feature: f.name }));
+      // Pole Strike: an attack with a qualifying weapon as part of this turn's Attack action.
+      const attackedWith = f.after_attack_with;
+      if (attackedWith && !attackedWith.some((a) => c.features_used.includes(attackMark(a))))
+        fail(message("refusal.needs_attack_with", { feature: f.name, attacks: attackedWith }));
       if (f.after_hit && !c.hits.includes(t.id))
         fail(message("refusal.hasnt_hit_turn", { name: c.name, target: t.name }));
       if (f.extra_action && !c.used.action) {
@@ -3730,6 +3777,12 @@ function run(
       );
       play(c, { type: "use_feature", key: f.key, amount: action.amount });
       c.features_used.push(f.key);
+      // A die-free variant counts as the maneuver's use, marked as taken under its alternative.
+      if (f.counts_as)
+        c.features_used.push(
+          f.alternative ? alternativeMark(f.counts_as, f.alternative.label) : f.counts_as,
+        );
+      if (alternative) c.riders_used.push(alternative);
       if (f.heal && f.target !== "self") {
         const amount = f.heal.pooled
           ? (action.amount as number)
@@ -4433,6 +4486,10 @@ function sizeOf(ctx: EncounterContext, c: EncounterCombatant): string | null | u
 const SIZES = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 /** `features_used` marker: the Attack action was taken this turn (Pole Strike needs it). */
 const ATTACK_ACTION = "action:attack";
+/** `features_used` marker: an attack with this line was made as part of the Attack action. */
+const attackMark = (attack: string): string => `${ATTACK_ACTION}:${attack}`;
+/** `features_used` marker: `feature` was used this turn under the alternative `label`. */
+const alternativeMark = (feature: string, label: string): string => `${feature}@${label}`;
 
 /** Its creature type (`Undead`): a monster's stat block, a character's species. */
 function creatureTypeOf(ctx: EncounterContext, c: EncounterCombatant): string {

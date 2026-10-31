@@ -176,7 +176,8 @@ export interface Decision {
     | "zone_force"
     | "indomitable"
     | "deflect_attacks"
-    | "relentless_rage";
+    | "relentless_rage"
+    | "hit_on_miss";
   /** Who decides. */
   readonly combatant: Combatant;
   /** The question for the table, with the roll: "Brakka: Dexterity saving throw 7 vs 15…". */
@@ -683,6 +684,8 @@ export interface AttackResult {
   readonly reason_messages: readonly Message[];
   /** The Bardic Inspiration die rolled and added to a miss, if any. */
   readonly inspiration: number | null;
+  /** The feature that turned this miss into a hit (Peerless Aim): the roll is the miss's. */
+  readonly hit_instead?: string;
   /** The damage rolled on a hit. */
   readonly damage: RolledDamage | null;
   /** Names of the riders added to the damage. */
@@ -729,6 +732,11 @@ export interface AttackOptions {
   forgo_advantage?: boolean;
   /** A flat bonus to the attack roll (Sundering Blow: +5). */
   bonus?: number;
+  /**
+   * A feature that can turn a miss into a hit (Peerless Aim), by name: on a miss, the attacker
+   * decides (`hit_on_miss`) whether the attack hits instead; the roll is kept.
+   */
+  hit_on_miss?: string;
   /** The GM's mode for this roll, replacing the computed one (`DmOptions.mode_override`). */
   mode_override?: { mode: RollMode; reason: string };
   /** Labelled modifiers to the attack roll (`DmOptions.modifiers`), listed in the result. */
@@ -906,7 +914,26 @@ export function makeAttack(
           rng,
         );
   total += inspiration ?? 0;
-  const hit = criticalRoll || (!critical_miss && total >= target.armor_class);
+  const rolledHit = criticalRoll || (!critical_miss && total >= target.armor_class);
+  // Peerless Aim: a miss that hits instead, the roll kept (the attacker's decision).
+  const instead =
+    !rolledHit &&
+    !!options.hit_on_miss &&
+    decide(
+      decision(
+        "hit_on_miss",
+        attacker,
+        message("decision.hit_on_miss", {
+          name: attacker.name,
+          feature: options.hit_on_miss,
+          attack: line.name,
+          total,
+          ac: target.armor_class,
+        }),
+        true,
+      ),
+    );
+  const hit = rolledHit || instead;
   const critical_hit = criticalRoll || (hit && effective.critical_on_hit);
   const base = {
     attacker: attacker.name,
@@ -922,6 +949,7 @@ export function makeAttack(
     reasons: effective.reasons,
     reason_messages: effective.reason_messages,
     inspiration,
+    ...(instead && options.hit_on_miss ? { hit_instead: options.hit_on_miss } : {}),
   };
   if (!hit) return { ...base, damage: null, riders: [], instances: [], outcome: null };
   let base_parts = line.damage_parts;

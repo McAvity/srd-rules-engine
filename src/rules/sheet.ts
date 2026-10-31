@@ -141,7 +141,18 @@ export interface FeatureActionLine {
   readonly after_hit: boolean;
   /** Only after taking the Attack action this turn (Pole Strike). */
   readonly after_attack_action?: boolean;
+  /**
+   * Only after an attack with one of these of the character's attack lines (by name) as part of
+   * this turn's Attack action: the lines made with a qualifying carried weapon (Pole Strike).
+   */
+  readonly after_attack_with?: readonly string[];
   readonly once_per_turn: boolean;
+  /** Used without its resource under a once-per-turn alternative shared with riders (Relentless). */
+  readonly alternative?: { readonly label: string };
+  /** Its use also counts as this other action's (its key) this turn, for riders that need it. */
+  readonly counts_as?: string;
+  /** Used when an attack roll misses (it hits instead), then not until your next turn starts. */
+  readonly hit_on_miss?: boolean;
   readonly save: {
     readonly ability: Ability;
     readonly dc: number;
@@ -733,21 +744,21 @@ export function computeSheet(
       if (weapon) attacks.push(attackLine(weapon, attackContext));
     }
   }
+  // The weapons carried, with the name of the attack line each makes (an equipped one first).
+  const carriedWeapons = (
+    play
+      ? [...play.items]
+          .sort((a, b) => Number(b.equipped) - Number(a.equipped))
+          .map((i) => ({ name: i.name, id: i.base }))
+      : Object.keys(equipment).map((id) => ({ name: lookup(catalog.weapons, id)?.name, id }))
+  ).flatMap(({ name, id }) => {
+    const weapon = lookup(catalog.weapons, id);
+    return weapon ? [{ name: name ?? weapon.name, weapon }] : [];
+  });
   // Weapon strikes (Pole Strike): one line per strike, from the first carried weapon that
-  // qualifies (an equipped one first), its damage die and type replaced.
+  // qualifies, its damage die and type replaced.
   for (const strike of res.sources.flatMap((src) => src.grants.weapon_strikes ?? [])) {
-    const carried = play
-      ? [...play.items].sort((a, b) => Number(b.equipped) - Number(a.equipped)).map((i) => i.base)
-      : Object.keys(equipment);
-    const weapon = carried
-      .map((id) => lookup(catalog.weapons, id))
-      .find(
-        (w) =>
-          !!w &&
-          (strike.weapons.includes(w.id) ||
-            (strike.properties.length > 0 &&
-              strike.properties.every((p) => w.properties.includes(p)))),
-      );
+    const weapon = carriedWeapons.find((x) => weaponQualifies(x.weapon, strike))?.weapon;
     if (!weapon) continue;
     const base = attackLine(weapon, attackContext);
     const parts = base.damage_parts.map((p, i) =>
@@ -924,6 +935,7 @@ export function computeSheet(
           const sides = /(\d+)$/.exec(String(column(roll.progression)))?.[1];
           return sides ? `1d${sides}` : null;
         };
+        const qualifying = a.after_attack_with;
         return {
           key: `${scope}:${a.id}`,
           name: a.name,
@@ -938,7 +950,17 @@ export function computeSheet(
           attacks: a.attacks,
           after_hit: a.after_hit,
           ...(a.after_attack_action ? { after_attack_action: true } : {}),
+          ...(qualifying
+            ? {
+                after_attack_with: carriedWeapons
+                  .filter((x) => weaponQualifies(x.weapon, qualifying))
+                  .map((x) => x.name),
+              }
+            : {}),
           once_per_turn: a.once_per_turn,
+          ...(a.alternative ? { alternative: { label: a.alternative.label } } : {}),
+          ...(a.counts_as ? { counts_as: `${scope}:${a.counts_as}` } : {}),
+          ...(a.hit_on_miss ? { hit_on_miss: true } : {}),
           save: a.save && {
             ability: a.save.ability,
             dc:
@@ -1530,6 +1552,17 @@ function attackLine(
     reach: w.kind === "melee" ? (w.properties.includes("reach") ? 10 : 5) : null,
     range: parseRange(w.range),
   };
+}
+
+/** A weapon one of these ids, or with all of these properties (when some are given). */
+function weaponQualifies(
+  w: WeaponDef,
+  q: { readonly weapons: readonly string[]; readonly properties: readonly string[] },
+): boolean {
+  return (
+    q.weapons.includes(w.id) ||
+    (q.properties.length > 0 && q.properties.every((p) => w.properties.includes(p)))
+  );
 }
 
 /** A rider with its damage worked out for its source's class level. */

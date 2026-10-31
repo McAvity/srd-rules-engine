@@ -217,7 +217,16 @@ spends them on a hit. `exclusive: <group>` allows one rider of the group per att
 label}` pays it instead by rolling those dice (once per turn per label in an encounter);
 `requires_feature: <action id>` needs that feature action used this turn. `weapon_strikes` grant
 extra attack lines (`{name, die, damage_type, weapons, properties}`) and an action with
-`after_attack_action: true` needs the Attack action first. Prerequisites may list
+`after_attack_action: true` needs the Attack action first; `after_attack_with: {weapons,
+properties}` needs an attack with such a weapon as part of that Attack action (the sheet lists the
+qualifying lines). A feature action's `alternative: {label}` uses the same once-per-turn budget
+as riders' `alternative` of that label (one per turn whatever the form, every creature's turn a
+new one); `counts_as: <action id>` makes its use count as that action's for `requires_feature`,
+and such a rider then takes its `alternative` dice without a second charge (a paid use keeps
+its own die). `hit_on_miss: true` is offered on a missed attack roll in an encounter (decision
+`hit_on_miss`: the roll kept, the attack hits) and comes back at the start of the user's next
+turn; by hand it's a costless use the table applies to the miss it declares (the attack's damage
+is rolled whatever the d20). Outside encounters these limits are the caller's. Prerequisites may list
 `armor_training`; an `option` with `requires_lacking_saves: true` is unavailable when a save it
 grants is already proficient.
 `while_active: [rage, reckless-attack]` offers it only while those toggles are

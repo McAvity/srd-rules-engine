@@ -98,8 +98,13 @@ export const EncounterCombatantSchema = z.object({
     .object({ target: z.string(), melee: z.boolean(), critical: z.boolean() })
     .nullable()
     .default(null),
-  /** Once-per-turn features used this turn. */
+  /**
+   * Once-per-turn features used this turn, and markers of the turn: `action:attack` (the Attack
+   * action taken) and `action:attack:<attack>` (an attack made as part of it).
+   */
   features_used: z.array(z.string()).default([]),
+  /** Features that come back at the start of its next turn (Peerless Aim), used meanwhile. */
+  used_until_turn: z.array(z.string()).default([]),
   /**
    * Who makes its decisions (Bardic Inspiration, Legendary Resistance, Uncanny Dodge): `ask`
    * stops for an answer after the roll, `auto` takes the recommended choice; `null`: the
@@ -322,6 +327,7 @@ export const PendingSchema = z.object({
     "indomitable",
     "deflect_attacks",
     "relentless_rage",
+    "hit_on_miss",
   ]),
   question: z.string(),
   /** `question` as a message (for translation); absent in documents saved before it. */

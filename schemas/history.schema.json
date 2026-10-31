@@ -355,6 +355,13 @@
                           "type": "string"
                         }
                       },
+                      "used_until_turn": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "decisions": {
                         "default": null,
                         "anyOf": [
@@ -1775,7 +1782,8 @@
                             "zone_force",
                             "indomitable",
                             "deflect_attacks",
-                            "relentless_rage"
+                            "relentless_rage",
+                            "hit_on_miss"
                           ]
                         },
                         "question": {

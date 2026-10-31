@@ -413,8 +413,15 @@ export function rollWith(
         {
           name: f.name,
           costs: [{ type: "play", action: use }],
-          messages:
-            f.roll_die !== undefined ? [message("feature.manual_effect", { feature: f.name })] : [],
+          messages: [
+            ...(f.roll_die !== undefined
+              ? [message("feature.manual_effect", { feature: f.name })]
+              : []),
+            // Peerless Aim by hand: the table declares the miss; the attack's damage is rolled.
+            ...(f.hit_on_miss
+              ? [message("feature.hit_on_miss_by_hand", { feature: f.name, name })]
+              : []),
+          ],
         },
       );
     }

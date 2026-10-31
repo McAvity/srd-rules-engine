@@ -1392,8 +1392,46 @@
               "after_attack_action": {
                 "type": "boolean"
               },
+              "after_attack_with": {
+                "type": "object",
+                "properties": {
+                  "weapons": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "properties": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
               "once_per_turn": {
                 "default": false,
+                "type": "boolean"
+              },
+              "alternative": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              "counts_as": {
+                "type": "string"
+              },
+              "hit_on_miss": {
                 "type": "boolean"
               },
               "save": {
