@@ -162,28 +162,23 @@ export function rollWith(
     return daily(action, all.find((a) => a.name === action)?.per_day, action);
   };
   /**
-   * The uses that paid riders on this attack spend (one each), refused before anything is rolled
-   * when one has none left: costs for the table to apply, like a slot.
+   * The uses that paid riders on this attack spend (one each; none for a rider paid with its
+   * `alternative`), and the save a rider asks of the target: costs for the caller to check and
+   * pay, like a slot (the app refuses a roll it can't pay before rolling, or rolls it forced).
    */
-  const paidRiders = (
+  const ridersOf = (
     attack: string,
-    riders: readonly { rider: string }[] | undefined,
-  ): RollCost[] => {
-    const s = sheetOf();
-    const line = s?.attacks.find((a) => a.name === attack);
-    return (riders ?? []).flatMap((r) => {
+    riders: readonly { rider: string; alternative?: boolean }[] | undefined,
+  ): { costs: RollCost[]; save: { ability: Ability; dc: number } | null } => {
+    const line = sheetOf()?.attacks.find((a) => a.name === attack);
+    let save: { ability: Ability; dc: number } | null = null;
+    const costs = (riders ?? []).flatMap((r): RollCost[] => {
       const rider = line?.riders.find((x) => x.id === r.rider || x.name === r.rider);
-      if (!rider?.uses) return [];
-      const use = s?.play.uses.find((u) => u.key === rider.uses);
-      if (!use || use.spent + 1 > use.max)
-        fail(
-          message("refusal.uses_left_count", {
-            name: use?.name ?? rider.name,
-            left: use ? use.max - use.spent : 0,
-          }),
-        );
-      return [{ type: "play", action: { type: "use", key: rider.uses } } satisfies RollCost];
+      if (rider?.save && !save) save = { ability: rider.save.ability, dc: rider.save.dc };
+      if (!rider?.uses || r.alternative) return [];
+      return [{ type: "play", action: { type: "use", key: rider.uses } }];
     });
+    return { costs, save };
   };
   const attackDice = (attack: string, extra: AttackOptions = {}): AttackDice =>
     rollAttack(combatant, attack, { rng, ...extra });
@@ -251,8 +246,7 @@ export function rollWith(
         { turn },
       );
       const dm = attackDm(what.dm);
-      // Paid riders are checked before any die is rolled.
-      const paid = paidRiders(what.attack, what.riders);
+      const paid = ridersOf(what.attack, what.riders);
       const dice = attackDice(what.attack, {
         mode: what.mode,
         two_handed: what.two_handed,
@@ -271,8 +265,8 @@ export function rollWith(
         ],
       });
       return roll(
-        { attacks: [dice] },
-        { name: what.attack, costs: [...dailyOf(what.attack), ...paid] },
+        { attacks: [dice], save: paid.save },
+        { name: what.attack, costs: [...dailyOf(what.attack), ...paid.costs] },
       );
     }
     case "unarmed": {

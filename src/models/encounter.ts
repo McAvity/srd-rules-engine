@@ -523,7 +523,15 @@ export const RollWhatSchema = z
       attack: z.string(),
       mode,
       two_handed: z.boolean().optional(),
-      riders: z.array(z.object({ rider: z.string(), type: z.string().optional() })).optional(),
+      riders: z
+        .array(
+          z.object({
+            rider: z.string(),
+            type: z.string().optional(),
+            alternative: z.boolean().optional(),
+          }),
+        )
+        .optional(),
       light_extra: z.boolean().optional(),
       cleave: z.boolean().optional(),
       /** Cunning Strike effects, paid with Sneak Attack dice (needs the `sneak-attack` rider). */
@@ -607,7 +615,15 @@ const AttackActionSchema = z.object({
   attack: z.string(),
   mode: z.enum(["normal", "advantage", "disadvantage"]).optional(),
   two_handed: z.boolean().optional(),
-  riders: z.array(z.object({ rider: z.string(), type: z.string().optional() })).optional(),
+  riders: z
+    .array(
+      z.object({
+        rider: z.string(),
+        type: z.string().optional(),
+        alternative: z.boolean().optional(),
+      }),
+    )
+    .optional(),
   ally_adjacent: z.boolean().optional(),
   /** Within 5 feet of the target (default: a melee attack is, a ranged one isn't). */
   within_5ft: z.boolean().optional(),

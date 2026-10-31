@@ -107,6 +107,8 @@ export const MESSAGES_EN = {
   "mastery.vex": "Vex: {name}'s next attack roll against {target} has Advantage.",
   "mastery.sap": "Sap: {target}'s next attack roll has Disadvantage.",
   "mastery.slow": "Slow: {target}'s Speed is 10 feet lower until {name}'s next turn.",
+  "attack.rider_save":
+    "{rider}: {target} {success, select, true {succeeds} other {fails}} ({save}).",
   "mastery.topple": "Topple: {target} {success, select, true {succeeds} other {fails}} ({save}).",
   "mastery.push": "Push: {name} can push {target} up to 10 feet straight away.",
   "mastery.cleave":
@@ -306,6 +308,8 @@ export const MESSAGES_EN = {
   "refusal.point_feet_away_out": "That point is {d} feet away: out of {spell}'s range ({range})",
   "refusal.feet_away_out_range": "{target} is {d} feet away: out of {spell}'s range ({range})",
   "refusal.already_used_turn": "{name} has already used {again} this turn",
+  "refusal.rider_needs_feature": "{rider} needs {feature} used this turn",
+  "refusal.needs_attack_action": "{feature} follows the Attack action this turn",
   "refusal.used_own_turns": "{rider} is used on {name}'s own turns",
   "refusal.no_class_features": "{name} has no class features",
   "refusal.each_effect_used_once": "Each effect can be used once per attack",
@@ -568,6 +572,8 @@ export const MESSAGES_EN = {
     "The attack roll has Disadvantage: its Advantage can't be forgone",
   "rule.isnt_light_weapon": "{attack} isn't a Light weapon",
   "rule.doesnt_cleave_mastery_property": "{attack} doesn't have the Cleave mastery property",
+  "rule.rider_once": "{rider} is added once per attack",
+  "rule.rider_exclusive": "{rider} can't be added with {other} to the same attack",
   "rule.no_rider": "{attack} has no rider '{rider}'",
   "rule.needs_target_missing_some": "{rider} needs a target that's missing some of its Hit Points",
   "rule.needs_advantage_ally_next":
@@ -649,6 +655,8 @@ export const MESSAGES_EN = {
   "option.requires_class_level": "requires {class} level {level}+",
   "option.requires": "requires {name}",
   "option.requires_ability": "requires {abilities, list, or} {min}+",
+  "option.requires_armor_training": "requires {armor} armor training",
+  "option.already_save_proficient": "already proficient in {ability} saving throws",
   "option.requires_feature": "requires the {feature} feature",
   "option.requires_spell": "requires knowing {spells, list, or}",
   "option.requires_spellcasting": "requires the Spellcasting or Pact Magic feature",

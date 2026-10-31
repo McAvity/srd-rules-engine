@@ -211,7 +211,15 @@ Slayer) is checked by `makeAttack`; `once_per_turn` is enforced in encounters (o
 caller tracks it), and `own_turn` only on the attacker's turns (Divine Strike).
 `uses: <resource id>` makes an optional rider paid: each application spends one use of that
 resource (same source scope as a feature action's `uses`); `rollByHand` returns the use as a cost
-and refuses when none is left; an encounter attack spends it from the character's state on a hit.
+(the caller checks and pays it); an encounter attack checks all paid uses before rolling and
+spends them on a hit. `exclusive: <group>` allows one rider of the group per attack; `save:
+{ability, dc_ability, conditions}` is the target's save when it's applied; `alternative: {dice,
+label}` pays it instead by rolling those dice (once per turn per label in an encounter);
+`requires_feature: <action id>` needs that feature action used this turn. `weapon_strikes` grant
+extra attack lines (`{name, die, damage_type, weapons, properties}`) and an action with
+`after_attack_action: true` needs the Attack action first. Prerequisites may list
+`armor_training`; an `option` with `requires_lacking_saves: true` is unavailable when a save it
+grants is already proficient.
 `while_active: [rage, reckless-attack]` offers it only while those toggles are
 on (Frenzy), and `damage: {progression: Rage Damage, die: 6}` rolls that many dice. A later rider
 with the same `id` replaces an earlier one (Divine Strike at Cleric 14: `at_class_level` gives the

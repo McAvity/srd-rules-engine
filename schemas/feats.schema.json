@@ -128,6 +128,12 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "armor_training": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               },
               "additionalProperties": false
@@ -289,6 +295,12 @@
                   },
                   "spells": {
                     "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "armor_training": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -1037,6 +1049,68 @@
               },
               "uses": {
                 "type": "string"
+              },
+              "exclusive": {
+                "type": "string"
+              },
+              "save": {
+                "type": "object",
+                "properties": {
+                  "ability": {
+                    "type": "string",
+                    "enum": [
+                      "str",
+                      "dex",
+                      "con",
+                      "int",
+                      "wis",
+                      "cha"
+                    ]
+                  },
+                  "dc_ability": {
+                    "type": "string",
+                    "enum": [
+                      "str",
+                      "dex",
+                      "con",
+                      "int",
+                      "wis",
+                      "cha"
+                    ]
+                  },
+                  "conditions": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "ability",
+                  "dc_ability"
+                ],
+                "additionalProperties": false
+              },
+              "alternative": {
+                "type": "object",
+                "properties": {
+                  "dice": {
+                    "type": "string",
+                    "pattern": "^\\d+d\\d+$"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "dice",
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              "requires_feature": {
+                "type": "string"
               }
             },
             "required": [
@@ -1383,6 +1457,9 @@
               },
               "after_hit": {
                 "default": false,
+                "type": "boolean"
+              },
+              "after_attack_action": {
                 "type": "boolean"
               },
               "once_per_turn": {
@@ -1904,6 +1981,59 @@
             "additionalProperties": false
           }
         },
+        "weapon_strikes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "die": {
+                "type": "string",
+                "pattern": "^\\d+d\\d+$"
+              },
+              "damage_type": {
+                "type": "string",
+                "enum": [
+                  "acid",
+                  "bludgeoning",
+                  "cold",
+                  "fire",
+                  "force",
+                  "lightning",
+                  "necrotic",
+                  "piercing",
+                  "poison",
+                  "psychic",
+                  "radiant",
+                  "slashing",
+                  "thunder"
+                ]
+              },
+              "weapons": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "properties": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "die",
+              "damage_type"
+            ],
+            "additionalProperties": false
+          }
+        },
         "items": {
           "default": [],
           "type": "array",
@@ -2290,6 +2420,9 @@
         "grants": {
           "default": {},
           "$ref": "#/$defs/Grants"
+        },
+        "requires_lacking_saves": {
+          "type": "boolean"
         }
       },
       "required": [

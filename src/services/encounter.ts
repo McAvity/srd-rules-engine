@@ -95,7 +95,7 @@ import {
 } from "../rules/grid";
 import { message, plainMessage, ruleReason, texts, toMessage } from "../rules/messages";
 import { mathRng, type Rng } from "../rules/rng";
-import type { AttackLine } from "../rules/sheet";
+import type { AttackLine, AttackRider } from "../rules/sheet";
 import {
   type ByHandRoll,
   type CheckedCost,
@@ -1469,7 +1469,7 @@ function run(
     options: {
       mode?: "normal" | "advantage" | "disadvantage";
       two_handed?: boolean;
-      riders?: readonly { rider: string; type?: string }[];
+      riders?: readonly { rider: string; type?: string; alternative?: boolean }[];
       ally_adjacent?: boolean;
       within_5ft?: boolean;
       light_extra?: boolean;
@@ -1501,13 +1501,44 @@ function run(
     const again = onceIds.find((id) => c.riders_used.includes(id));
     if (again) refuse(message("refusal.already_used_turn", { name: c.name, again }));
     const paidUses: string[] = [];
+    const alternatives: string[] = [];
+    const riderSaves: NonNullable<AttackRider["save"] & { rider: string }>[] = [];
     for (const r of riders) {
       const rider = line?.riders.find((x) => x.id === r.rider || x.name === r.rider);
       if (rider?.own_turn && current()?.id !== c.id) {
         fail(message("refusal.used_own_turns", { rider: rider.name, name: c.name }));
       }
-      // A rider paid with a limited use spends one of the attacker's, on a hit (below).
-      if (rider?.uses && c.character !== null) paidUses.push(rider.uses);
+      // Lunging Attack's damage: only after its Dash was used this turn.
+      if (rider?.requires_feature && !c.features_used.includes(rider.requires_feature)) {
+        const feature = rider.requires_feature.slice(rider.requires_feature.lastIndexOf(":") + 1);
+        fail(message("refusal.rider_needs_feature", { rider: rider.name, feature }));
+      }
+      // Relentless: the alternative instead of a use, once per turn per label.
+      if (r.alternative && rider?.alternative) {
+        const again = `alternative:${rider.alternative.label}`;
+        if (c.riders_used.includes(again) || alternatives.includes(again))
+          refuse(
+            message("refusal.already_used_turn", { name: c.name, again: rider.alternative.label }),
+          );
+        alternatives.push(again);
+      } else if (rider?.uses && c.character !== null) paidUses.push(rider.uses);
+      if (rider?.save) riderSaves.push({ ...rider.save, rider: rider.name });
+    }
+    // Paid riders are checked before any die is rolled: all of this attack's uses together.
+    if (paidUses.length) {
+      const ref = characterRef(ctx, c);
+      const uses = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).play.uses;
+      for (const key of new Set(paidUses)) {
+        const use = uses.find((u) => u.key === key);
+        const asked = paidUses.filter((k) => k === key).length;
+        if (!use || use.spent + asked > use.max) {
+          const reason = message("refusal.uses_left_count", {
+            name: use?.name ?? key,
+            left: use ? use.max - use.spent : 0,
+          });
+          refuse(message("refusal.character", { name: c.name, reason }));
+        }
+      }
     }
     const target = withCover(encounterCombatant(e, t.id, ctx), coverFor(c, t, options.cover));
     // Help: Advantage on the next attack roll by one of the helper's allies against the target.
@@ -1583,9 +1614,30 @@ function run(
         message("attack.miss", { name: c.name, target: t.name, attack: hit.attack, roll: rollMsg }),
       );
     } else {
-      c.riders_used.push(...onceIds);
-      // Paid riders: one use each, from the character's state (refused, nothing applied, if none).
+      c.riders_used.push(...onceIds, ...alternatives);
+      // Paid riders: one use each, from the character's state (forced and unpaid: noted, not spent).
       for (const key of paidUses) play(c, { type: "use", key });
+      // A rider's saving throw (a maneuver's): the target rolls it; on a failure, its conditions.
+      for (const rs of riderSaves) {
+        const save = rollSavingThrow(encounterCombatant(e, t.id, ctx), rs.ability, rs.dc, {
+          rng,
+          decide,
+        });
+        notes.push(
+          message("attack.rider_save", {
+            target: t.name,
+            rider: rs.rider,
+            success: save.success,
+            save: saveText(save),
+          }),
+        );
+        spendLegendaryResistance(t, save);
+        if (!save.success && rs.conditions.length)
+          applyTo(
+            t,
+            rs.conditions.map((condition) => ({ type: "add_condition" as const, condition })),
+          );
+      }
       c.hits.push(t.id);
       c.last_hit = {
         target: t.id,
@@ -1665,7 +1717,7 @@ function run(
     attacker: Combatant,
     attackName: string,
     options: {
-      riders?: readonly { rider: string }[];
+      riders?: readonly { rider: string; alternative?: boolean }[];
       cunning?: readonly string[];
       brutal?: readonly string[];
       opportunity?: boolean;
@@ -2413,6 +2465,7 @@ function run(
     else {
       // The Attack action: Extra Attack or Multiattack give more attacks with it.
       c.used.action = true;
+      c.features_used.push(ATTACK_ACTION);
       c.attacks_left = encounterCombatant(e, c.id, ctx).attacks_per_action - 1;
     }
   };
@@ -3664,6 +3717,8 @@ function run(
       if (f.once_per_turn && c.features_used.includes(f.key)) {
         refuse(message("refusal.already_used_turn_2", { name: c.name, feature: f.name }));
       }
+      if (f.after_attack_action && !c.features_used.includes(ATTACK_ACTION))
+        fail(message("refusal.needs_attack_action", { feature: f.name }));
       if (f.after_hit && !c.hits.includes(t.id))
         fail(message("refusal.hasnt_hit_turn", { name: c.name, target: t.name }));
       if (f.extra_action && !c.used.action) {
@@ -3674,7 +3729,7 @@ function run(
         message("feature.used", { name: c.name, feature: f.name, count: on.length, targets: on }),
       );
       play(c, { type: "use_feature", key: f.key, amount: action.amount });
-      if (f.once_per_turn) c.features_used.push(f.key);
+      c.features_used.push(f.key);
       if (f.heal && f.target !== "self") {
         const amount = f.heal.pooled
           ? (action.amount as number)
@@ -4376,6 +4431,8 @@ function sizeOf(ctx: EncounterContext, c: EncounterCombatant): string | null | u
 }
 
 const SIZES = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
+/** `features_used` marker: the Attack action was taken this turn (Pole Strike needs it). */
+const ATTACK_ACTION = "action:attack";
 
 /** Its creature type (`Undead`): a monster's stat block, a character's species. */
 function creatureTypeOf(ctx: EncounterContext, c: EncounterCombatant): string {

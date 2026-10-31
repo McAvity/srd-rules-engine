@@ -7,6 +7,27 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Changed — paid riders: costs computed, enforcement by the caller (kenli F-002 T02 R04)
+- `rollByHand` no longer refuses a paid rider itself: it returns the use as a cost, as for a
+  slot, so the caller's cost check refuses before rolling or a GM rolls it forced (unpaid).
+- An encounter attack checks all its paid riders' uses together before any die (forceable as a
+  `no_resources` refusal); a hit spends them once, a miss spends nothing.
+
+### Added — rider, prerequisite and strike options (kenli F-002 T02 R04)
+- `DamageRider.exclusive` (one rider of a group per attack; the same rider twice is refused
+  too, before any die), `save` (the target's save with its DC on the attack line; an encounter
+  rolls it on a hit and applies its conditions), `alternative` (`{dice, label}`: asked with
+  `alternative: true`, no use spent, once per turn per label in an encounter) and
+  `requires_feature` (only after that feature action this turn, in an encounter).
+- `Grants.weapon_strikes`: an extra attack line with a carried qualifying weapon, its damage
+  die and type replaced. `FeatureAction.after_attack_action`: only after the Attack action.
+- `Prerequisite.armor_training` (training you must already have) and
+  `ChoiceOption.requires_lacking_saves` (unavailable when a save it grants is already
+  proficient from another source, as of the choice's level). All optional: older content
+  parses to the same objects. New messages: `rule.rider_once`, `rule.rider_exclusive`,
+  `attack.rider_save`, `refusal.rider_needs_feature`, `refusal.needs_attack_action`,
+  `option.requires_armor_training`, `option.already_save_proficient`.
+
 ### Added — damage riders paid with a limited use (kenli F-002 T02)
 - `DamageRider.uses` (optional): the resource (of the same source, scoped like a feature action's
   `uses`) that applying an optional rider spends, one use per application. The attack line lists

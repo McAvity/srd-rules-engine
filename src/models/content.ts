@@ -290,6 +290,26 @@ export const DamageRiderSchema = z.strictObject({
    * same object.
    */
   uses: z.string().optional(),
+  /** At most one rider of this group on one attack (Battle Master: one maneuver per attack). */
+  exclusive: z.string().optional(),
+  /**
+   * The target's saving throw when the rider is applied: DC 8 + `dc_ability` modifier +
+   * Proficiency Bonus; on a failure, the conditions (an encounter rolls and applies them).
+   */
+  save: z
+    .strictObject({
+      ability: z.enum(ABILITIES),
+      dc_ability: z.enum(ABILITIES),
+      conditions: z.array(z.string()).default([]),
+    })
+    .optional(),
+  /**
+   * Another way to pay for it (Relentless): roll these dice instead of the rider's own damage
+   * and spend no use, once per turn per `label` (asked with `alternative: true`).
+   */
+  alternative: z.strictObject({ dice: Dice, label: z.string() }).optional(),
+  /** Only after this feature action (same source) was used this turn (Lunging Attack's Dash). */
+  requires_feature: z.string().optional(),
 });
 export type DamageRider = z.infer<typeof DamageRiderSchema>;
 
@@ -382,6 +402,8 @@ export const FeatureActionSchema = z.strictObject({
     .default(null),
   /** Used after hitting the target this turn (Stunning Strike). */
   after_hit: z.boolean().default(false),
+  /** Only after taking the Attack action this turn (Pole Strike). Optional. */
+  after_attack_action: z.boolean().optional(),
   once_per_turn: z.boolean().default(false),
   /**
    * The target's saving throw, DC 8 + `dc_ability` modifier + Proficiency Bonus (`spell`: the
@@ -459,6 +481,20 @@ export const FeatureActionSchema = z.strictObject({
 export type FeatureActionDef = z.infer<typeof FeatureActionSchema>;
 
 export const TraitSchema = z.strictObject({ name: z.string(), text: z.string() });
+
+/**
+ * An attack line made with a carried weapon that qualifies (any listed weapon id, or all the
+ * listed properties), its damage die and type replaced (Pole Strike: the other end, a d4,
+ * Bludgeoning); the ability, proficiency, mastery and riders are the weapon's.
+ */
+export const WeaponStrikeSchema = z.strictObject({
+  name: z.string(),
+  die: Dice,
+  damage_type: z.enum(DAMAGE_TYPES),
+  weapons: z.array(z.string()).default([]),
+  properties: z.array(z.string()).default([]),
+});
+export type WeaponStrike = z.infer<typeof WeaponStrikeSchema>;
 export type Trait = z.infer<typeof TraitSchema>;
 
 /**
@@ -582,6 +618,11 @@ export interface ChoiceOption {
   name: string;
   description: string;
   grants: Grants;
+  /**
+   * Unavailable when a saving throw it grants is already proficient from another source
+   * (Resilient: "an ability in which you lack saving throw proficiency"). Optional.
+   */
+  requires_lacking_saves?: boolean;
 }
 
 export interface ChoiceDef {
@@ -704,6 +745,8 @@ export interface Grants {
   free_casts?: FreeCast[];
   /** d20 floors on ability checks (Reliable Talent-like features in packs). Optional. */
   d20_floors?: D20Floor[];
+  /** Extra attack lines made with a carried weapon (Polearm Master's Pole Strike). Optional. */
+  weapon_strikes?: WeaponStrike[];
   items: ItemGrant[];
   gp: number;
   traits: Trait[];
@@ -730,6 +773,7 @@ export const ChoiceOptionSchema: z.ZodType<ChoiceOption, unknown> = z
       name: z.string(),
       description: z.string().default(""),
       grants: GrantsSchema.prefault({}),
+      requires_lacking_saves: z.boolean().optional(),
     }),
   )
   .meta({ id: "ChoiceOption" });
@@ -832,6 +876,7 @@ export const GrantsSchema: z.ZodType<Grants, unknown> = z
       toggles: z.array(ToggleSchema).default([]),
       free_casts: z.array(FreeCastSchema).optional(),
       d20_floors: z.array(D20FloorSchema).optional(),
+      weapon_strikes: z.array(WeaponStrikeSchema).optional(),
       items: z.array(ItemGrantSchema).default([]),
       gp: z.int().default(0),
       traits: z.array(TraitSchema).default([]),
@@ -931,6 +976,8 @@ export const PrerequisiteSchema = z.strictObject({
   spellcasting: z.boolean().default(false),
   /** You must know at least one of these spells. */
   spells: z.array(z.string()).default([]),
+  /** Armor training you must already have (`light`, `medium`…). Optional. */
+  armor_training: z.array(z.string()).optional(),
 });
 export type Prerequisite = z.infer<typeof PrerequisiteSchema>;
 

@@ -703,7 +703,7 @@ export interface AttackOptions {
    * a choice: `[{ rider: "sneak-attack" }, { rider: "divine-strike", type: "radiant" }]`.
    * Once-per-turn limits are the caller's to track (turns come with encounters).
    */
-  riders?: readonly { rider: string; type?: string }[];
+  riders?: readonly { rider: string; type?: string; alternative?: boolean }[];
   /** An ally is within 5 feet of the target and not Incapacitated (Sneak Attack without Advantage). */
   ally_adjacent?: boolean;
   /** The attacker is within 5 feet of the target (default: a melee attack is, a ranged one isn't). */
@@ -799,9 +799,21 @@ function prepareAttack(
   // Check the riders before rolling, so a refused request rolls nothing.
   const extra: DamagePart[] = [];
   const riderNames: string[] = [];
+  const asked = new Set<string>();
+  const groups = new Map<string, string>();
   for (const request of riders) {
     const rider = line.riders.find((r) => r.id === request.rider || r.name === request.rider);
     if (!rider)
+      throw new RuleError(message("rule.no_rider", { attack: line.name, rider: request.rider }));
+    // Each rider once per attack; one of an `exclusive` group (one maneuver per attack).
+    if (asked.has(rider.id)) throw new RuleError(message("rule.rider_once", { rider: rider.name }));
+    asked.add(rider.id);
+    if (rider.exclusive) {
+      const other = groups.get(rider.exclusive);
+      if (other) throw new RuleError(message("rule.rider_exclusive", { rider: rider.name, other }));
+      groups.set(rider.exclusive, rider.name);
+    }
+    if (request.alternative && !rider.alternative)
       throw new RuleError(message("rule.no_rider", { attack: line.name, rider: request.rider }));
     // Without a target (rolled by hand), the table judges what the rider needs.
     if (rider.requires === "target_damaged" && target && target.hp >= target.max_hp) {
@@ -828,7 +840,7 @@ function prepareAttack(
     if (!(DAMAGE_TYPES as readonly string[]).includes(type)) {
       throw new RuleError(message("rule.unknown_damage_type", { rider: rider.name, type }));
     }
-    let dice = rider.dice;
+    let dice = request.alternative && rider.alternative ? rider.alternative.dice : rider.dice;
     const taken = forgo.filter((f) => f.rider === rider.id).reduce((n, f) => n + f.dice, 0);
     if (taken && dice) {
       const m = /^(\d+)d(\d+)$/.exec(dice);

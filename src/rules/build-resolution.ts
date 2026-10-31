@@ -324,7 +324,8 @@ export class Resolution {
     }
   }
 
-  private sourcesAt(atLevel: number): ActiveSource[] {
+  /** The active sources up to a character level (a choice judged as of its own level). */
+  sourcesAt(atLevel: number): ActiveSource[] {
     return this.sources.filter((s) => s.level <= atLevel);
   }
 
@@ -426,6 +427,15 @@ export class Resolution {
           min: pre.abilities.min,
         });
       }
+    }
+    if (pre.armor_training?.length) {
+      const trained = new Set(
+        this.sourcesAt(level)
+          .filter((s) => !s.key.endsWith(`@${excludeChoice}`))
+          .flatMap((s) => s.grants.armor_training),
+      );
+      const missing = pre.armor_training.find((a) => !trained.has(a));
+      if (missing) return message("option.requires_armor_training", { armor: missing });
     }
     const owned = new Set(
       this.sourcesAt(level)
@@ -951,14 +961,33 @@ function optionViews(res: Resolution, choice: ActiveChoice): OptionView[] {
   switch (d.kind) {
     case "option": {
       const taken = takenByOtherInstances(res, choice);
-      return d.options.map((o) =>
-        view(
+      // Resilient-like options: a saving throw already proficient from another source (this
+      // choice's own picks aside, as of the choice's level) makes the option unavailable.
+      const saves = d.options.some((o) => o.requires_lacking_saves)
+        ? new Set(
+            res
+              .sourcesAt(at(choice))
+              .filter((s) => !s.key.startsWith(`${choice.key}=`))
+              .flatMap((s) => s.grants.saving_throws),
+          )
+        : null;
+      return d.options.map((o) => {
+        const proficient = o.requires_lacking_saves
+          ? o.grants.saving_throws.find((a) => saves?.has(a))
+          : undefined;
+        return view(
           o.id,
           o.name,
           o.description,
-          taken.has(o.id) ? message("option.chosen_for", { source: taken.get(o.id) ?? "" }) : null,
-        ),
-      );
+          taken.has(o.id)
+            ? message("option.chosen_for", { source: taken.get(o.id) ?? "" })
+            : proficient
+              ? message("option.already_save_proficient", {
+                  ability: message(`ability.${proficient}`),
+                })
+              : null,
+        );
+      });
     }
     case "ability":
       return ABILITIES.filter(ok).map((a) => view(a, ABILITY_NAMES[a]));

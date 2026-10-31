@@ -73,6 +73,18 @@ export interface AttackRider {
   readonly requires: "advantage_or_ally" | "target_damaged" | null;
   /** The limited use (its `uses` key) one application spends, for a rider paid with a resource. */
   readonly uses?: string;
+  /** At most one rider of this group per attack (Battle Master maneuvers). */
+  readonly exclusive?: string;
+  /** The target's saving throw when it's applied, its DC worked out. */
+  readonly save?: {
+    readonly ability: Ability;
+    readonly dc: number;
+    readonly conditions: readonly string[];
+  };
+  /** Paid instead by rolling these dice once per turn per `label` (Relentless). */
+  readonly alternative?: { readonly dice: string; readonly label: string };
+  /** The feature action (its key) that must have been used this turn. */
+  readonly requires_feature?: string;
 }
 
 export interface AttackLine {
@@ -127,6 +139,8 @@ export interface FeatureActionLine {
   readonly also: readonly ("dash" | "disengage" | "dodge")[];
   readonly attacks: { readonly attack: string; readonly count: number } | null;
   readonly after_hit: boolean;
+  /** Only after taking the Attack action this turn (Pole Strike). */
+  readonly after_attack_action?: boolean;
   readonly once_per_turn: boolean;
   readonly save: {
     readonly ability: Ability;
@@ -719,6 +733,38 @@ export function computeSheet(
       if (weapon) attacks.push(attackLine(weapon, attackContext));
     }
   }
+  // Weapon strikes (Pole Strike): one line per strike, from the first carried weapon that
+  // qualifies (an equipped one first), its damage die and type replaced.
+  for (const strike of res.sources.flatMap((src) => src.grants.weapon_strikes ?? [])) {
+    const carried = play
+      ? [...play.items].sort((a, b) => Number(b.equipped) - Number(a.equipped)).map((i) => i.base)
+      : Object.keys(equipment);
+    const weapon = carried
+      .map((id) => lookup(catalog.weapons, id))
+      .find(
+        (w) =>
+          !!w &&
+          (strike.weapons.includes(w.id) ||
+            (strike.properties.length > 0 &&
+              strike.properties.every((p) => w.properties.includes(p)))),
+      );
+    if (!weapon) continue;
+    const base = attackLine(weapon, attackContext);
+    const parts = base.damage_parts.map((p, i) =>
+      i === 0 ? { ...p, dice: strike.die, type: strike.damage_type } : p,
+    );
+    attacks.push({
+      ...base,
+      name: strike.name,
+      damage: formatDamage(parts),
+      damage_type: strike.damage_type,
+      damage_parts: parts,
+      two_handed_damage_parts: null,
+      light_extra_damage_parts: null,
+      cleave_damage_parts: null,
+      notes: [...base.notes, `with ${weapon.name}`],
+    });
+  }
   // Damage riders (Rage Damage, Sneak Attack, Divine Strike): the latest of each id wins.
   const riders = new Map<string, { rider: ResolvedRider; level: number }>();
   const activeToggles = new Set(
@@ -729,8 +775,21 @@ export function computeSheet(
       // Frenzy: only while Rage and Reckless Attack are both active.
       if (!def.while_active.every((id) => activeToggles.has(id))) continue;
       const resolved = resolveRider(def, src, catalog, classLevels);
-      const rider =
-        resolved && def.uses ? { ...resolved, uses: `${usesScope(src)}:${def.uses}` } : resolved;
+      const scope = usesScope(src);
+      const rider = resolved && {
+        ...resolved,
+        ...(def.uses ? { uses: `${scope}:${def.uses}` } : {}),
+        ...(def.requires_feature ? { requires_feature: `${scope}:${def.requires_feature}` } : {}),
+        ...(def.save
+          ? {
+              save: {
+                ability: def.save.ability,
+                dc: 8 + pb + abilityModifier(scores[def.save.dc_ability]),
+                conditions: def.save.conditions,
+              },
+            }
+          : {}),
+      };
       const previous = riders.get(def.id);
       if (rider && (!previous || src.level >= previous.level)) {
         riders.set(def.id, { rider, level: src.level });
@@ -878,6 +937,7 @@ export function computeSheet(
           also: a.also,
           attacks: a.attacks,
           after_hit: a.after_hit,
+          ...(a.after_attack_action ? { after_attack_action: true } : {}),
           once_per_turn: a.once_per_turn,
           save: a.save && {
             ability: a.save.ability,
@@ -1480,6 +1540,8 @@ interface ResolvedRider {
   readonly bonus: number;
   /** The `uses` key a paid rider spends (its source's scope, as for a feature action). */
   readonly uses?: string;
+  readonly save?: AttackRider["save"];
+  readonly requires_feature?: string;
 }
 
 function resolveRider(
@@ -1551,6 +1613,10 @@ function withRiders(line: AttackLine, riders: readonly ResolvedRider[]): AttackL
         own_turn: r.def.own_turn,
         requires: r.def.requires,
         ...(r.uses ? { uses: r.uses } : {}),
+        ...(r.def.exclusive ? { exclusive: r.def.exclusive } : {}),
+        ...(r.save ? { save: r.save } : {}),
+        ...(r.def.alternative ? { alternative: r.def.alternative } : {}),
+        ...(r.requires_feature ? { requires_feature: r.requires_feature } : {}),
       });
     }
   }

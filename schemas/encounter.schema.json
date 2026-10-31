@@ -446,6 +446,9 @@
                                 },
                                 "type": {
                                   "type": "string"
+                                },
+                                "alternative": {
+                                  "type": "boolean"
                                 }
                               },
                               "required": [
@@ -3215,6 +3218,9 @@
                           },
                           "type": {
                             "type": "string"
+                          },
+                          "alternative": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -3785,6 +3791,9 @@
                   },
                   "type": {
                     "type": "string"
+                  },
+                  "alternative": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -5343,6 +5352,9 @@
                   },
                   "type": {
                     "type": "string"
+                  },
+                  "alternative": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
