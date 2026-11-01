@@ -1942,7 +1942,11 @@ export interface StockLine {
   readonly cost_cp: number;
   /** Copper per bundle from the catalog. */
   readonly price_cp: number | null;
-  /** Worn or held after the purchase. */
+  /**
+   * Worn or held after the whole list (kenli F-002 T12, D044: the staged state, not the request).
+   * `equip: false` asks nothing: an item already worn (a class's granted armor) stays worn, and
+   * shows `true` here.
+   */
   readonly equip: boolean;
 }
 
@@ -1953,7 +1957,9 @@ export interface StockLine {
  * again; a missing amount is bought in whole catalog bundles (a partial Arrow bundle becomes one
  * whole bundle: `received` says how many); the price is always the catalog's (`buy` without a
  * price). All or nothing: an unknown item, one without a listed price, a bad count or not enough
- * coins refuses the whole list (`PlayError`), nothing changes. Nothing is stored here.
+ * coins refuses the whole list (`PlayError`), nothing changes. Nothing is stored here. Each line's
+ * `equip` is the staged result; items asked to be worn that can't all be worn together (two
+ * armors) refuse the list (D044).
  */
 export function stockItems(
   build: CharacterBuild,
@@ -2003,7 +2009,7 @@ export function stockItems(
       received: bundles * q.bundle,
       cost_cp: bundles * (q.cp ?? 0),
       price_cp: q.cp,
-      equip: want.equip,
+      equip: false,
     });
   }
   for (const want of items) {
@@ -2017,9 +2023,21 @@ export function stockItems(
     s = r.state;
     messages.push(...r.messages);
   }
+  // D044: what is worn is read from the staged state. A wanted item that a later one took off
+  // (a second armor) can't be worn with the rest: the whole list is refused, not shown worn.
+  const worn = (id: string) =>
+    s.inventory.some(
+      (i) => i.item === id && !i.location && !i.custom && i.base === null && i.equipped,
+    );
+  for (const want of items)
+    if (want.equip && !worn(want.item))
+      throw new PlayError([
+        message("refusal.stock_equip_conflict", { item: itemQuote(catalog, want.item).name }),
+      ]);
+  const final = lines.map((l) => ({ ...l, equip: worn(l.item) }));
   const before_cp = purseValue(state.currency);
   const after_cp = purseValue(s.currency);
-  return { state: s, lines, before_cp, after_cp, spent_cp: before_cp - after_cp, messages };
+  return { state: s, lines: final, before_cp, after_cp, spent_cp: before_cp - after_cp, messages };
 }
 
 /**

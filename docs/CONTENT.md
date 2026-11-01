@@ -205,7 +205,8 @@ resources:
 # `attack.melee_weapon`.
 # kenli F-002 T12 (R14): an action's `after_failed_roll: {kinds: [check, attack], spend: on_success}`
 # (Peerless Skill); a pack's top-level `automation: [{id, name, when: {class?, subclass?,
-# class_level?, feat?}, grants}]` adds ordinary grants to characters whose features meet `when`.
+# class_level?, feat?}, grants}]` adds ordinary grants to characters whose features meet `when`;
+# its grants add no choice and no feat, also not nested (`at_class_level`, toggles; D035).
 free_casts:                     # cast without a slot by spending a use of the same source
 - {uses: free-cast, choice: spell}          # the spells picked in this source's `spell` choice
 - {uses: misty, spells: [misty-step]}       # or named

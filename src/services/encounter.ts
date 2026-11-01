@@ -307,8 +307,8 @@ function withDodge(
         ],
       }
     : original;
-  // Staggering Blow: Disadvantage on its next saving throw.
-  const base = encounter.marks.some((m) => m.kind === "staggered" && m.on === c.id)
+  // Staggering Blow: Disadvantage on its next saving throw (its own mark, D042).
+  const base = encounter.marks.some((m) => m.kind === "staggered_save" && m.on === c.id)
     ? {
         ...view,
         condition_rolls: {
@@ -1242,8 +1242,9 @@ function run(
     c.inspiration = null;
   };
   const spendLegendaryResistance = (c: EncounterCombatant, save: SaveResult | null): void => {
-    // Staggering Blow's Disadvantage is on the next saving throw only.
-    if (save) e.marks = e.marks.filter((m) => !(m.kind === "staggered" && m.on === c.id));
+    // Staggering Blow's Disadvantage is on the next saving throw only; its Opportunity Attack ban
+    // (`staggered`) lasts until the start of the Barbarian's next turn regardless (D042).
+    if (save) e.marks = e.marks.filter((m) => !(m.kind === "staggered_save" && m.on === c.id));
     if (save?.indomitable && c.character !== null) {
       const ref = characterRef(ctx, c);
       const use = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).play.uses.find(
@@ -2043,17 +2044,21 @@ function run(
         });
       }
     }
-    const mark = (kind: "hamstrung" | "staggered" | "sundered", text: Message) => {
+    const mark = (
+      kind: "hamstrung" | "staggered" | "staggered_save" | "sundered",
+      text: Message | null,
+      ends: typeof until | null = until,
+    ) => {
       e.marks = e.marks.filter((m) => !(m.on === t.id && m.kind === kind));
       e.marks.push({
         kind,
         label: "Brutal Strike",
         by: c.id,
         on: t.id,
-        ends: { ...until },
+        ends: ends ? { ...ends } : null,
         damage: null,
       });
-      notes.push(text);
+      if (text) notes.push(text);
     };
     for (const effect of options.brutal ?? []) {
       if (effect === "forceful") {
@@ -2062,6 +2067,9 @@ function run(
         mark("hamstrung", message("brutal.hamstring", { target: t.name, name: c.name }));
       } else if (effect === "staggering") {
         mark("staggered", message("brutal.staggering", { target: t.name, name: c.name }));
+        // XPHB: "Disadvantage on the next saving throw it makes" has no end of its own (only the
+        // Opportunity Attack ban is "until the start of your next turn"): used by its next save.
+        mark("staggered_save", null, null);
       } else {
         mark("sundered", message("brutal.sundering", { target: t.name }));
       }
@@ -3887,7 +3895,21 @@ function run(
           if (own.companions.some((x) => x.attack === action.attack)) {
             if (c.features_used.includes(COMPANION_STRIKE))
               refuse(message("refusal.companion_strike_once", { name: c.name }));
-            c.features_used.push(COMPANION_STRIKE);
+            // D037: the beast takes one action a turn, however it's commanded (Bonus Action or
+            // a given-up attack).
+            if (c.features_used.includes(COMPANION_ACTION))
+              refuse(message("refusal.companion_action_once", { name: c.name }));
+            c.features_used.push(COMPANION_STRIKE, COMPANION_ACTION);
+            // Bestial Fury: the Beast's Strike action is two strikes however it's commanded; the
+            // given-up attack is the first, the rest are granted like the command's.
+            const count = Math.max(
+              1,
+              ...own.actions
+                .filter((a) => a.attacks?.attack === action.attack)
+                .map((a) => a.attacks?.count ?? 1),
+            );
+            if (count > 1 && (!c.granted_attacks || c.granted_attacks.count === 0))
+              c.granted_attacks = { attack: action.attack, count: count - 1 };
           }
         }
         spendAttack(c, reaction);
@@ -4188,6 +4210,15 @@ function run(
       if (f.extra_action && !c.used.action) {
         fail(message("refusal.take_your_action_gives", { feature: f.name }));
       }
+      // D037: commanding the companion's strike is its one action this turn (also when an
+      // attack was given up for it).
+      const commandsCompanion =
+        !!f.attacks &&
+        computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).companions.some(
+          (x) => x.attack === f.attacks?.attack,
+        );
+      if (commandsCompanion && c.features_used.includes(COMPANION_ACTION))
+        refuse(message("refusal.companion_action_once", { name: c.name }));
       const on = f.many ? targets.map((x) => x.name) : t === c ? [] : [t.name];
       notes.push(
         message("feature.used", { name: c.name, feature: f.name, count: on.length, targets: on }),
@@ -4249,6 +4280,7 @@ function run(
         if (also === "dodge") c.dodging = true;
       }
       if (f.attacks) c.granted_attacks = { ...f.attacks };
+      if (commandsCompanion) c.features_used.push(COMPANION_ACTION);
       if (f.save) {
         const fs = f.save;
         // Damage is rolled once for every creature (SRD "Damage against Multiple Targets").
@@ -5088,6 +5120,8 @@ const SIZES = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 const ATTACK_ACTION = "action:attack";
 /** kenli F-002 T12 (D022): an Attack action attack given up for the companion's strike this turn. */
 const COMPANION_STRIKE = "action:companion-strike";
+/** kenli F-002 T12 (D037): the companion's one action this turn taken (either command). */
+const COMPANION_ACTION = "action:companion-action";
 /** kenli F-002 T12 B2a: a level 1+ spell cast on a turn, and a Quickened Spell (by turn key). */
 const LEVELED_CAST = "cast:leveled";
 const QUICKENED_CAST = "cast:quickened";

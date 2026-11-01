@@ -7,6 +7,23 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Fixed — kenli F-002 T12 final corrections (SRD bytes unchanged; older documents still parse)
+- D035: an automation (`AutomationSchema`) adding a choice or a feat is refused also in nested
+  grants (`at_class_level`, a toggle's grants, any depth); `addsChoiceOrFeat(grants)`.
+- D042: Staggering Blow is two encounter marks. `staggered` (no Opportunity Attacks) ends at the
+  start of the Barbarian's next turn; the new mark kind `staggered_save` (Disadvantage on the
+  target's next saving throw) has no time limit of its own (`ends: null`, the XPHB text bounds only
+  the Opportunity Attack clause) and is used by that save, which no longer lifts the ban.
+  Encounter/history JSON Schemas regenerated (one more mark kind).
+- D037: a companion takes one action a turn however it's commanded: after a given-up Attack-action
+  attack the command is refused, and after the command the given-up attack is refused
+  (`refusal.companion_action_once`); with a command of two strikes (Bestial Fury) the given-up
+  attack is the first strike and the second is granted (`granted_attacks`). Nothing is spent on a
+  refusal.
+- D044: `stockItems`' `StockLine.equip` is the staged state's (an owned, already worn granted armor
+  with `equip: false` shows `true`; `false` takes nothing off), and items asked to be worn that
+  can't all be (two armors) refuse the whole list (`refusal.stock_equip_conflict`).
+
 ### Added — kenli F-002 T13 (no document change; SRD bytes unchanged)
 - `itemQuote(catalog, id)`: an item's listed price as data (copper per bundle, bundle size; `cp:
   null` for an unpriced magic item) — the price `buy` charges.

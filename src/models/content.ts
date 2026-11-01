@@ -1355,10 +1355,21 @@ export const AutomationSchema = z
       }),
     grants: GrantsSchema,
   })
-  .refine((a) => a.grants.choices.length === 0 && a.grants.feats.length === 0, {
-    message: "an automation adds no choice and no feat",
+  .refine((a) => !addsChoiceOrFeat(a.grants), {
+    message: "an automation adds no choice and no feat (also not in nested grants)",
   });
 export type AutomationDef = z.infer<typeof AutomationSchema>;
+
+/**
+ * kenli F-002 T12 (D035): whether grants add a choice or a feat anywhere, nested grants included
+ * (`at_class_level`, a toggle's grants, a choice option's grants).
+ */
+export function addsChoiceOrFeat(g: Grants): boolean {
+  if (g.choices.length > 0 || g.feats.length > 0) return true;
+  if (g.at_class_level.some((x) => addsChoiceOrFeat(x.grants))) return true;
+  if (g.toggles.some((t) => addsChoiceOrFeat(t.grants))) return true;
+  return false;
+}
 
 /**
  * What you need to take a feat or a class feature option. Every listed condition must hold.

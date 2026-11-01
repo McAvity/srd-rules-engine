@@ -964,6 +964,7 @@ export const MESSAGES_EN = {
   "refusal.needs_feature_first": "{feature}: only after {after} this turn",
   "refusal.companion_strike_once":
     "{name} has already given up an attack of this Attack action for the companion's strike",
+  "refusal.companion_action_once": "{name}'s companion has already used its one action this turn",
   "attack.damage_as": "{attack}: its damage dealt as {type}",
   "rule.damage_type_not_allowed": "{attack} can't deal {type} damage (only {types})",
   "attack.rider_condition": "{target}: {conditions} ({rider})",
@@ -997,6 +998,7 @@ export const MESSAGES_EN = {
   "label.cost_sneak_dice": "{count}d6 of Sneak Attack",
   "refusal.stock_units": "{item}: a whole number of units, at least 1",
   "refusal.stock_twice": "{item} is listed twice",
+  "refusal.stock_equip_conflict": "{item} can't be worn or held together with the rest of the list",
   "refusal.stock_unpriced": "{item} has no listed price: it can't be bought",
 } as const;
 

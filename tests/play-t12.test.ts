@@ -599,6 +599,37 @@ describe("R14-04: a pack's automation for features the character already has (ga
     };
     expect(() => createCatalog([srdPack, pack, bad], {})).toThrow();
   });
+  it("D035: nor in nested grants (at_class_level, a toggle's grants, deeper levels)", () => {
+    const withAuto = (grants: unknown) => ({
+      ...auto,
+      manifest: { ...auto.manifest, id: "test-bad-nested" },
+      automation: [{ id: "x", name: "X", when: { class: "wizard" }, grants }],
+    });
+    const choice = { id: "pick", label: "Pick", kind: "skill" };
+    for (const grants of [
+      { at_class_level: [{ level: 5, grants: { feats: [{ feat: "skilled" }] } }] },
+      { at_class_level: [{ level: 5, grants: { choices: [choice] } }] },
+      {
+        at_class_level: [
+          {
+            level: 5,
+            grants: { at_class_level: [{ level: 9, grants: { feats: [{ feat: "alert" }] } }] },
+          },
+        ],
+      },
+      { toggles: [{ id: "t", name: "T", grants: { feats: [{ feat: "alert" }] } }] },
+    ])
+      expect(() => createCatalog([srdPack, pack, withAuto(grants)], {})).toThrow(
+        /no choice and no feat/,
+      );
+    // Nested grants without a choice or a feat are still accepted.
+    const ok = withAuto({
+      at_class_level: [
+        { level: 5, grants: { actions: [{ id: "a5", name: "A5", economy: "free" }] } },
+      ],
+    });
+    expect(() => createCatalog([srdPack, pack, ok], {})).not.toThrow();
+  });
 });
 
 describe("R14-05: a redundant pick on a skill grant with nothing left to give", () => {

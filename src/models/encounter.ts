@@ -217,8 +217,9 @@ export const SpellMarkSchema = z.object({
   // (Hunter's Mark, Hex).
   /**
    * `speed_halved`: `on`'s Speed is halved (Stunning Strike's successful save); `hamstrung`: −15
-   * feet (Hamstring Blow); `staggered`: Disadvantage on its next save, no Opportunity Attacks
-   * (Staggering Blow); `sundered`: +5 to the next attack roll against it by someone else than
+   * feet (Hamstring Blow); `staggered`: no Opportunity Attacks until `ends` (Staggering Blow);
+   * kenli F-002 T12 (D042) `staggered_save`: Disadvantage on its next saving throw, used by that
+   * save (Staggering Blow; `ends: null`, no time limit in the XPHB text); `sundered`: +5 to the next attack roll against it by someone else than
    * `by` (Sundering Blow); `speed_zero`: its Speed is 0 (Halt, for the rest of the turn);
    * `studied`: `by`'s next attack roll against it has Advantage (Studied Attacks); kenli F-002
    * T12 B2b `dazed`: on the turn it ends with, `on` can only move, take an action or take a Bonus
@@ -231,6 +232,7 @@ export const SpellMarkSchema = z.object({
     "studied",
     "hamstrung",
     "staggered",
+    "staggered_save",
     "sundered",
     "quarry",
     "dazed",

@@ -527,7 +527,7 @@ describe("B2b Brutal Strike: once per turn; Barbarian 17 2d10 and two different 
         .enc()
         .marks.map((m) => m.kind)
         .sort(),
-    ).toEqual(["hamstrung", "staggered"]);
+    ).toEqual(["hamstrung", "staggered", "staggered_save"]);
     // Extra Attack: the second attack this turn can't use Brutal Strike again.
     expect(() => f.act(swing(["forceful"]), [18, 6, 5, 5])).toThrow("already used Brutal Strike");
   });
@@ -568,14 +568,50 @@ describe("B2b Improved Brutal Strike's marks, used by the next roll (SRD Barbari
   it("Staggering Blow: the target's next save with Disadvantage (Rook's Trip), then it's gone", () => {
     const p = party();
     p.act(swing(["staggering"]), [18, 6, 5]);
-    expect(p.enc().marks.map((m) => m.kind)).toEqual(["staggered"]);
+    expect(p.enc().marks.map((m) => m.kind)).toEqual(["staggered", "staggered_save"]);
     p.act({ type: "next_turn" });
     // Rook's Trip: the Ogre's Dexterity save rolls two d20 and keeps the lower (19, 2).
     const r = p.act(stab(["trip"]), [18, 4, 6, 6, 19, 2]);
     expect(
       r.notes.some((n) => /^Cunning Strike \(Trip\): Ogre fails/.test(n) && /disadvantage/.test(n)),
     ).toBe(true);
+    expect(p.enc().marks.some((m) => m.kind === "staggered_save")).toBe(false);
+  });
+
+  it("D042: the save uses only the Disadvantage; no Opportunity Attacks until the start of Grom's next turn, then they're back", () => {
+    const p = party();
+    p.act(swing(["staggering"]), [18, 6, 5]);
+    const oa = {
+      type: "attack",
+      id: "ogre",
+      target: "rook",
+      attack: "Greatclub",
+      opportunity: true,
+    } as EncounterAction;
+    expect(() => p.act(oa, [2, 2])).toThrow("can't make Opportunity Attacks");
+    p.act({ type: "next_turn" });
+    const beforeSave = p.enc();
+    p.act(stab(["trip"]), [18, 4, 6, 6, 19, 2]);
+    // The Disadvantage is used; the ban is still live this round (Rook's turn, before Grom's).
+    expect(p.enc().marks.map((m) => m.kind)).toEqual(["staggered"]);
+    expect(() => p.act(oa, [2, 2])).toThrow("can't make Opportunity Attacks");
+    // Undo restores the state before the save: both marks (the encounter is a value).
+    expect(beforeSave.marks.map((m) => m.kind)).toEqual(["staggered", "staggered_save"]);
+    // Ogre's turn, then Grom's: the ban ends at the start of Grom's next turn.
+    p.act({ type: "next_turn" });
+    expect(() => p.act(oa, [2, 2])).toThrow("can't make Opportunity Attacks");
+    p.act({ type: "next_turn" });
     expect(p.enc().marks.some((m) => m.kind === "staggered")).toBe(false);
+    expect(() => p.act(oa, [2, 2])).not.toThrow();
+  });
+
+  it("D042: the next-save Disadvantage has no time limit of its own: still there after the ban ends", () => {
+    const p = party();
+    p.act(swing(["staggering"]), [18, 6, 5]);
+    p.act({ type: "next_turn" });
+    p.act({ type: "next_turn" });
+    p.act({ type: "next_turn" });
+    expect(p.enc().marks.map((m) => m.kind)).toEqual(["staggered_save"]);
   });
 
   it("Sundering Blow: +5 to the next attack roll against it by another creature, once; ends at the start of Grom's next turn", () => {

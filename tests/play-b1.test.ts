@@ -501,6 +501,64 @@ describe("D022/D024: the companion's strike and commands (Beast Master-like)", (
     f.act(strike);
     expect(() => f.act(strike)).toThrow(/already given up an attack/);
   });
+  describe("D037: one beast action a turn, however commanded; Bestial Fury's two strikes either way", () => {
+    const strike = (granted = false) => ({
+      type: "attack" as const,
+      id: "me",
+      target: "hill-giant",
+      attack: strikeName,
+      ...(granted ? { granted: true } : {}),
+    });
+    const command = { type: "feature" as const, id: "me", feature: "ranger:command" };
+    const me = (f: ReturnType<typeof fight>) => f.enc().combatants.find((c) => c.id === "me");
+    it("Ranger 11: a given-up attack makes the first strike and grants the second; a third refused", () => {
+      const b = ranger(11);
+      const f = fight(b, createState(b, cat), "hill-giant");
+      f.act(strike());
+      expect(me(f)?.granted_attacks).toEqual({ attack: strikeName, count: 1 });
+      f.act(strike(true));
+      expect(() => f.act(strike(true))).toThrow(/no granted attacks left/);
+      expect(() => f.act(strike())).toThrow(/already given up an attack/);
+      // the player's cost once: one Attack action attack, no Bonus Action
+      expect(me(f)?.used.bonus_action).toBe(false);
+    });
+    it("Ranger 11, command first: two strikes, then no given-up attack for a third", () => {
+      const b = ranger(11);
+      const f = fight(b, createState(b, cat), "hill-giant");
+      f.act(command);
+      f.act(strike(true));
+      f.act(strike(true));
+      const before = f.enc();
+      expect(() => f.act(strike())).toThrow(/companion has already used its one action this turn/);
+      // refused: nothing spent (the Attack action's attacks untouched); the encounter unchanged
+      expect(f.enc()).toBe(before);
+      expect(me(f)?.used.action).toBe(false);
+    });
+    it("Ranger 11, given-up attack first: the command refused, its Bonus Action not spent", () => {
+      const b = ranger(11);
+      const f = fight(b, createState(b, cat), "hill-giant");
+      f.act(strike());
+      expect(() => f.act(command)).toThrow(/companion has already used its one action this turn/);
+      expect(me(f)?.used.bonus_action).toBe(false);
+      f.act(strike(true));
+      expect(() => f.act(strike(true))).toThrow(/no granted attacks left/);
+    });
+    it("Ranger 10: one strike either way, nothing more; both reset on the next own turn (Undo = the encounter before)", () => {
+      const b = ranger(10);
+      const f = fight(b, createState(b, cat), "hill-giant");
+      const start = f.enc();
+      f.act(strike());
+      expect(me(f)?.granted_attacks).toBeNull();
+      expect(() => f.act(command)).toThrow(/one action this turn/);
+      // the encounter before the strike (what Undo restores) has neither marker
+      expect(start.combatants.find((c) => c.id === "me")?.features_used ?? []).toEqual([]);
+      nextOwnTurn(f);
+      f.act(command);
+      f.act(strike(true));
+      expect(() => f.act(strike(true))).toThrow(/no granted attacks left/);
+      expect(() => f.act(strike())).toThrow(/one action this turn/);
+    });
+  });
   it("Bestial Fury: 1d6 Force at 11, 1d10 at 20, once per turn, on the strike only", () => {
     const r11 = computePlaySheet(ranger(11), createState(ranger(11), cat), cat).attacks;
     expect(

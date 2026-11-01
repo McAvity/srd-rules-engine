@@ -142,4 +142,46 @@ describe("stockItems: a starting kit on a state in memory", () => {
     expect(gold(s0)).toBe(8000);
     expect(s0.inventory).toEqual([]);
   });
+
+  it("D044: each line's equip is the staged state's, not the request", () => {
+    // The SRD Fighter's granted Chain Mail is worn; `equip: false` asks nothing, it stays worn.
+    const granted = createState(build, catalog);
+    expect(granted.inventory.find((i) => i.item === "chain-mail")?.equipped).toBe(true);
+    const r = stockItems(build, granted, catalog, [{ item: "chain-mail", units: 1, equip: false }]);
+    expect(r.lines[0]).toMatchObject({ item: "chain-mail", owned: 1, bundles: 0, equip: true });
+    expect(r.state.inventory.find((i) => i.item === "chain-mail")?.equipped).toBe(true);
+    // Not worn and not asked: false.
+    const s = stockItems(build, withGold(100), catalog, [
+      { item: "dagger", units: 1, equip: false },
+    ]);
+    expect(s.lines[0]?.equip).toBe(false);
+  });
+
+  it("D044: two armors asked to be worn can't both be: the whole list refused, nothing changes", () => {
+    const s0 = withGold(500);
+    expect(() =>
+      stockItems(build, s0, catalog, [
+        { item: "chain-mail", units: 1, equip: true },
+        { item: "leather-armor", units: 1, equip: true },
+      ]),
+    ).toThrow(/Leather Armor|Chain Mail/);
+    expect(() =>
+      stockItems(build, s0, catalog, [
+        { item: "chain-mail", units: 1, equip: true },
+        { item: "leather-armor", units: 1, equip: true },
+      ]),
+    ).toThrow(/can't be worn or held together/);
+    expect(gold(s0)).toBe(50000);
+    expect(s0.inventory).toEqual([]);
+    // One armor worn, the other only carried: fine, and the lines say which.
+    const ok = stockItems(build, s0, catalog, [
+      { item: "chain-mail", units: 1, equip: true },
+      { item: "leather-armor", units: 1, equip: false },
+    ]);
+    expect(ok.lines.map((l) => [l.item, l.equip])).toEqual([
+      ["chain-mail", true],
+      ["leather-armor", false],
+    ]);
+    expect(computePlaySheet(build, ok.state, catalog).armor_class.total).toBe(16);
+  });
 });
