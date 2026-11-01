@@ -742,6 +742,7 @@ export const MESSAGES_EN = {
   "issue.chosen_twice": "{value} chosen twice",
   "issue.not_an_option": "'{value}' isn't an option",
   "issue.option_unavailable": "{name} — {why}",
+  "issue.redundant_pick": "{name}: no effect ({why}): every option is already known",
   "issue.choose_more": "choose {count} more",
   "issue.choose_only": "choose only {count}",
   "builder.bonuses_reset_background":

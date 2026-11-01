@@ -600,3 +600,83 @@ describe("R14-04: a pack's automation for features the character already has (ga
     expect(() => createCatalog([srdPack, pack, bad], {})).toThrow();
   });
 });
+
+describe("R14-05: a redundant pick on a skill grant with nothing left to give", () => {
+  const allSkills = {
+    manifest: { id: "test-skills", version: "1.0.0", source: "test", requires: ["srd-5.2.1"] },
+    feats: [
+      {
+        id: "test-every-skill",
+        name: "Test Every Skill",
+        category: "general",
+        description: "Every skill (test).",
+        grants: {
+          skills: [
+            "acrobatics",
+            "animal-handling",
+            "arcana",
+            "athletics",
+            "deception",
+            "history",
+            "insight",
+            "intimidation",
+            "investigation",
+            "medicine",
+            "nature",
+            "perception",
+            "performance",
+            "persuasion",
+            "religion",
+            "sleight-of-hand",
+            "stealth",
+            "survival",
+          ],
+        },
+      },
+    ],
+    patches: [
+      {
+        target: "species/human",
+        op: "append",
+        path: "grants.feats",
+        value: { feat: "test-every-skill" },
+      },
+    ],
+  };
+  const catS: Catalog = createCatalog([srdPack, allSkills], {});
+  const fighter = () =>
+    autocomplete(classBuild("fighter", { background: "soldier", bonus: { str: 2, con: 1 } }), catS);
+  it("the Fighter's skill choice has nothing to give: its pick is a note, not an error; still 18 skills", () => {
+    const b = fighter();
+    const key =
+      Object.keys(b.choices).find((k) => k === "class:fighter#skills") ?? "class:fighter#skills";
+    const set = builder.setChoice(b, catS, key, ["athletics", "perception"]);
+    const v = builder.evaluate(set.build, catS);
+    const own = v.resolution.choice(key);
+    expect(own && v.resolution.selected(own)).toEqual(["athletics", "perception"]);
+    expect(v.report.issues.filter((i) => i.severity === "error")).toEqual([]);
+    expect(JSON.stringify(v.report.issues)).toContain("issue.redundant_pick");
+    expect(v.sheet.skills.filter((s) => s.proficient_from).length).toBe(18);
+    expect(v.sheet.skills.filter((s) => s.expertise).length).toBe(0);
+  });
+  it("without the exhausted grant (the plain SRD), an already-known pick is still refused", () => {
+    let b = autocomplete(
+      classBuild("fighter", { background: "soldier", bonus: { str: 2, con: 1 } }),
+      cat,
+    );
+    const v0 = builder.evaluate(b, cat);
+    const ch0 = v0.resolution.choice("class:fighter#skills");
+    const ch = ch0 ? { selected: v0.resolution.selected(ch0) } : undefined;
+    const known = v0.sheet.skills.find(
+      (s) => s.proficient_from && s.proficient_from !== "Fighter",
+    )?.skill;
+    expect(ch && known).toBeTruthy();
+    expect(() =>
+      builder.setChoice(b, cat, "class:fighter#skills", [
+        known as string,
+        ...(ch?.selected.slice(1) ?? []),
+      ]),
+    ).toThrow();
+    b = builder.setChoice(b, cat, "class:fighter#skills", ch?.selected ?? []).build;
+  });
+});

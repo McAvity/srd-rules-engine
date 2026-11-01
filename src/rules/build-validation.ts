@@ -287,6 +287,21 @@ export function replaceErrorMessages(
   return errors;
 }
 
+/**
+ * kenli F-002 T12 (R14-05): a skill grant with nothing left to give — every option already
+ * proficient from another source. Its pick is then recorded as redundant (no effect), not refused.
+ */
+export function exhaustedGrant(
+  kind: string,
+  views: readonly { readonly unavailable_message: Message | null }[],
+): boolean {
+  return (
+    kind === "skill" &&
+    views.length > 0 &&
+    views.every((v) => v.unavailable_message?.code === "option.proficient_from")
+  );
+}
+
 export function choiceIssues(res: Resolution, choice: ActiveChoice): Issue[] {
   const { step, key, label, level } = choice;
   if (choice.replaces) {
@@ -325,9 +340,17 @@ export function choiceIssues(res: Resolution, choice: ActiveChoice): Issue[] {
       if (n > 1) add("error", message("issue.chosen_twice", { value }));
     }
   }
+  // kenli F-002 T12 (R14-05): a skill grant with nothing left to give (every skill already
+  // proficient from another source) can still record its pick as redundant: no effect, a note.
+  const exhausted = exhaustedGrant(kind, [...views.values()]);
   for (const value of counts.keys()) {
     const view = views.get(value);
     if (!view) add("error", message("issue.not_an_option", { value }));
+    else if (exhausted && view.unavailable_message?.code === "option.proficient_from")
+      add(
+        "note",
+        message("issue.redundant_pick", { name: view.name, why: view.unavailable_message }),
+      );
     else if (view.unavailable_message && kind !== "ability_increase") {
       add(
         "error",

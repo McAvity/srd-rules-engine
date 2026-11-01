@@ -19,6 +19,9 @@ migrated when it's loaded.
 - `ContentPack.automation` (`AutomationDef`): a pack's play automation for features a character
   already has, as ordinary grants gated by class/subclass level or a feat taken; a pack-level list
   (like `patches`, kept in the split manifest), source-filtered; it adds no choice and no feat.
+- A skill grant with nothing left to give (every skill already proficient elsewhere) records its
+  pick as redundant (`issue.redundant_pick`, a note; no effect, no extra skill or Expertise)
+  instead of refusing or dropping it.
 
 ### Added / fixed — play hooks of kenli F-002 T12 batch A (all optional, no defaults: the SRD bundle and older documents keep their bytes)
 - `free_casts[].at_will` (Spell Mastery: no slot, nothing spent; `uses` then absent) and
