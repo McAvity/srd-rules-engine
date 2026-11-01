@@ -370,3 +370,29 @@ describe("D001: Halt (Speed 0) after a Dash", () => {
     expect(ogre().moved).toBe(0);
   });
 });
+
+describe("optional grant lists merged at a class's first level (mergeGrants)", () => {
+  it("a class patch adding cast_triggers to features.1 resolves (the list absent from its core grants)", () => {
+    const c = createCatalog(
+      [
+        srdPack,
+        {
+          manifest: { id: "t-merge", source: "test", requires: ["srd-5.2.1"] },
+          patches: [
+            {
+              target: "classes/wizard",
+              op: "set",
+              path: "features.1.cast_triggers",
+              value: [{ id: "x", name: "X", school: "abjuration", resource: "x" }],
+            },
+          ],
+        },
+      ],
+      {},
+    );
+    const b = autocomplete(classBuild("wizard"), c);
+    expect(computePlaySheet(b, createState(b, c), c).cast_triggers.map((t) => t.key)).toEqual([
+      "wizard:x",
+    ]);
+  });
+});

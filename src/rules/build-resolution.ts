@@ -163,7 +163,8 @@ export function mergeGrants(a: Grants, b: Grants): Grants {
   const out = { ...a } as Record<string, unknown>;
   for (const [key, value] of Object.entries(b)) {
     const current = out[key];
-    if (Array.isArray(value)) out[key] = [...(current as unknown[]), ...value];
+    // An optional list (free_casts, cast_triggers…) may be absent on one side (kenli F-002 T10).
+    if (Array.isArray(value)) out[key] = [...((current as unknown[] | undefined) ?? []), ...value];
     else if (typeof value === "number") out[key] = ((current as number) ?? 0) + value;
     else if (value !== null) out[key] = value;
   }

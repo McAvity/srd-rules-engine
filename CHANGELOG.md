@@ -21,6 +21,8 @@ migrated when it's loaded.
   level) and `temp_hp.per_class_level` (Wild Shape's Temporary Hit Points; the higher ones stay).
 
 ### Fixed (kenli F-002 D001, D002, D006)
+- `mergeGrants`: an optional grant list (`free_casts`, `cast_triggers`…) absent on one side no
+  longer throws when a class's core grants and first-level features are merged.
 - A Speed of 0 (Halt, Grappled…) leaves no movement, whatever an earlier Dash added (`moveBudget`).
 - Savage Attacker: rolling the weapon's damage dice twice uses it for the turn, whichever roll is
   kept (a kept first roll no longer leaves it for a later hit).
