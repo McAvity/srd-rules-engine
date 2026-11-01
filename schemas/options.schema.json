@@ -5786,6 +5786,29 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "triggers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "create",
+                              "restore"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "mode"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -6488,6 +6511,29 @@
               "type": "array",
               "items": {
                 "type": "string"
+              }
+            },
+            "triggers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "create",
+                      "restore"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "mode"
+                ],
+                "additionalProperties": false
               }
             }
           },

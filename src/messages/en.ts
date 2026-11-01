@@ -920,6 +920,7 @@ export const MESSAGES_EN = {
     "{use} isn't there: it's created by casting a {school} spell with a spell slot",
   "refusal.pool_already_created": "{use} was already created: again only after a Long Rest",
   "refusal.pool_full": "{use} is full ({max})",
+  "play.pool_full_no_gain": "{use} is already at its maximum ({max}): it gains nothing",
   "refusal.pool_low": "{use} has {current} left",
   "refusal.trigger_needs_slotted_school":
     "{trigger}: needs a {school} spell cast with a spell slot",
@@ -930,6 +931,11 @@ export const MESSAGES_EN = {
     "{feature}: the attack the table declared a miss hits instead, with the damage already rolled for it; not again until the start of {name}'s next turn (the table keeps track)",
   "cast.ritual": "{spell} cast as a ritual: no spell slot, 10 minutes longer",
   "cast.free": "{spell} cast with {use}: no spell slot",
+  "refusal.free_cast_only": "{spell} is cast only through {use}, not with a spell slot",
+  "cast.slot_kept": "{feature}: {die} rolled {rolled}, the level {level} slot isn't expended",
+  "cast.slot_not_kept": "{feature}: {die} rolled {rolled}, the level {level} slot is expended",
+  "initiative.regained": "{name}: {use} back to {left} ({feature})",
+  "cast.at_will": "{spell} cast at will with {use}: no spell slot, nothing spent",
   "unarmed.grapple":
     "Grapple, DC {dc}: the target makes a Strength or Dexterity saving throw (its choice) or has the Grappled condition. Only a creature at most one size larger than you, with a hand of yours free.",
   "unarmed.shove":

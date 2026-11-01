@@ -154,6 +154,8 @@ const EFFECT_TARGET_NAMES = [
   "speed",
   "spell.save_dc",
   "attack.weapon",
+  /** kenli F-002 T12 (D015): attack rolls with a Melee weapon only (Sacred Weapon). */
+  "attack.melee_weapon",
 ] as const;
 export type EffectTarget =
   | (typeof EFFECT_TARGET_NAMES)[number]
@@ -667,12 +669,62 @@ export type ResourceDef = z.infer<typeof ResourceSchema>;
  * source instead: `spells` by id, or the spells picked in its `choice` (Magic Initiate's level 1
  * spell). At the spell's own level, with the source's spellcasting feature.
  */
-export const FreeCastSchema = z.strictObject({
-  uses: z.string(),
-  spells: z.array(z.string()).optional(),
-  choice: z.string().optional(),
-});
+export const FreeCastSchema = z
+  .strictObject({
+    /** The limited use spent per cast. Absent only with `at_will`. */
+    uses: z.string().optional(),
+    spells: z.array(z.string()).optional(),
+    choice: z.string().optional(),
+    /**
+     * kenli F-002 T12 (D011): cast without a slot and without spending anything (Spell Mastery:
+     * "at their lowest level without expending a spell slot"); a slot still casts it higher.
+     */
+    at_will: z.boolean().optional(),
+    /**
+     * kenli F-002 T12 (D026): its `spells` are on the sheet from this source even when nothing else
+     * grants them, cast only this way (Shadow Arts' Darkness for a Focus Point, not with a slot).
+     */
+    line: z.boolean().optional(),
+  })
+  .refine((f) => (f.uses !== undefined) !== (f.at_will === true), {
+    message: "a free cast spends `uses` or is `at_will`, exactly one",
+  });
 export type FreeCast = z.infer<typeof FreeCastSchema>;
+
+/**
+ * kenli F-002 T12 (D012): a spell's range increased by `feet` (Spell Sniper: 60) or by
+ * `per_class_level.feet` × that class's level (Eldritch Spear: 30 × Warlock level); only `spell`
+ * (an id, or `$<choice id>` of the same source), only spells with an attack roll (`attack_roll`),
+ * and only ranges of at least `min_feet`. The sheet states the result on the spell's line.
+ */
+export const SpellRangeSchema = z.strictObject({
+  name: z.string(),
+  feet: z.int().min(0).optional(),
+  per_class_level: z.strictObject({ class: z.string(), feet: z.int().min(1) }).optional(),
+  spell: z.string().optional(),
+  attack_roll: z.boolean().optional(),
+  min_feet: z.int().min(0).optional(),
+});
+export type SpellRange = z.infer<typeof SpellRangeSchema>;
+
+/**
+ * kenli F-002 T12 (D017): when its owner rolls Initiative, the source's `uses` come back until
+ * `to` are left, if fewer (XPHB Bard 18 Superior Inspiration: "until you have two").
+ */
+export const InitiativeRegainSchema = z.strictObject({ uses: z.string(), to: z.int().min(1) });
+export type InitiativeRegain = z.infer<typeof InitiativeRegainSchema>;
+
+/**
+ * kenli F-002 T12 (D017): whenever a spell is cast with a spell slot of level 1–`max_level`, `die`
+ * is rolled; equal to the slot's level, the slot isn't expended (XPHB Boon of Spell Recall).
+ * Spell slots only (not Pact Magic, not a free cast or a ritual, not a slot spent another way).
+ */
+export const SlotRefundSchema = z.strictObject({
+  name: z.string(),
+  die: z.string(),
+  max_level: z.int().min(1).max(9),
+});
+export type SlotRefund = z.infer<typeof SlotRefundSchema>;
 
 /**
  * Something casting a spell of `school` with a spell slot can do to a `tracked` resource of the
@@ -921,6 +973,12 @@ export interface Grants {
   toggles: ToggleDef[];
   /** Spells cast without a slot, spending a use (Magic Initiate). Optional. */
   free_casts?: FreeCast[];
+  /** kenli F-002 T12 (D012): a spell's range increased (Eldritch Spear, Spell Sniper). Optional. */
+  spell_ranges?: SpellRange[];
+  /** kenli F-002 T12 (D017): uses regained up to `to` when Initiative is rolled (Superior Inspiration). */
+  initiative_regain?: InitiativeRegain[];
+  /** kenli F-002 T12 (D017): a slot's die roll that keeps it (Boon of Spell Recall). */
+  slot_refund?: SlotRefund;
   cast_triggers?: CastTrigger[];
   attack_lines?: FixedAttack[];
   companions?: Companion[];
@@ -1070,6 +1128,9 @@ export const GrantsSchema: z.ZodType<Grants, unknown> = z
       actions: z.array(FeatureActionSchema).default([]),
       toggles: z.array(ToggleSchema).default([]),
       free_casts: z.array(FreeCastSchema).optional(),
+      spell_ranges: z.array(SpellRangeSchema).optional(),
+      initiative_regain: z.array(InitiativeRegainSchema).optional(),
+      slot_refund: SlotRefundSchema.optional(),
       cast_triggers: z.array(CastTriggerSchema).optional(),
       attack_lines: z.array(FixedAttackSchema).optional(),
       companions: z.array(CompanionSchema).optional(),

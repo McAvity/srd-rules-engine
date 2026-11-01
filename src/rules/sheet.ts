@@ -257,6 +257,8 @@ export interface FreeCastLine {
   readonly spells: readonly string[];
   /** kenli F-011: the source instance that grants it (`SpellGrant.key`); read-only provenance. */
   readonly source_key: string;
+  /** kenli F-002 T12 (D011): nothing spent (Spell Mastery); `use` then only names it. */
+  readonly at_will: boolean;
 }
 
 /** A d20 floor on ability checks (`Grants.d20_floors`), with the feature that gives it. */
@@ -459,6 +461,18 @@ export interface DerivedSheet {
   readonly spellbook: readonly string[];
   /** Spells you can cast without a slot by spending a use (Magic Initiate). */
   readonly free_casts: readonly FreeCastLine[];
+  /** kenli F-002 T12 (D017): uses regained up to `to` when Initiative is rolled (Superior Inspiration). */
+  readonly initiative_regain: readonly {
+    readonly use: string;
+    readonly to: number;
+    readonly name: string;
+  }[];
+  /** kenli F-002 T12 (D017): a slot kept on a matching die roll (Boon of Spell Recall), or `null`. */
+  readonly slot_refund: {
+    readonly name: string;
+    readonly die: string;
+    readonly max_level: number;
+  } | null;
   /**
    * What casting a spell of a school with a slot can do to a tracked pool (`Grants.cast_triggers`):
    * the caster picks it with that cast (a roll's `triggers`).
@@ -565,6 +579,12 @@ export interface SpellLine {
    * Magic Initiates with the same name); nothing here changes how the spell is cast or paid.
    */
   readonly grants: readonly SpellGrant[];
+  /**
+   * kenli F-002 T12 (D012): its range with the character's increases (`Grants.spell_ranges`), e.g.
+   * `"270 feet"`, and the features that give them; absent when nothing changes the catalog's.
+   */
+  readonly range?: string;
+  readonly range_from?: readonly string[];
 }
 
 /** kenli F-011: one source instance granting a spell (see `SpellLine.grants`). */
@@ -580,6 +600,11 @@ export interface SpellGrant {
   /** That spellcasting feature's instance (`SpellcastingLine.key`), or `null`. */
   readonly spellcasting_key: string | null;
   readonly always_prepared: boolean;
+  /**
+   * kenli F-002 T12 (D026): this grant casts it only through its free cast (`FreeCast.line`), not
+   * with a slot. Absent: an ordinary grant.
+   */
+  readonly free_only?: boolean;
 }
 
 export function computeSheet(
@@ -827,6 +852,7 @@ export function computeSheet(
     masteries,
     rangedBonus: effects("attack.ranged"),
     weaponBonus: effects("attack.weapon"),
+    meleeWeaponBonus: effects("attack.melee_weapon"),
     featIds: new Set(res.featSources().map((s) => s.feat.id)),
     // Martial Arts works only while you aren't wearing armor or wielding a Shield.
     martialArtsDie: armor === null && shield === null ? martialArtsDie : 0,
@@ -1288,9 +1314,19 @@ export function computeSheet(
     spellbook: magic.spellbook,
     resources,
     limited_uses: uses,
+    initiative_regain: res.sources.flatMap((src) =>
+      (src.grants.initiative_regain ?? []).map((r) => ({
+        use: `${usesScope(src)}:${r.uses}`,
+        to: r.to,
+        name: src.name,
+      })),
+    ),
+    slot_refund: res.sources.find((src) => src.grants.slot_refund)?.grants.slot_refund ?? null,
     free_casts: magic.free_casts.map((f) => ({
       ...f,
-      name: uses.find((u) => u.key === f.use)?.name ?? f.use,
+      name:
+        uses.find((u) => u.key === f.use)?.name ??
+        (f.at_will ? (res.sources.find((x) => x.key === f.source_key)?.name ?? f.use) : f.use),
     })),
     shape,
     companions,
@@ -1689,6 +1725,57 @@ function spellcastingSummary(
       else add(id, choice.source, choice.definition.always_prepared);
     }
   }
+  // kenli F-002 T12 (D026): a free cast with `line` puts its named spells on the sheet from its
+  // source, cast only through it (no slot line: `free_only`).
+  for (const src of res.sources)
+    for (const f of src.grants.free_casts ?? [])
+      if (f.line)
+        for (const id of f.spells ?? []) {
+          const before = spells.get(id);
+          add(id, src, true);
+          const now = spells.get(id);
+          if (now && now !== before)
+            spells.set(id, {
+              ...now,
+              grants: now.grants.map((g) => (g.key === src.key ? { ...g, free_only: true } : g)),
+            });
+        }
+  // kenli F-002 T12 (D012): range increases, stated on the line (the catalog's own range unchanged).
+  const ranges = res.sources.flatMap((src) =>
+    (src.grants.spell_ranges ?? []).map((r) => {
+      const ref = r.spell;
+      let only: readonly string[] | null = null;
+      if (ref?.startsWith("$")) {
+        const choice = res.choices.find(
+          (c) => c.source.key === src.key && c.definition.id === ref.slice(1),
+        );
+        only = choice ? res.contributed(choice) : [];
+      } else if (ref) only = [ref];
+      const per = r.per_class_level;
+      const feet = (r.feet ?? 0) + (per ? per.feet * (classLevels.get(per.class) ?? 0) : 0);
+      return { name: r.name, only, feet, attack: r.attack_roll === true, min: r.min_feet ?? 0 };
+    }),
+  );
+  if (ranges.length)
+    for (const [id, line] of spells) {
+      const def = lookup(catalog.spells, id);
+      const base = def ? /^(\d+) feet$/.exec(def.range.trim()) : null;
+      if (!def || !base) continue;
+      const feet = Number(base[1]);
+      const hits = ranges.filter(
+        (r) =>
+          r.feet > 0 &&
+          feet >= r.min &&
+          (r.only === null || r.only.includes(id)) &&
+          (!r.attack || (def.mechanics?.attack ?? null) !== null),
+      );
+      if (hits.length)
+        spells.set(id, {
+          ...line,
+          range: `${feet + hits.reduce((a, r) => a + r.feet, 0)} feet`,
+          range_from: hits.map((r) => r.name),
+        });
+    }
   const sorted = [...spells.values()].sort((a, b) => a.level - b.level);
   // Free casts: the spells named, or picked in the source's own choice, with the source's line.
   const free_casts = res.sources.flatMap((src) =>
@@ -1697,7 +1784,9 @@ function spellcastingSummary(
         ? res.choices.find((c) => c.source.key === src.key && c.definition.id === f.choice)
         : undefined;
       return {
-        use: `${usesScope(src)}:${f.uses}`,
+        // kenli F-002 T12 (D011): an at-will cast spends nothing; its key names the source.
+        use: f.uses !== undefined ? `${usesScope(src)}:${f.uses}` : `${src.key}#at-will`,
+        at_will: f.at_will === true,
         spellcasting: castWith(src),
         spells: [...(f.spells ?? []), ...(choice ? res.contributed(choice) : [])],
         source_key: src.key,
@@ -1716,6 +1805,8 @@ interface AttackContext {
   rangedBonus: readonly ResolvedEffect[];
   /** Bonuses to every weapon attack roll (Sacred Weapon). */
   weaponBonus: readonly ResolvedEffect[];
+  /** Effects on attack rolls with a Melee weapon only (`attack.melee_weapon`). */
+  meleeWeaponBonus: readonly ResolvedEffect[];
   featIds: ReadonlySet<string>;
   /** Martial Arts die size (6 = d6) while it applies, else 0. */
   martialArtsDie: number;
@@ -1775,6 +1866,7 @@ function attackLine(
   const notes: string[] = [];
   if (w.kind === "ranged") bonus += ctx.rangedBonus.reduce((sum, [, v]) => sum + v, 0);
   bonus += ctx.weaponBonus.reduce((sum, [, v]) => sum + v, 0);
+  if (w.kind !== "ranged") bonus += ctx.meleeWeaponBonus.reduce((sum, [, v]) => sum + v, 0);
   if (!proficient) notes.push("not proficient");
   if (w.properties.includes("heavy")) {
     const needed: Ability = w.kind === "melee" ? "str" : "dex";

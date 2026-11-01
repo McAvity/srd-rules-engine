@@ -96,6 +96,12 @@ export interface Combatant {
    * `sorcerer`). Unscoped `attack.spell` in `advantages` still applies to every spell attack.
    */
   readonly spell_attack_classes?: readonly string[];
+  /** kenli F-002 T12 (D017): a slot kept on a matching die roll (Boon of Spell Recall). */
+  readonly slot_refund?: {
+    readonly name: string;
+    readonly die: string;
+    readonly max_level: number;
+  } | null;
   /** Can't cast spells or concentrate (Rage). */
   readonly no_spells: boolean;
   /** Conditions it can't have (a monster's Immunities). */

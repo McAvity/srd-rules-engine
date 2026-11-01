@@ -544,7 +544,10 @@ describe("a miss that hits instead (Peerless Aim-like), until the start of the n
     expect(s.encounter.pending).toMatchObject({ kind: "hit_on_miss", combatant: "brakka" });
     const declined = s.act({ type: "decide", use: false } as EncounterAction);
     expect(attackResult(declined).hit).toBe(false);
-    expect(s.encounter.combatants.find((c) => c.id === "brakka")?.used_until_turn).toEqual([]);
+    // kenli F-002 T12 (C14): optional, absent when nothing is used.
+    expect(s.encounter.combatants.find((c) => c.id === "brakka")?.used_until_turn ?? []).toEqual(
+      [],
+    );
     s.act({ type: "next_turn" });
     s.act(swing([], { reaction: true }), scriptedRng([3]));
     const used = s.act({ type: "decide", use: true } as EncounterAction);

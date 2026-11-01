@@ -204,9 +204,14 @@ describe("H2: a tracked pool created and restored by casting (Arcane Ward)", () 
       triggers: [{ key: KEY, mode: "restore" }],
     });
     expect(pool(b, s)?.current).toBe(15); // 6 + 6 + 3 (capped)
-    expect(() =>
-      cast(b, s, { spell: "shield", slot_level: 1, triggers: [{ key: KEY, mode: "restore" }] }),
-    ).toThrow(/is full/);
+    // kenli F-002 T12 (D018): at its maximum the cast stays legal; the slot is spent, nothing gained.
+    const full = cast(b, s, {
+      spell: "shield",
+      slot_level: 1,
+      triggers: [{ key: KEY, mode: "restore" }],
+    });
+    expect(pool(b, full)?.current).toBe(15);
+    expect(slotsSpent(full)).toBe(slotsSpent(s) + 1);
   });
 
   it("W5: Bonus Action + a slot restores 2 × the slot's level, paid once; no slot → refused, nothing spent", () => {

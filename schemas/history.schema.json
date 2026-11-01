@@ -356,7 +356,6 @@
                         }
                       },
                       "used_until_turn": {
-                        "default": [],
                         "type": "array",
                         "items": {
                           "type": "string"
@@ -789,6 +788,28 @@
                                         "type": "array",
                                         "items": {
                                           "type": "string"
+                                        }
+                                      },
+                                      "triggers": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "mode": {
+                                              "type": "string",
+                                              "enum": [
+                                                "create",
+                                                "restore"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "key",
+                                            "mode"
+                                          ]
                                         }
                                       }
                                     },
@@ -3912,6 +3933,28 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "triggers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "create",
+                              "restore"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "mode"
+                        ]
+                      }
                     }
                   },
                   "required": [
@@ -4591,6 +4634,28 @@
               "type": "array",
               "items": {
                 "type": "string"
+              }
+            },
+            "triggers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "create",
+                      "restore"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "mode"
+                ]
               }
             }
           },

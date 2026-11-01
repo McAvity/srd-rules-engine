@@ -1111,7 +1111,7 @@ function run(
     }
     for (const x of e.combatants) x.riders_used = [];
     // Features used "until the start of your next turn" (Peerless Aim) come back.
-    c.used_until_turn = [];
+    if (c.used_until_turn !== undefined) delete c.used_until_turn;
     // "Only once per turn": every creature's turn is a new one.
     for (const z of e.zones) z.saved = [];
     // Toggles that last until the start of your next turn (Reckless Attack) end; those with a
@@ -1599,7 +1599,7 @@ function run(
         : (() => {
             const ref = characterRef(ctx, c);
             return computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).actions.find(
-              (a) => a.hit_on_miss && !c.used_until_turn.includes(a.key),
+              (a) => a.hit_on_miss && !(c.used_until_turn ?? []).includes(a.key),
             );
           })();
     const target = withCover(encounterCombatant(e, t.id, ctx), coverFor(c, t, options.cover));
@@ -1721,7 +1721,7 @@ function run(
         );
       }
       if (hit.hit_instead && aim) {
-        c.used_until_turn.push(aim.key);
+        c.used_until_turn = [...(c.used_until_turn ?? []), aim.key];
         notes.push(message("attack.hit_instead", { name: c.name, feature: aim.name }));
       }
       c.riders_used.push(...onceIds, ...alternatives);
@@ -2778,6 +2778,28 @@ function run(
             bonus: signedText(bonus),
           }),
         );
+        // kenli F-002 T12 (D017): uses that come back when Initiative is rolled (Superior
+        // Inspiration: "until you have two"), through the character's own play action.
+        if (c.character !== null) {
+          const ref = characterRef(ctx, c);
+          const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
+          for (const r of sheet.initiative_regain) {
+            const use = sheet.play.uses.find((u) => u.key === r.use);
+            const left = use ? use.max - use.spent : 0;
+            if (!use || left >= r.to) continue;
+            const amount = Math.min(r.to, use.max) - left;
+            if (amount <= 0) continue;
+            applyTo(c, [{ type: "restore_use", key: r.use, amount }]);
+            notes.push(
+              message("initiative.regained", {
+                name: c.name,
+                use: use.name,
+                left: left + amount,
+                feature: r.name,
+              }),
+            );
+          }
+        }
       }
       if (e.round > 0) reorder(e, ctx);
       break;
@@ -4072,6 +4094,9 @@ function run(
           ref.catalog ?? ctx.catalog,
         ).spells.find((x) => x.id === spell.id);
         if (!known) fail(message("refusal.cant_cast", { name: c.name, spell: spell.name }));
+        // kenli F-002 T12 (D026): only through its free cast (the sheet's roll), never a slot.
+        if (known.grants.length > 0 && known.grants.every((g) => g.free_only === true))
+          fail(message("refusal.free_cast_only", { spell: spell.name, use: known.source }));
         spellcasting = action.spellcasting ?? spellcastingOf(known);
         what = castingEconomy(spell);
       } else {
@@ -4166,6 +4191,33 @@ function run(
         held: released && releasing?.held,
       });
       if (!released) c.used[what] = true;
+      // kenli F-002 T12 (D016): cast triggers (Arcane Ward) paid with this cast, after its slot,
+      // through the character's own play action (it checks the school, the slot and the pool).
+      if (action.triggers?.length) {
+        if (c.character === null || spell.level < 1)
+          fail(
+            message("refusal.trigger_needs_slotted_school", {
+              trigger: action.triggers[0]?.key ?? "",
+              school: spell.school,
+            }),
+          );
+        const ref = characterRef(ctx, c);
+        const pactLevel = action.pact
+          ? (computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).play.pact_magic
+              ?.slot_level ?? spell.level)
+          : null;
+        const used = pactLevel ?? slot_level ?? spell.level;
+        applyTo(
+          c,
+          action.triggers.map((t) => ({
+            type: "cast_trigger" as const,
+            key: t.key,
+            mode: t.mode,
+            spell: spell.id,
+            slot_level: used,
+          })),
+        );
+      }
       // A refused action throws, and the working copy of the encounter is dropped.
       if (line && !(released && releasing?.held)) {
         spendDaily(c, line.action, line.action_per_day, line.action);

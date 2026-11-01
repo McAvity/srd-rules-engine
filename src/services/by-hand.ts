@@ -225,9 +225,11 @@ export function rollWith(
     const optionNotes: Message[] = [];
     for (const o of picked) {
       if (o.effect === "distant") {
-        const feet = /^(\d+) feet/.exec(spell.range)?.[1];
-        const range =
-          spell.range === "Touch" ? "30 feet" : feet ? `${Number(feet) * 2} feet` : null;
+        // kenli F-002 T12 (D012): Distant doubles the range as the character casts it (Eldritch
+        // Spear, Spell Sniper included: the sheet line's `range`), else the catalog's.
+        const ranged = sheetOf()?.spells.find((x) => x.id === spell.id)?.range ?? spell.range;
+        const feet = /^(\d+) feet/.exec(ranged)?.[1];
+        const range = ranged === "Touch" ? "30 feet" : feet ? `${Number(feet) * 2} feet` : null;
         if (!range) fail(message("refusal.distant_needs_range", { spell: spell.name }));
         optionNotes.push(message("cast.distant", { range: range as string }));
       } else if (o.effect === "quickened") {
@@ -366,6 +368,19 @@ export function rollWith(
       }
       const payment = what.payment ?? { type: "slot" as const };
       const common = { mode: what.mode, damage_type: what.damage_type, dm: what.dm };
+      // kenli F-002 T12 (D026): a spell the sheet has only through a free cast (`FreeCast.line`).
+      if (
+        payment.type !== "free" &&
+        known &&
+        known.grants.length > 0 &&
+        known.grants.every((g) => g.free_only === true)
+      )
+        fail(
+          message("refusal.free_cast_only", {
+            spell: spell.name,
+            use: known.free[0]?.name ?? "",
+          }),
+        );
       if (payment.type === "free") {
         // A free cast: at the spell's level, with the spellcasting feature that gives it.
         const entry =
@@ -389,13 +404,17 @@ export function rollWith(
             }),
           );
         }
-        const free = message("cast.free", { spell: spell.name, use: entry.name });
+        const free = message(entry.at_will ? "cast.at_will" : "cast.free", {
+          spell: spell.name,
+          use: entry.name,
+        });
         return spellRoll(
           spell,
           spell.name,
           { ...common, slot_level: spell.level, spellcasting: entry.spellcasting ?? undefined },
           [],
-          { use: entry.use, message: free },
+          // kenli F-002 T12 (D011): at will, nothing spent (no slot, so no cast trigger either).
+          entry.at_will ? { ritual: free } : { use: entry.use, message: free },
           what.triggers,
           what.options,
         );

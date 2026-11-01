@@ -7,6 +7,21 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added / fixed — play hooks of kenli F-002 T12 batch A (all optional, no defaults: the SRD bundle and older documents keep their bytes)
+- `free_casts[].at_will` (Spell Mastery: no slot, nothing spent; `uses` then absent) and
+  `free_casts[].line` (the named spells on the sheet only through that free cast: `SpellGrant.free_only`,
+  no slot line; a slot cast of it refused `refusal.free_cast_only`). `FreeCastLine`/`FreeCastChoice.at_will`.
+- `Grants.spell_ranges` (flat feet, feet × a class's level, one spell or `$choice`, attack-roll
+  spells only, a minimum range): the sheet's `SpellLine.range` / `range_from`; Distant doubles it.
+- Effect target `attack.melee_weapon` (Sacred Weapon: melee weapons only).
+- Encounter `cast.triggers` (Arcane Ward on an encounter cast, after its slot).
+- `Grants.initiative_regain` (uses back up to `to` when the encounter rolls Initiative) and
+  `Grants.slot_refund` (a die equal to the spell slot's level keeps it; `cast.slot_kept`).
+- Fixed: a full tracked pool no longer refuses a restore cast trigger (the cast is legal, nothing
+  gained: `play.pool_full_no_gain`); a tool's cost listed with its weight ("35 GP, 2 lb.") is its
+  price; an encounter's `used_until_turn` is optional (an encounter written before it parses back to
+  the same document).
+
 ### Added — play hooks for the 2024 plans (kenli F-002 T10)
 - Tracked pools (`ResourceDef.tracked`, Arcane Ward): the play state keeps their current value in
   `pools` (optional: a state without them keeps its bytes); absent until created, ended (not

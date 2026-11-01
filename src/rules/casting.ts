@@ -35,7 +35,7 @@ import {
   rollDamage,
   takeDamage,
 } from "./damage";
-import { parseDiceExpression } from "./dice";
+import { parseDiceExpression, roll } from "./dice";
 import { message, plainMessage, RuleError } from "./messages";
 import { mathRng, type Rng } from "./rng";
 
@@ -189,7 +189,38 @@ export function cantripTier(level: number): number {
  * Throws `RangeError` for an illegal slot level or too many targets. A spell without
  * `mechanics` is still cast (slot, Concentration), with a note that its effects are text.
  */
+/**
+ * Cast a spell (see `castSpellOnce`). kenli F-002 T12 (D017): with the caster's `slot_refund`
+ * (Boon of Spell Recall), a spell slot of level 1–`max_level` is kept when its die (rolled after the
+ * spell's own dice, with the same `rng`) equals the slot's level.
+ */
 export function castSpell(
+  caster: Combatant,
+  spell: SpellDef,
+  targets: readonly Combatant[],
+  options: Parameters<typeof castSpellOnce>[3] = {},
+): SpellCastResult {
+  const r = castSpellOnce(caster, spell, targets, options);
+  const refund = caster.slot_refund;
+  const spend = r.caster_actions.find((a) => a.type === "spend_slot");
+  if (!refund || !spend || spend.type !== "spend_slot" || spend.level > refund.max_level) return r;
+  const rolled = roll(refund.die, options.rng ?? mathRng).total;
+  const kept = rolled === spend.level;
+  const note = message(kept ? "cast.slot_kept" : "cast.slot_not_kept", {
+    feature: refund.name,
+    die: refund.die,
+    rolled,
+    level: spend.level,
+  });
+  return {
+    ...r,
+    caster_actions: kept ? r.caster_actions.filter((a) => a !== spend) : r.caster_actions,
+    notes: [...r.notes, note.text],
+    messages: [...r.messages, note],
+  };
+}
+
+function castSpellOnce(
   caster: Combatant,
   spell: SpellDef,
   targets: readonly Combatant[],

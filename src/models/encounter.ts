@@ -103,8 +103,12 @@ export const EncounterCombatantSchema = z.object({
    * action taken) and `action:attack:<attack>` (an attack made as part of it).
    */
   features_used: z.array(z.string()).default([]),
-  /** Features that come back at the start of its next turn (Peerless Aim), used meanwhile. */
-  used_until_turn: z.array(z.string()).default([]),
+  /**
+   * Features that come back at the start of its next turn (Peerless Aim), used meanwhile.
+   * Optional, no default (kenli F-002 T12, C14): an encounter written before it reads back to the
+   * same document; absent = none used.
+   */
+  used_until_turn: z.array(z.string()).optional(),
   /**
    * Who makes its decisions (Bardic Inspiration, Legendary Resistance, Uncanny Dodge): `ask`
    * stops for an answer after the roll, `auto` takes the recommended choice; `null`: the
@@ -728,6 +732,12 @@ const CastActionSchema = z.object({
   damage_type: z.enum(DAMAGE_TYPES).optional(),
   /** Creatures a zone doesn't affect, for a spell whose caster designates them. */
   unaffected: z.array(z.string()).optional(),
+  /**
+   * kenli F-002 T12 (D016): a character's cast triggers paid with this cast (`sheet.cast_triggers`:
+   * Arcane Ward created or restored), as the `roll` action's `cast.triggers`: after its slot, only
+   * with a spell slot of the trigger's school.
+   */
+  triggers: z.array(z.object({ key: z.string(), mode: z.enum(["create", "restore"]) })).optional(),
 });
 
 const MoveActionSchema = z.object({

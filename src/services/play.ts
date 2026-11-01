@@ -411,19 +411,26 @@ export function computePlaySheet(
   const shapeCasting = new Set(res.sources.filter((s) => s.grants.shape_casting).map((s) => s.key));
   const inShape = (line: (typeof sheet.spells)[number]) =>
     sheet.shape !== null && !line.grants.some((g) => shapeCasting.has(g.key));
+  // kenli F-002 T12 (D026): a line every grant of which is a free cast only has no slot to pick.
+  const freeOnly = (line: (typeof sheet.spells)[number]) =>
+    line.grants.length > 0 && line.grants.every((g) => g.free_only === true);
   const spells = sheet.spells.map((line) => ({
     ...line,
-    ...spellSlots(line.level, play),
+    ...(freeOnly(line)
+      ? { slots: [], slot_levels: [], pact_slot: null }
+      : spellSlots(line.level, play)),
     free: sheet.free_casts
       .filter((f) => line.level > 0 && f.spells.includes(line.id))
       .map((f): FreeCastChoice => {
         const use = play.uses.find((u) => u.key === f.use);
-        const left = use ? Math.max(0, use.max - use.spent) : 0;
+        // kenli F-002 T12 (D011): at will, nothing to run out of.
+        const left = f.at_will ? 1 : use ? Math.max(0, use.max - use.spent) : 0;
         return {
           use: f.use,
           name: f.name,
           spellcasting: f.spellcasting,
           source_key: f.source_key,
+          at_will: f.at_will,
           left,
           available: left > 0,
           reason:
@@ -459,6 +466,8 @@ export interface FreeCastChoice {
   readonly spellcasting: string | null;
   /** kenli F-011: the source instance that grants it (`SpellGrant.key`); read-only provenance. */
   readonly source_key: string;
+  /** kenli F-002 T12 (D011): cast at will, nothing spent (`left` stays 1). */
+  readonly at_will: boolean;
   readonly left: number;
   readonly available: boolean;
   /** Why not (`refusal.free_cast_spent`); `null` when available. */
@@ -577,6 +586,7 @@ export function combatantFromCharacter(
     advantages: sheet.advantages
       .filter((a) => !(a.target === "attack.spell" && a.class_id !== null))
       .map((a) => a.target),
+    slot_refund: sheet.slot_refund,
     spell_attack_classes: [
       ...new Set(
         sheet.advantages.flatMap((a) =>
@@ -1059,6 +1069,13 @@ export function applyAction(
         notes.push(message("play.pool_created", { use: use.name, max: use.max }));
       } else {
         if (!trigger.restore_per_slot_level) refuse();
+        // kenli F-002 T12 (D018): a full pool gains nothing, the cast itself stays legal (XPHB
+        // Arcane Ward: it regains Hit Points; at its maximum there is none to regain).
+        if (!use.created) fail(notCreated(use));
+        if ((use.current ?? 0) >= use.max) {
+          notes.push(message("play.pool_full_no_gain", { use: use.name, max: use.max }));
+          break;
+        }
         addToPool(use, trigger.restore_per_slot_level * action.slot_level);
       }
       break;
@@ -1803,12 +1820,25 @@ function itemPrice(
 ): { name: string; cp: number | null; bundle: number } {
   const gear = lookup(catalog.gear, id);
   if (gear) return { name: gear.name, cp: priceInCp(gear.cost), bundle: gear.bundle };
-  const priced =
-    lookup(catalog.weapons, id) ?? lookup(catalog.armor, id) ?? lookup(catalog.tools, id);
+  const priced = lookup(catalog.weapons, id) ?? lookup(catalog.armor, id);
   if (priced) return { name: priced.name, cp: priceInCp(priced.cost), bundle: 1 };
+  const tool = lookup(catalog.tools, id);
+  if (tool) return { name: tool.name, cp: listedToolCost(tool.cost), bundle: 1 };
   const magic = lookup(catalog.magic_items, id);
   if (magic) return { name: magic.name, cp: null, bundle: 1 };
   throw new PlayError([message("refusal.unknown_item", { item: id })]);
+}
+
+/**
+ * A tool's listed cost (kenli F-002 T12, D029): the SRD tools table gives the cost with the weight
+ * after it ("35 GP, 2 lb."), so only the part before a trailing weight is the price. Anything else
+ * that isn't a plain price stays unlisted (`null`).
+ */
+function listedToolCost(cost: string): number | null {
+  const plain = priceInCp(cost);
+  if (plain !== null) return plain;
+  const m = /^([^,]+),\s*[\d½/\s]+lb\.?$/i.exec(cost.trim());
+  return m ? priceInCp(m[1] as string) : null;
 }
 
 /** Pounds in a listed weight: `8 lb.`, `1/2 lb.`, `58½ lb.`, `5 lb. (full)`; `null` if none. */

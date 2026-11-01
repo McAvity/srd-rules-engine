@@ -198,6 +198,11 @@ resources:
   max: {proficiency: true}
   recharge: long
   spend_for: [d20_advantage, impose_disadvantage]   # what else a use can be spent on
+# kenli F-002 T12: a free cast can be `at_will: true` (no `uses`: Spell Mastery) or `line: true`
+# (its spells shown, cast only this way: Shadow Arts' Darkness); `spell_ranges` add range feet
+# ({name, feet?, per_class_level?: {class, feet}, spell?: id or $choice, attack_roll?, min_feet?});
+# `initiative_regain: [{uses, to}]`; `slot_refund: {name, die, max_level}`; effect target
+# `attack.melee_weapon`.
 free_casts:                     # cast without a slot by spending a use of the same source
 - {uses: free-cast, choice: spell}          # the spells picked in this source's `spell` choice
 - {uses: misty, spells: [misty-step]}       # or named
