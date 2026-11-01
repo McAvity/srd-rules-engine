@@ -1272,6 +1272,15 @@ export function applyAction(
       const feature =
         sheet.actions.find((a) => a.key === action.key) ??
         fail(message("refusal.no_feature_2", { key: action.key }));
+      // kenli F-002 T12 B2a (D040): it switches its toggle on (the toggle's own cost).
+      if (feature.activates)
+        return applyAction(
+          build,
+          state,
+          catalog,
+          { type: "activate", key: feature.activates },
+          { rng },
+        );
       if (feature.pool && action.amount === undefined)
         fail(message("refusal.how_much_amount", { feature: feature.name }));
       const amount = feature.pool ? (action.amount as number) : feature.cost;

@@ -222,6 +222,8 @@ export interface FeatureActionLine {
   readonly restores_slot?: number;
   /** kenli F-002 T12 (D022): the action (its key) that must have been used this turn first. */
   readonly after_feature?: string;
+  /** kenli F-002 T12 B2a (D040): the toggle (its key) it switches on. */
+  readonly activates?: string;
 }
 
 /** kenli F-002 T10 (H3): a form choice's picks with the engine's availability now. */
@@ -1361,6 +1363,7 @@ export function computeSheet(
             ...(a.also_spends ? { also_spends: `${scope}:${a.also_spends}` } : {}),
             ...(a.restores_slot ? { restores_slot: a.restores_slot } : {}),
             ...(a.after_feature ? { after_feature: `${scope}:${a.after_feature}` } : {}),
+            ...(a.activates ? { activates: `${scope}:${a.activates}` } : {}),
           };
         }),
       ),

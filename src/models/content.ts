@@ -591,6 +591,12 @@ export const FeatureActionSchema = z.strictObject({
    */
   after_feature: z.string().optional(),
   /**
+   * kenli F-002 T12 B2a (D040): using it switches on this toggle of the same source, with the
+   * toggle's own cost (its use, or a `toggle_alternatives` payment) and this action's economy
+   * (Innate Sorcery: a Bonus Action). Optional.
+   */
+  activates: z.string().optional(),
+  /**
    * Paid with a spell slot of any level: `instead` of its `uses` when the player chooses
    * (a feature whose own use is spent), or always (`required`: Font of Inspiration).
    */

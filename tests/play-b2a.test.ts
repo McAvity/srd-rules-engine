@@ -49,6 +49,17 @@ const pack = {
     opt("empowered-spell", 1, null, true),
     {
       target: "classes/sorcerer",
+      op: "append",
+      path: "features.1.actions",
+      value: {
+        id: "innate-activate",
+        name: "Test Innate (Bonus Action)",
+        economy: "bonus_action",
+        activates: "innate-sorcery",
+      },
+    },
+    {
+      target: "classes/sorcerer",
       op: "set",
       path: "features.7.cast_option_limit",
       value: { count: 2, while_active: "innate-sorcery" },
@@ -305,5 +316,141 @@ describe("B2a Subtle Spell's Material exception", () => {
     const spell = (id: string) => cat.spells[id as keyof typeof cat.spells] as never;
     expect(costlyMaterial(spell("chromatic-orb"))).toMatch(/diamond worth 50\+ GP/);
     expect(costlyMaterial(spell("fire-bolt"))).toBeNull();
+  });
+});
+
+describe("D040: Innate Sorcery switched on with its Bonus Action (`activates`)", () => {
+  const ACT = "sorcerer:innate-activate";
+  const b = sorcerer(7, ["distant-spell", "quickened-spell"]);
+  const Q = key(b, "quickened-spell");
+  const me = (f: ReturnType<typeof fight>) => f.enc().combatants.find((c) => c.id === "me")!;
+  it("with a use left: one use, the Bonus Action spent, on; again refused at no cost", () => {
+    const f = fight(b, ["ogre"]);
+    f.act({ type: "feature", id: "me", feature: ACT });
+    expect(f.me().uses_spent[INNATE]).toBe(1);
+    expect(f.me().active).toContain(INNATE);
+    expect(me(f).used.bonus_action).toBe(true);
+    const before = JSON.stringify(f.me());
+    expect(() => f.act({ type: "feature", id: "me", feature: ACT })).toThrow();
+    expect(JSON.stringify(f.me())).toBe(before);
+  });
+  it("no use left: 2 Sorcery Points and the Bonus Action; Quickened then refused that turn; next turn allowed", () => {
+    let s = createState(b, cat);
+    s = applyAction(b, s, cat, { type: "use", key: INNATE, amount: 2 }).state;
+    const f = fight(b, ["ogre"], 0, s);
+    f.act({ type: "feature", id: "me", feature: ACT });
+    expect(sp(f.me())).toBe(2);
+    expect(me(f).used.bonus_action).toBe(true);
+    const fb = {
+      type: "cast" as const,
+      id: "me",
+      spell: "fire-bolt",
+      targets: ["ogre"],
+      options: [Q],
+    };
+    expect(() => f.act(fb)).toThrow(/bonus action/i);
+    expect(sp(f.me())).toBe(2);
+    f.act({ type: "next_turn" });
+    f.act({ type: "next_turn" });
+    f.act(fb);
+    expect(sp(f.me())).toBe(4);
+  });
+  it("by hand on the sheet it switches the toggle on with its cost", () => {
+    const r = applyAction(b, createState(b, cat), cat, { type: "use_feature", key: ACT });
+    expect(r.state.active).toContain(INNATE);
+    expect(r.state.uses_spent[INNATE]).toBe(1);
+  });
+});
+
+describe("D039: Heightened Spell on a place-only zone (Web): the chosen creature's later saves", () => {
+  const web = () => {
+    let b = sorcerer(3, ["heightened-spell", "careful-spell"]);
+    const prep = resolve(b, cat).choices.find((c) => c.key === "class:sorcerer:3#prepared");
+    b = builder.setChoice(b, cat, prep?.key ?? "", ["web"]).build;
+    return autocomplete(b, cat);
+  };
+  function positioned(b: CharacterBuild) {
+    const nb = builder.setName(b, cat, "Me").build;
+    const characters: Record<string, { build: CharacterBuild; state: CharacterState }> = {
+      me: { build: nb, state: createState(nb, cat) },
+    };
+    let e: Encounter = createEncounter();
+    const act = (a: EncounterAction) => {
+      const r = applyEncounterAction(e, a, { catalog: cat, characters, rng: fixedRng(10) });
+      e = r.encounter;
+      for (const [id, x] of Object.entries(r.states))
+        characters[id] = { ...characters[id]!, state: x };
+      return r;
+    };
+    act({ type: "add_character", character: "me" });
+    act({ type: "add_monster", monster: "goblin-warrior" });
+    act({ type: "add_monster", monster: "goblin-warrior" });
+    act({ type: "place", id: "me", x: 0, y: 0 });
+    act({ type: "place", id: "goblin-warrior", x: 4, y: 0 });
+    act({ type: "place", id: "goblin-warrior-2", x: 5, y: 0 });
+    act({ type: "set_initiative", id: "me", value: 20 });
+    act({ type: "set_initiative", id: "goblin-warrior", value: 10 });
+    act({ type: "set_initiative", id: "goblin-warrior-2", value: 5 });
+    act({ type: "start" });
+    return { act, me: () => characters.me!.state, enc: () => e };
+  }
+  const saveModes = (r: { messages: readonly { code: string; params?: unknown }[] }) =>
+    JSON.stringify(r.messages);
+  it("Heightened on one creature in the Web: 2 SP, no save now; its start-of-turn save with Disadvantage, the other's normal", () => {
+    const b = web();
+    const H = key(b, "heightened-spell");
+    const f = positioned(b);
+    const r = f.act({
+      type: "cast",
+      id: "me",
+      spell: "web",
+      area: { point: { x: 4, y: 0 } },
+      options: [H],
+      heightened: "goblin-warrior",
+    });
+    expect(sp(f.me())).toBe(2);
+    expect(r.messages.some((m) => m.code === "cast.heightened")).toBe(true);
+    expect(f.enc().zones.find((z) => z.spell === "web")?.heightened).toBe("goblin-warrior");
+    const g1 = f.act({ type: "next_turn" }); // goblin-warrior's turn starts in the Web
+    expect(saveModes(g1)).toMatch(/"mode":"disadvantage"/);
+    expect(r.messages.some((m) => m.code === "target.result")).toBe(false); // no save when cast
+    const g2 = f.act({ type: "next_turn" }); // goblin-warrior-2's turn
+    expect(saveModes(g2)).toMatch(/"mode":"normal"/);
+    // Another spell's save by the Heightened creature isn't affected (the Disadvantage is the Web's).
+    f.act({ type: "next_turn" });
+    const bh = f.act({
+      type: "cast",
+      id: "me",
+      spell: "burning-hands",
+      targets: ["goblin-warrior"],
+    });
+    expect(JSON.stringify(bh.result)).not.toMatch(/disadvantage/);
+    expect(sp(f.me())).toBe(2);
+  });
+  it("a creature not in the Web as Heightened's choice is refused, nothing spent; Careful stays refused (no save when cast)", () => {
+    const b = web();
+    const f = positioned(b);
+    expect(() =>
+      f.act({
+        type: "cast",
+        id: "me",
+        spell: "web",
+        area: { point: { x: 10, y: 10 } },
+        options: [key(b, "heightened-spell")],
+        heightened: "goblin-warrior",
+      }),
+    ).toThrow(/choose one of the spell's targets/);
+    expect(sp(f.me())).toBe(0);
+    expect(() =>
+      f.act({
+        type: "cast",
+        id: "me",
+        spell: "web",
+        area: { point: { x: 4, y: 0 } },
+        options: [key(b, "careful-spell")],
+        careful: ["goblin-warrior"],
+      }),
+    ).toThrow(/forces no saving throw when/);
+    expect(sp(f.me())).toBe(0);
   });
 });

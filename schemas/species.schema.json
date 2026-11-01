@@ -1690,6 +1690,9 @@
               "after_feature": {
                 "type": "string"
               },
+              "activates": {
+                "type": "string"
+              },
               "slot_payment": {
                 "type": "string",
                 "enum": [

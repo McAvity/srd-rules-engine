@@ -2218,6 +2218,8 @@ function run(
       careful?: readonly string[];
       castPlan?: CastOptionPlan;
       castSheet?: CastOptionSheet;
+      /** A place-only zone's creatures (no save when cast): Heightened chooses among them. */
+      zoneTargets?: readonly string[];
     },
   ): SpellCastResult => {
     const zone = spell.mechanics?.zone ?? null;
@@ -2252,25 +2254,37 @@ function run(
       careful: carefulIds,
       castPlan,
       castSheet,
+      zoneTargets,
       ...cast
     } = options;
     // kenli F-002 T12 B2a: Heightened and Careful on the spell's actual targets (after its area).
     const optionSaves =
       castPlan && castSheet
         ? (() => {
-            const idx = (id: string) => targets.findIndex((t) => t.id === id);
+            // A place-only zone: its creatures now, for the choice only (no save is made now).
+            const pool = !targets.length && zoneTargets ? zoneTargets.map(find) : targets;
+            // Careful: its creatures succeed on the save "when you cast" — a place-only zone makes none.
+            if (pool !== targets && castPlan.careful)
+              fail(
+                message("refusal.careful_no_save_now", {
+                  option: castPlan.picked.find((o) => o.effect === "careful")?.name ?? "",
+                  spell: spell.name,
+                }),
+              );
+            const idx = (id: string) => pool.findIndex((t) => t.id === id);
             try {
-              return castOptionSaves(
+              const r = castOptionSaves(
                 castPlan,
                 castSheet,
                 spell,
-                targets,
+                pool,
                 {
                   heightened: heightenedId === undefined ? undefined : idx(heightenedId),
                   careful: carefulIds?.map(idx),
                 },
-                targets.findIndex((t) => t.id === c.id),
+                pool.findIndex((t) => t.id === c.id),
               );
+              return pool === targets ? r : { overrides: [], messages: r.messages };
             } catch (error) {
               if (error instanceof RangeError) fail(ruleReason(error));
               throw error;
@@ -4061,13 +4075,17 @@ function run(
       notes.push(
         message("feature.used", { name: c.name, feature: f.name, count: on.length, targets: on }),
       );
-      play(c, {
-        type: "use_feature",
-        key: f.key,
-        amount: action.amount,
-        ...(action.payment ? { payment: action.payment } : {}),
-        ...(action.form ? { form: action.form } : {}),
-      });
+      // kenli F-002 T12 B2a (D040): a feature that switches a toggle on (Innate Sorcery) does it
+      // with its economy, through the toggle's own activation (its use, or its alternative).
+      if (f.activates) applyTo(c, [{ type: "activate", key: f.activates }]);
+      else
+        play(c, {
+          type: "use_feature",
+          key: f.key,
+          amount: action.amount,
+          ...(action.payment ? { payment: action.payment } : {}),
+          ...(action.form ? { form: action.form } : {}),
+        });
       c.features_used.push(f.key);
       // A die-free variant counts as the maneuver's use, marked as taken under its alternative.
       if (f.counts_as)
@@ -4362,6 +4380,9 @@ function run(
       // A zone that makes no save when it appears (Spirit Guardians, Web) only takes its place.
       const placeOnly = action.area && spell.mechanics?.zone && !spell.mechanics.zone.on_cast;
       if (placeOnly) checkZonePoint(c, spell, action.area?.point);
+      // kenli F-002 T12 B2a (D039): a place-only zone (Web) has no save when cast; Heightened's
+      // creature is one of those in its area, its later saves made with Disadvantage.
+      const zoneTargets = placeOnly && action.area ? spellArea(c, spell, action.area) : undefined;
       const area = smite
         ? [smite.target]
         : wall
@@ -4389,6 +4410,7 @@ function run(
         ...(castPlan ? { castPlan, castSheet, subtle: !!castPlan.subtle } : {}),
         ...(action.heightened !== undefined ? { heightened: action.heightened } : {}),
         ...(action.careful?.length ? { careful: action.careful } : {}),
+        ...(zoneTargets ? { zoneTargets } : {}),
       });
       if (!released) c.used[what] = true;
       // Metamagic paid once with the cast (Sorcery Points), through the character's play actions.

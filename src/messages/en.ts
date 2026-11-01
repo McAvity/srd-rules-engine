@@ -957,6 +957,7 @@ export const MESSAGES_EN = {
   "cast.careful": "{targets} succeed on the save against {spell} (Careful Spell)",
   "reason.heightened": "Heightened Spell",
   "save.careful": "Careful Spell: an automatic success",
+  "refusal.careful_no_save_now": "{option}: {spell} forces no saving throw when it's cast",
   "cast.option_targets_by_hand":
     "{option}: its creatures are the table's (a roll by hand has no targets)",
   "play.feature_slot_back": "{feature}: a level {level} spell slot back",
