@@ -658,6 +658,13 @@ export function combatantOptions(
         // the lowest slot with one left by default (the caller may pick another), so it's judged
         // with its payment, not refused for the lack of one.
         ...(f.slot_payment === "required" ? defaultSlotPayment(sheet) : {}),
+        // …and a feature that takes a form (Wild Shape): the first known form allowed now.
+        ...(f.shape
+          ? (() => {
+              const form = f.shape.forms.find((x) => !x.unavailable)?.id;
+              return form ? { form } : {};
+            })()
+          : {}),
       };
       const made = entry(action, named(f.name), cost, targets, { uses });
       // "hasn't hit X this turn" said of its placeholder target: no hit at all.

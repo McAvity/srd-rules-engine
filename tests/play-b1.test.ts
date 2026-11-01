@@ -414,6 +414,15 @@ describe("D021: Wild Resurgence (Druid 5-like)", () => {
     const left = opt(createState(b, cat));
     expect(left?.available).toBe(false);
     expect(left?.reason).toMatch(/only when no Wild Shape is left/);
+    // Wild Shape's option takes the first known form allowed (the caller may pick another).
+    const nb = builder.setName(b, cat, "Me").build;
+    const f = fight(b, createState(b, cat));
+    const shape = combatantOptions(f.enc(), "me", {
+      catalog: cat,
+      characters: { me: { build: nb, state: f.me() } },
+    }).features.find((x) => x.action.type === "feature" && x.action.feature === "druid:shape");
+    expect(shape?.action).toMatchObject({ form: "wolf" });
+    expect(shape?.available).toBe(true);
   });
   it("a Wild Shape use for a level 1 slot: once per Long Rest, only with a level 1 slot spent", () => {
     const b = druid(5);
