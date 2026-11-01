@@ -529,3 +529,69 @@ describe("B2b Brutal Strike: once per turn; Barbarian 17 2d10 and two different 
     expect(() => f.act(swing(["forceful"]), [18, 6, 5, 5])).toThrow("already used Brutal Strike");
   });
 });
+
+describe("B2b Improved Brutal Strike's marks, used by the next roll (SRD Barbarian 13)", () => {
+  function party() {
+    const grom = hero("barbarian", 13, "Grom");
+    const rook = hero("rogue", 5, "Rook");
+    const characters: Record<string, { build: CharacterBuild; state: CharacterState }> = {
+      grom: { build: grom, state: createState(grom, scat) },
+      rook: { build: rook, state: createState(rook, scat) },
+    };
+    let e: Encounter = createEncounter();
+    const act = (a: EncounterAction, rolls: readonly number[] = []): EncounterResult => {
+      const r = applyEncounterAction(e, a, { catalog: scat, characters, rng: seq(rolls) });
+      e = r.encounter;
+      for (const [k, x] of Object.entries(r.states))
+        characters[k] = { ...(characters[k] as (typeof characters)[string]), state: x };
+      return r;
+    };
+    for (const c of ["grom", "rook"]) act({ type: "add_character", character: c, side: "party" });
+    act({ type: "add_monster", monster: "ogre", side: "enemies" });
+    act({ type: "set_initiative", id: "grom", value: 20 });
+    act({ type: "set_initiative", id: "rook", value: 15 });
+    act({ type: "set_initiative", id: "ogre", value: 1 });
+    act({ type: "start" });
+    act({
+      type: "effects",
+      id: "grom",
+      actions: [{ type: "activate", key: "barbarian:reckless-attack" }],
+    });
+    return { act, enc: () => e };
+  }
+  const swing = (brutal: string[]): EncounterAction =>
+    ({ type: "attack", id: "grom", target: "ogre", attack: "Greataxe", brutal }) as EncounterAction;
+
+  it("Staggering Blow: the target's next save with Disadvantage (Rook's Trip), then it's gone", () => {
+    const p = party();
+    p.act(swing(["staggering"]), [18, 6, 5]);
+    expect(p.enc().marks.map((m) => m.kind)).toEqual(["staggered"]);
+    p.act({ type: "next_turn" });
+    // Rook's Trip: the Ogre's Dexterity save rolls two d20 and keeps the lower (19, 2).
+    const r = p.act(stab(["trip"]), [18, 4, 6, 6, 19, 2]);
+    expect(
+      r.notes.some((n) => /^Cunning Strike \(Trip\): Ogre fails/.test(n) && /disadvantage/.test(n)),
+    ).toBe(true);
+    expect(p.enc().marks.some((m) => m.kind === "staggered")).toBe(false);
+  });
+
+  it("Sundering Blow: +5 to the next attack roll against it by another creature, once; ends at the start of Grom's next turn", () => {
+    const p = party();
+    p.act(swing(["sundering"]), [18, 6, 5]);
+    expect(p.enc().marks.map((m) => m.kind)).toEqual(["sundered"]);
+    p.act({ type: "next_turn" });
+    // Rook's Dagger: d20 1 + its bonus + 5 against AC 11 (a natural 1 still misses), the mark used.
+    const r = p.act(stab([]), [9, 4, 6, 6, 6]);
+    const hit = r.result as unknown as { total: number; hit: boolean };
+    expect(r.notes.some((n) => /\+5/.test(n) || /Sundering/.test(n))).toBe(true);
+    expect(hit.total).toBeGreaterThanOrEqual(9 + 5);
+    expect(p.enc().marks.some((m) => m.kind === "sundered")).toBe(false);
+    // A new one, unused: gone at the start of Grom's next turn.
+    const q = party();
+    q.act(swing(["sundering"]), [18, 6, 5]);
+    q.act({ type: "next_turn" });
+    q.act({ type: "next_turn" });
+    q.act({ type: "next_turn" });
+    expect(q.enc().marks.some((m) => m.kind === "sundered")).toBe(false);
+  });
+});
