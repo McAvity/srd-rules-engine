@@ -50,6 +50,23 @@ export interface RolledDamage {
   readonly parts: readonly RolledDamagePart[];
   readonly total: number;
   readonly critical: boolean;
+  /**
+   * kenli F-002 T12 B2b: dice of this roll rerolled by a feature (Empowered Spell, `source` its
+   * cast option's key), the new rolls kept; absent when none was.
+   */
+  readonly rerolled?: RerolledDice;
+}
+
+/** Dice of a damage roll rerolled together by one feature (`RolledDamage.rerolled`). */
+export interface RerolledDice {
+  readonly source: string;
+  readonly label: string;
+  readonly dice: readonly {
+    readonly part: number;
+    readonly die: number;
+    readonly from: number;
+    readonly to: number;
+  }[];
 }
 
 /**

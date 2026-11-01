@@ -11,6 +11,10 @@
  *   - `heightened` — one target of a spell that forces a save has Disadvantage on saves against it.
  *   - `careful` — up to the Charisma modifier (minimum 1) of the creatures making the spell's save
  *     succeed automatically, no damage where a success halves it.
+ *   - `empowered` (kenli F-002 T12 B2b) — "When you roll damage for a spell, you can spend 1 Sorcery
+ *     Point to reroll a number of the damage dice up to your Charisma modifier (minimum of one), and
+ *     you must use the new rolls": named with the cast it only asks for that choice once the damage
+ *     is rolled (`CastOptionPlan.empowered`), its cost is NOT paid with the cast (`empowerDamage`).
  *
  * One option per spell unless an option is `combinable` (Empowered Spell) or the sheet's
  * `cast_option_limit` is higher (Sorcery Incarnate while Innate Sorcery is active).
@@ -20,7 +24,10 @@ import type { SpellDef } from "../models/content";
 import type { Message } from "../models/messages";
 import type { PlayAction } from "../models/state";
 import type { SaveOverride } from "./casting";
+import type { RolledDamage } from "./damage";
 import { message, RuleError } from "./messages";
+import { type DamageDie, rerollDamageDice } from "./rerolls";
+import type { Rng } from "./rng";
 import type { CastOptionLine } from "./sheet";
 
 /** What a sheet gives the check: its cast options, how many one spell takes, its CHA modifier. */
@@ -41,6 +48,8 @@ export interface CastOptionPlan {
   readonly subtle: { readonly still: string | null } | null;
   readonly heightened: boolean;
   readonly careful: boolean;
+  /** kenli F-002 T12 B2b: Empowered Spell asked for after the damage roll (not paid here). */
+  readonly empowered: CastOptionLine | null;
   readonly messages: readonly Message[];
 }
 
@@ -52,6 +61,12 @@ const fail = (m: Message): never => {
 export function costlyMaterial(spell: SpellDef): string | null {
   const m = /\bM \(([^)]*)\)/.exec(spell.components)?.[1] ?? null;
   return m && /consume|\bworth\b|\d[\d,]*\+?\s*GP/i.test(m) ? m : null;
+}
+
+/** Whether a spell rolls damage (its own, or a follow-up save's): what Empowered Spell rerolls. */
+export function spellDamages(spell: SpellDef): boolean {
+  const m = spell.mechanics;
+  return !!m && (m.damage.length > 0 || (m.follow_up?.damage.length ?? 0) > 0);
 }
 
 /** Check the picked options (sheet keys) against the spell, as the character casts it. */
@@ -83,6 +98,7 @@ export function planCastOptions(
   let subtle: CastOptionPlan["subtle"] = null;
   let heightened = false;
   let careful = false;
+  let empowered: CastOptionLine | null = null;
   const saves = !!(spell.mechanics?.save || spell.mechanics?.follow_up || spell.mechanics?.zone);
   for (const o of picked) {
     if (o.effect === "distant") {
@@ -110,10 +126,18 @@ export function planCastOptions(
         fail(message("refusal.metamagic_needs_save", { option: o.name, spell: spell.name }));
       if (o.effect === "heightened") heightened = true;
       else careful = true;
+    } else if (o.effect === "empowered") {
+      // Only a spell that rolls damage: its dice are what the option rerolls.
+      if (!spellDamages(spell))
+        fail(message("refusal.empowered_needs_damage", { option: o.name, spell: spell.name }));
+      empowered = o;
     }
   }
-  const costs: PlayAction[] = picked.map((o) => ({ type: "use", key: o.uses, amount: o.cost }));
-  return { picked, costs, range, quickened, subtle, heightened, careful, messages };
+  // Empowered Spell is paid when it's used on the damage roll, never with the cast.
+  const costs: PlayAction[] = picked
+    .filter((o) => o.effect !== "empowered")
+    .map((o) => ({ type: "use", key: o.uses, amount: o.cost }));
+  return { picked, costs, range, quickened, subtle, heightened, careful, empowered, messages };
 }
 
 /**
@@ -168,4 +192,39 @@ export function castOptionSaves(
     );
   }
   return { overrides, messages };
+}
+
+/**
+ * kenli F-002 T12 B2b, Empowered Spell on one damage roll of a spell, after it's rolled: the
+ * chosen dice (up to the Charisma modifier, minimum 1, each once; damage dice only) rerolled and
+ * the new rolls kept, even lower. Returns the roll, its cost (one `use` of the option, paid once by
+ * the caller) and the note. Throws a `RuleError` for a refused choice: nothing is rolled.
+ */
+export function empowerDamage(
+  option: CastOptionLine,
+  cha: number,
+  damage: RolledDamage,
+  dice: readonly DamageDie[],
+  source: { readonly rng: Rng } | { readonly values: readonly number[] },
+): { damage: RolledDamage; cost: PlayAction; message: Message } {
+  if (option.effect !== "empowered") fail(message("refusal.no_cast_option", { key: option.key }));
+  if (damage.rerolled?.source === option.key)
+    fail(message("refusal.empowered_used", { option: option.name }));
+  const max = option.reroll_dice ?? Math.max(1, cha);
+  const next = rerollDamageDice(damage, dice, source, {
+    max,
+    key: option.key,
+    label: option.name,
+  });
+  const changes = (next.rerolled?.dice ?? []).map((d) => `${d.from} → ${d.to}`).join(", ");
+  return {
+    damage: next,
+    cost: { type: "use", key: option.uses, amount: option.cost },
+    message: message("empowered.rerolled", {
+      option: option.name,
+      dice: changes,
+      from: damage.total,
+      total: next.total,
+    }),
+  };
 }

@@ -174,6 +174,9 @@ export {
 export {
   type BattleMap,
   BattleMapSchema,
+  CUNNING_STRIKE_DICE,
+  CUNNING_STRIKES,
+  type CunningStrike,
   type DmOptions,
   DmOptionsSchema,
   ECONOMY,
@@ -393,6 +396,7 @@ export {
   type Defenses,
   formatDamage,
   isBloodied,
+  type RerolledDice,
   type RolledDamage,
   type RolledDamagePart,
   rollDamage,
@@ -435,9 +439,12 @@ export {
   addAdvantageDie,
   addBonusDie,
   type CriticalDice,
+  type DamageDie,
   type DieSource,
+  damageDice,
   type RerollResult,
   type RerollTarget,
+  rerollDamageDice,
   rerollDie,
   setCritical,
 } from "./rules/rerolls";
@@ -535,6 +542,7 @@ export {
   spellSlots,
   startingEquipment,
   useAfterFailedRoll,
+  useEmpoweredSpell,
   validateState,
 } from "./services/play";
 export {

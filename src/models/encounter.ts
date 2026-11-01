@@ -220,7 +220,9 @@ export const SpellMarkSchema = z.object({
    * feet (Hamstring Blow); `staggered`: Disadvantage on its next save, no Opportunity Attacks
    * (Staggering Blow); `sundered`: +5 to the next attack roll against it by someone else than
    * `by` (Sundering Blow); `speed_zero`: its Speed is 0 (Halt, for the rest of the turn);
-   * `studied`: `by`'s next attack roll against it has Advantage (Studied Attacks).
+   * `studied`: `by`'s next attack roll against it has Advantage (Studied Attacks); kenli F-002
+   * T12 B2b `dazed`: on the turn it ends with, `on` can only move, take an action or take a Bonus
+   * Action (Cunning Strike's Daze).
    */
   kind: z.enum([
     "advantage_against",
@@ -231,6 +233,7 @@ export const SpellMarkSchema = z.object({
     "staggered",
     "sundered",
     "quarry",
+    "dazed",
   ]),
   /** The spell's name: `Guiding Bolt`. */
   label: z.string(),
@@ -325,7 +328,11 @@ export type Zone = z.infer<typeof ZoneSchema>;
 export const PendingSchema = z.object({
   action: z.lazy(() => EncounterActionSchema),
   rolls: z.array(z.int()),
-  answers: z.array(z.boolean()),
+  /**
+   * The answers given so far, in order; kenli F-002 T12 B2b: a choice of dice (Empowered Spell) is
+   * the indexes picked in that decision's `dice`.
+   */
+  answers: z.array(z.union([z.boolean(), z.array(z.int().min(0))])),
   /** Who decides, and what. */
   combatant: z.string(),
   kind: z.enum([
@@ -340,12 +347,29 @@ export const PendingSchema = z.object({
     "tactical_mind",
     "guarded_mind",
     "savage_attacker",
+    "empowered_spell",
   ]),
   question: z.string(),
   /** `question` as a message (for translation); absent in documents saved before it. */
   question_message: MessageSchema.optional(),
   /** What `auto` would answer (only when it can turn the failure into a success). */
   recommended: z.boolean().default(true),
+  /**
+   * kenli F-002 T12 B2b, a choice of dice (Empowered Spell): the damage roll's dice to pick from
+   * (`decide` with `dice`: their indexes here), at most `max_dice` of them. Absent otherwise.
+   */
+  dice: z
+    .array(
+      z.object({
+        part: z.int().min(0),
+        die: z.int().min(0),
+        value: z.int().min(1),
+        sides: z.int().min(1),
+        type: z.string(),
+      }),
+    )
+    .optional(),
+  max_dice: z.int().min(1).optional(),
 });
 export type Pending = z.infer<typeof PendingSchema>;
 
@@ -534,6 +558,28 @@ export type SlotPayment = z.infer<typeof SlotPaymentSchema>;
  * Shove, a spell, a feature, a saving throw effect or a legendary action, with the fields of the
  * action that would take it, less its target, area and economy.
  */
+/**
+ * SRD Rogue "Cunning Strike" effects and their Sneak Attack dice (1d6 each; kenli F-002 T12 B2b:
+ * Devious Strikes' Daze 2d6, Knock Out 6d6, Obscure 3d6).
+ */
+export const CUNNING_STRIKES = [
+  "poison",
+  "trip",
+  "withdraw",
+  "daze",
+  "knock_out",
+  "obscure",
+] as const;
+export type CunningStrike = (typeof CUNNING_STRIKES)[number];
+export const CUNNING_STRIKE_DICE: Readonly<Record<CunningStrike, number>> = {
+  poison: 1,
+  trip: 1,
+  withdraw: 1,
+  daze: 2,
+  knock_out: 6,
+  obscure: 3,
+};
+
 export const RollWhatSchema = z
   .discriminatedUnion("type", [
     z.object({
@@ -555,7 +601,7 @@ export const RollWhatSchema = z
       light_extra: z.boolean().optional(),
       cleave: z.boolean().optional(),
       /** Cunning Strike effects, paid with Sneak Attack dice (needs the `sneak-attack` rider). */
-      cunning: z.array(z.enum(["poison", "trip", "withdraw"])).optional(),
+      cunning: z.array(z.enum(CUNNING_STRIKES)).optional(),
       /** Brutal Strike effects: Advantage forgone while Reckless, for 1d10 and an effect. */
       brutal: z.array(z.enum(["forceful", "hamstring", "staggering", "sundering"])).optional(),
       /** The GM's additions to this attack (`DmOptions`). */
@@ -679,7 +725,7 @@ const AttackActionSchema = z.object({
   /** The target's cover from this attack: +2 or +5 AC; Total Cover can't be targeted. */
   cover: z.enum(["half", "three_quarters", "total"]).optional(),
   /** Cunning Strike effects, paid with Sneak Attack dice (needs the `sneak-attack` rider). */
-  cunning: z.array(z.enum(["poison", "trip", "withdraw"])).optional(),
+  cunning: z.array(z.enum(CUNNING_STRIKES)).optional(),
   /** Brutal Strike effects: Advantage forgone while Reckless, for 1d10 and an effect. */
   brutal: z.array(z.enum(["forceful", "hamstring", "staggering", "sundering"])).optional(),
 });
@@ -816,7 +862,15 @@ export const EncounterActionSchema = z
       decisions: z.enum(["ask", "auto"]).optional(),
     }),
     /** Answer the pending decision. */
-    z.object({ type: z.literal("decide"), use: z.boolean() }),
+    /**
+     * The answer to `encounter.pending`; kenli F-002 T12 B2b: for a choice of dice (Empowered
+     * Spell), `use: true` with `dice` (indexes into `pending.dice`), or `use: false` to keep them.
+     */
+    z.object({
+      type: z.literal("decide"),
+      use: z.boolean(),
+      dice: z.array(z.int().min(0)).optional(),
+    }),
     /** Change who decides: one combatant's mode (`null`: the encounter's), or the encounter's. */
     z.object({
       type: z.literal("set_decisions"),

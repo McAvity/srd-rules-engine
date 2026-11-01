@@ -199,7 +199,8 @@ export interface Decision {
     | "hit_on_miss"
     | "tactical_mind"
     | "guarded_mind"
-    | "savage_attacker";
+    | "savage_attacker"
+    | "empowered_spell";
   /** Who decides. */
   readonly combatant: Combatant;
   /** The question for the table, with the roll: "Brakka: Dexterity saving throw 7 vs 15…". */

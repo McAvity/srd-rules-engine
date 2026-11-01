@@ -10,7 +10,13 @@ import { type Catalog, lookup } from "../content/catalog";
 import type { CharacterBuild } from "../models/build";
 import type { RollResult } from "../models/combat";
 import type { Ability, MonsterDef, SpellDef } from "../models/content";
-import type { DmOptions, RollCost, RollWhat } from "../models/encounter";
+import {
+  CUNNING_STRIKE_DICE,
+  type CunningStrike,
+  type DmOptions,
+  type RollCost,
+  type RollWhat,
+} from "../models/encounter";
 import type { Message } from "../models/messages";
 import type { OptionReason } from "../models/options";
 import type { CharacterState, PlayAction } from "../models/state";
@@ -673,7 +679,18 @@ export function strikeDice(
     ) {
       fail(message("refusal.cunning_strike_poison_needs", { name }));
     }
-    out.forgo.push({ rider: "sneak-attack", dice: cunning.length });
+    // kenli F-002 T12 B2b: Devious Strikes' effects (Rogue 14) and each effect's die cost; the
+    // Sneak Attack dice are removed before rolling (more than it has: `rule.dice_forgo`).
+    const devious: readonly string[] = ["daze", "knock_out", "obscure"];
+    if (cunning.some((x) => devious.includes(x)) && !sheet.rules.includes("devious_strikes"))
+      fail(message("refusal.devious_strikes_needed", { name }));
+    const dice = cunning.reduce(
+      (n, x) =>
+        n +
+        (CUNNING_STRIKE_DICE[x as CunningStrike] ?? fail(message("refusal.each_effect_used_once"))),
+      0,
+    );
+    out.forgo.push({ rider: "sneak-attack", dice });
   }
   if (brutal.length) {
     if (!sheet.rules.includes("brutal_strike"))

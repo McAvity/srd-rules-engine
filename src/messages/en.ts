@@ -980,6 +980,21 @@ export const MESSAGES_EN = {
   "unarmed.shove":
     "Shove, DC {dc}: the target makes a Strength or Dexterity saving throw (its choice) or you push it 5 feet away or knock it Prone. Only a creature at most one size larger than you.",
   "roll.initiative": "Initiative",
+  "refusal.empowered_needs_damage": "{option}: {spell} rolls no damage",
+  "refusal.empowered_used": "{option}: already used on this spell",
+  "refusal.no_empowered": "{name} has no Empowered Spell",
+  "refusal.reroll_too_many": "{label}: at most {max} dice",
+  "refusal.reroll_die_twice": "{label}: each die once",
+  "refusal.empowered_pick_dice": "Choose up to {max} damage dice to reroll, or keep the roll",
+  "decision.empowered_spell":
+    "{name}: {option} on {spell}'s damage ({dice}; total {total})? Reroll up to {max} of its dice for {cost} {use}, or keep it",
+  "empowered.rerolled": "{option}: dice rerolled ({dice}), damage {from} → {total}",
+  "refusal.devious_strikes_needed":
+    "Daze, Knock Out and Obscure come with Devious Strikes (Rogue level 14): {name} doesn't have it",
+  "refusal.dazed_one": "{name} is Dazed: only one of moving, an action or a Bonus Action this turn",
+  "cunning.dazed":
+    "{name} is Dazed: on its next turn, only one of moving, an action or a Bonus Action",
+  "label.cost_sneak_dice": "{count}d6 of Sneak Attack",
 } as const;
 
 export type MessageCode = keyof typeof MESSAGES_EN;

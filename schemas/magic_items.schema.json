@@ -1419,6 +1419,7 @@
               "great_weapon_fighting",
               "cunning_strike",
               "improved_cunning_strike",
+              "devious_strikes",
               "brutal_strike",
               "improved_brutal_strike",
               "relentless_rage"
@@ -2579,7 +2580,8 @@
                       "quickened",
                       "subtle",
                       "heightened",
-                      "careful"
+                      "careful",
+                      "empowered"
                     ]
                   },
                   {

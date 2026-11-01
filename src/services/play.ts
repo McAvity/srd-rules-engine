@@ -36,11 +36,13 @@ import {
   rollD20Test,
 } from "../rules/combatant";
 import { coinsFor, formatCp, pay, priceInCp, purseValue } from "../rules/currency";
+import type { RolledDamage } from "../rules/damage";
 import { type Defenses, isBloodied, rollDamage, takeDamage } from "../rules/damage";
 import { roll } from "../rules/dice";
 import { spaceForSize } from "../rules/grid";
-import { message, texts, toMessage } from "../rules/messages";
-import { addBonusDie } from "../rules/rerolls";
+import { message, RuleError, texts, toMessage } from "../rules/messages";
+import { empowerDamage } from "../rules/metamagic";
+import { addBonusDie, type DamageDie } from "../rules/rerolls";
 import { mathRng, type Rng } from "../rules/rng";
 import {
   type CarriedItem,
@@ -1907,6 +1909,44 @@ function pounds(weight: string): number | null {
   const m = /^(\d+)?(½|\s*1\/2)?(?:\s*lb)?/.exec(weight.trim());
   if (!m || (!m[1] && !m[2])) return null;
   return Number(m[1] ?? 0) + (m[2] ? 0.5 : 0);
+}
+
+/**
+ * kenli F-002 T12 B2b, Empowered Spell on a spell rolled by hand, after its damage: `rolls` are
+ * the damage rolls of that one cast (a beam's each, or the one roll), `roll` the one whose `dice`
+ * are rerolled. Refused (nothing rolled or spent) without the option, for a spell the sheet doesn't
+ * cast, once it was used on any roll of this cast, for no or a non-damage roll, too many, repeated
+ * or unknown dice, or without the Sorcery Point. Otherwise the new rolls are kept and the option's
+ * cost is paid once (one `use`).
+ */
+export function useEmpoweredSpell(
+  build: CharacterBuild,
+  state: CharacterState,
+  catalog: Catalog,
+  rolls: readonly (RolledDamage | null)[],
+  pick: { readonly roll: number; readonly dice: readonly DamageDie[] },
+  options: { readonly spell: string; readonly rng?: Rng },
+): { damage: RolledDamage; state: CharacterState; messages: Message[] } {
+  const rng = options.rng ?? mathRng;
+  const sheet = computePlaySheet(build, state, catalog);
+  const name = build.name || "?";
+  const option = sheet.cast_options.find((o) => o.effect === "empowered");
+  if (!option) throw new PlayError([message("refusal.no_empowered", { name })]);
+  const spell = sheet.spells.find((x) => x.id === options.spell);
+  if (!spell) throw new PlayError([message("refusal.cant_cast", { name, spell: options.spell })]);
+  if (rolls.some((r) => r?.rerolled?.source === option.key))
+    throw new PlayError([message("refusal.empowered_used", { option: option.name })]);
+  const damage = Number.isInteger(pick.roll) ? rolls[pick.roll] : undefined;
+  if (!damage) throw new PlayError([message("refusal.reroll_die_unknown")]);
+  let r: ReturnType<typeof empowerDamage>;
+  try {
+    r = empowerDamage(option, sheet.modifiers.cha, damage, pick.dice, { rng });
+  } catch (error) {
+    if (error instanceof RuleError) throw new PlayError([error.detail]);
+    throw error;
+  }
+  const paid = applyAction(build, state, catalog, r.cost);
+  return { damage: r.damage, state: paid.state, messages: [r.message] };
 }
 
 /**

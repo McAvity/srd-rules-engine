@@ -7,6 +7,19 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — kenli F-002 T12 batch B2b (optional values; SRD bytes and older documents unchanged)
+- Cast option effect `empowered` (Empowered Spell after the damage roll): `planCastOptions` asks for
+  it (`CastOptionPlan.empowered`) without paying it; `castSpell`'s `empower` hook on each damage roll;
+  an encounter cast that names it stops at the damage for the choice (`Pending.kind: empowered_spell`,
+  `Pending.dice`/`max_dice`, `answers` may hold dice indexes, `decide.dice`), same dice on replay, the
+  Sorcery Point paid once and only when used; `useEmpoweredSpell` for a roll by hand;
+  `rerollDamageDice`, `damageDice`, `RolledDamage.rerolled`. Refusals `refusal.empowered_*`,
+  `refusal.reroll_too_many`, `refusal.reroll_die_twice`.
+- Feature rule `devious_strikes`; Cunning Strike effects `daze`, `knock_out`, `obscure` with their
+  die costs (`CUNNING_STRIKE_DICE`), the Sneak Attack dice forgone are their sum; mark `dazed`
+  (only one of moving, an action or a Bonus Action that turn: `refusal.dazed_one`).
+- Fixed: Brutal Strike once per turn (its chosen roll, hit or miss).
+
 ### Added — kenli F-002 T12 batch A corrections (review14 R14-01–04; all optional, SRD bytes unchanged)
 - Encounter `cast.payment: {type: "free", use}`: a free or at-will cast in an encounter (no slot;
   the free cast's use spent once, none at will; its own level and spellcasting; no cast trigger);

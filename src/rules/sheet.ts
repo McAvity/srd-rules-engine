@@ -415,7 +415,16 @@ export interface CastOptionLine {
   /** The limited use it spends (`sorcerer:sorcery-points`). */
   readonly uses: string;
   readonly combinable: boolean;
-  readonly effect: "distant" | "quickened" | "subtle" | "heightened" | "careful" | null;
+  readonly effect:
+    | "distant"
+    | "quickened"
+    | "subtle"
+    | "heightened"
+    | "careful"
+    | "empowered"
+    | null;
+  /** kenli F-002 T12 B2b, `empowered`: how many dice of one damage roll it rerolls (CHA, min 1). */
+  readonly reroll_dice?: number;
 }
 
 /** kenli F-002 T12 B2a: a toggle switched on by spending another resource (Sorcery Incarnate). */
@@ -1098,6 +1107,8 @@ export function computeSheet(
       uses: `${o.resource_class}:${o.resource}`,
       combinable: o.combinable,
       effect: o.effect,
+      // kenli F-002 T12 B2b: Empowered Spell's dice: the Charisma modifier, minimum one.
+      ...(o.effect === "empowered" ? { reroll_dice: Math.max(1, mod.cha) } : {}),
     })),
   );
   const cast_option_limit = Math.max(

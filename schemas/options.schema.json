@@ -4545,6 +4545,14 @@
             },
             "use": {
               "type": "boolean"
+            },
+            "dice": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
             }
           },
           "required": [
@@ -5771,7 +5779,10 @@
                         "enum": [
                           "poison",
                           "trip",
-                          "withdraw"
+                          "withdraw",
+                          "daze",
+                          "knock_out",
+                          "obscure"
                         ]
                       }
                     },
@@ -6450,7 +6461,10 @@
                 "enum": [
                   "poison",
                   "trip",
-                  "withdraw"
+                  "withdraw",
+                  "daze",
+                  "knock_out",
+                  "obscure"
                 ]
               }
             },
@@ -8213,7 +8227,10 @@
                 "enum": [
                   "poison",
                   "trip",
-                  "withdraw"
+                  "withdraw",
+                  "daze",
+                  "knock_out",
+                  "obscure"
                 ]
               }
             },

@@ -94,6 +94,12 @@ export interface CastOptions {
    * where a success would halve it (`succeed`, Careful Spell). The reasons are messages.
    */
   save_overrides?: readonly SaveOverride[];
+  /**
+   * kenli F-002 T12 B2b (Empowered Spell): called with each damage roll of the spell as it's made
+   * (one roll shared by an area's targets; a beam's own), before anything is resolved from it;
+   * returns the roll to use (the same, or with dice rerolled). Not for a roll by hand.
+   */
+  empower?: (damage: RolledDamage) => RolledDamage;
 }
 
 export interface SpellAttackRoll {
@@ -256,6 +262,7 @@ function castSpellOnce(
     extra_damage = [],
     damage_modifiers,
     save_overrides = [],
+    empower = (d) => d,
   }: CastOptions = {},
 ): SpellCastResult {
   // Armor without training: "you can't cast spells" (SRD "Armor Training").
@@ -499,7 +506,7 @@ function castSpellOnce(
   const results: SpellTargetResult[] = [];
   let shared: RolledDamage | null = null;
   const sharedDamage = () => {
-    shared ??= parts.length && targets.length ? rollDamage(partsFor(true), { rng }) : null;
+    shared ??= parts.length && targets.length ? empower(rollDamage(partsFor(true), { rng })) : null;
     return shared;
   };
 
@@ -537,7 +544,7 @@ function castSpellOnce(
       };
       const rolled =
         (hit || potent) && parts.length
-          ? rollDamage(partsFor(beam === 0), { critical: critical_hit, rng })
+          ? empower(rollDamage(partsFor(beam === 0), { critical: critical_hit, rng }))
           : null;
       let instances = rolled ? toInstances(rolled) : [];
       if (!hit) instances = instances.map((d) => ({ ...d, amount: Math.floor(d.amount / 2) }));
@@ -560,13 +567,14 @@ function castSpellOnce(
       decide,
       potent,
       save_overrides,
+      empower,
     );
     shared = resolved.damage;
     results.push(...resolved.targets);
   } else if (projectiles) {
     // Darts that hit automatically: one roll for all of them, a feature's `one_roll` bonus on
     // the first dart only.
-    shared = parts.length && targets.length ? rollDamage(parts, { rng }) : null;
+    shared = parts.length && targets.length ? empower(rollDamage(parts, { rng })) : null;
     for (const [dart, index] of aimed.entries()) {
       const add = extra(dart === 0);
       const instances = shared
@@ -576,7 +584,7 @@ function castSpellOnce(
     }
   } else {
     if (critical && parts.length && targets.length) {
-      shared = rollDamage(partsFor(true), { critical: true, rng });
+      shared = empower(rollDamage(partsFor(true), { critical: true, rng }));
     }
     const rolled = sharedDamage();
     for (const [i, target] of targets.entries()) {
@@ -601,6 +609,7 @@ function castSpellOnce(
       decide,
       false,
       save_overrides,
+      empower,
     );
     follow_up = { ability: f.save.ability, dc, damage: resolved.damage, targets: resolved.targets };
   }
@@ -756,6 +765,7 @@ function resolveSave(
   decide: Decide,
   potent = false,
   overrides: readonly SaveOverride[] = [],
+  empower: (damage: RolledDamage) => RolledDamage = (d) => d,
 ): { damage: RolledDamage | null; targets: SpellTargetResult[] } {
   const saves = targets.map((t, i): SaveResult => {
     const o = overrides.find((x) => x.target === i);
@@ -781,7 +791,7 @@ function resolveSave(
     const modes = o?.disadvantage ? [modeReason("disadvantage", o.disadvantage)] : [];
     return rollSavingThrow(t, effect.ability, effect.dc, { rng, decide, modes });
   });
-  const damage = parts.length && targets.length ? rollDamage(parts, { rng }) : null;
+  const damage = parts.length && targets.length ? empower(rollDamage(parts, { rng })) : null;
   const results = targets.map((target, i) => {
     const save = saves[i] as SaveResult;
     let instances = damage ? toInstances(damage) : [];

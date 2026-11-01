@@ -384,6 +384,12 @@ export const FEATURE_RULES = [
   "great_weapon_fighting",
   "cunning_strike",
   "improved_cunning_strike",
+  /**
+   * kenli F-002 T12 B2b: Devious Strikes (SRD Rogue 14), Daze (2d6), Knock Out (6d6) and Obscure
+   * (3d6) among the Cunning Strike effects. Optional: content that names it (a private pack's
+   * patch of the Rogue's level 14 feature); absent, those effects are refused.
+   */
+  "devious_strikes",
   "brutal_strike",
   "improved_brutal_strike",
   "relentless_rage",
@@ -834,6 +840,9 @@ export type Companion = z.infer<typeof CompanionSchema>;
  * (Metamagic: `cost` Sorcery Points of `resource_class:resource`). One per spell unless
  * `combinable` (Empowered Spell); `effect` the change the engine states with the cast (`distant`:
  * range doubled, Touch → 30 feet; `quickened`: a Bonus Action). Optional, absent from older content.
+ * kenli F-002 T12 B2b: `empowered` is used after the damage is rolled, not paid with the cast: up to
+ * the Charisma modifier (minimum 1) of that damage roll's dice rerolled, the new rolls kept, its
+ * `cost` paid then (a cast that names it only asks for that choice).
  */
 export const CastOptionSchema = z.strictObject({
   id: z.string(),
@@ -843,7 +852,7 @@ export const CastOptionSchema = z.strictObject({
   resource: z.string(),
   combinable: z.boolean().default(false),
   effect: z
-    .enum(["distant", "quickened", "subtle", "heightened", "careful"])
+    .enum(["distant", "quickened", "subtle", "heightened", "careful", "empowered"])
     .nullable()
     .default(null),
 });
