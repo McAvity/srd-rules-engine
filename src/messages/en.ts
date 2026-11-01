@@ -112,7 +112,7 @@ export const MESSAGES_EN = {
     "Cunning Strike (Withdraw): {name} can move {feet} feet without provoking Opportunity Attacks.",
   "cunning.too_large": "Cunning Strike (Trip): {name} is too large to trip.",
   "cunning.save":
-    "Cunning Strike ({effect, select, poison {Poison} other {Trip}}): {name} {success, select, true {succeeds} other {fails}} ({save}).",
+    "Cunning Strike ({effect, select, poison {Poison} daze {Daze} knock_out {Knock Out} obscure {Obscure} other {Trip}}): {name} {success, select, true {succeeds} other {fails}} ({save}).",
   "brutal.sundered_bonus": "Sundering Blow: +5 to {name}'s attack roll against {target}.",
   "brutal.forceful":
     "Forceful Blow: {target} is pushed 15 feet straight away; {name} can move up to half its Speed toward it without provoking Opportunity Attacks.",

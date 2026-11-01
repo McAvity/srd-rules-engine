@@ -426,6 +426,8 @@ describe("B2b Cunning Strike: die costs, Improved (11) and Devious Strikes (14)"
     const r = k.act(stab(["knock_out"]), [18, 4, 6, 2]);
     expect(sneakDice(r)).toEqual(["1d4", "1d6"]);
     expect(k.ogre()?.conditions).toContain("unconscious");
+    // The note names the effect (not Trip).
+    expect(r.notes.some((n) => n.startsWith("Cunning Strike (Knock Out): Ogre fails"))).toBe(true);
     const effect = k
       .enc()
       .effects.find((x) => x.target === "ogre" && x.condition === "unconscious");
@@ -436,6 +438,7 @@ describe("B2b Cunning Strike: die costs, Improved (11) and Devious Strikes (14)"
     const ro = o.act(stab(["obscure"]), [18, 4, 6, 6, 6, 6, 2]);
     expect(sneakDice(ro)).toEqual(["1d4", "4d6"]);
     expect(o.ogre()?.conditions).toContain("blinded");
+    expect(ro.notes.some((n) => n.startsWith("Cunning Strike (Obscure): Ogre fails"))).toBe(true);
     expect(o.enc().effects.find((x) => x.condition === "blinded")?.ends).toMatchObject({
       at: "end",
       of: "ogre",
