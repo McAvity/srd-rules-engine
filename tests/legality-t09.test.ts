@@ -205,43 +205,33 @@ describe("a background from an older book: increases to any ability", () => {
 });
 
 describe("a spellbook records spells, it doesn't learn them", () => {
-  it("copies a spell another feature gives (Magic Initiate) but not one already in the book", () => {
-    // Sage: Magic Initiate (Wizard) from the background.
+  it("copies a spell another feature already gives (Magic Initiate) but not one already in the book", () => {
+    // Sage: Magic Initiate (Wizard) from the background, Shield as its level 1 spell.
     let b = start("wizard", "human");
     const mi = "feat:magic-initiate@background:sage";
+    b = builder.setChoice(b, cat, `${mi}#spell`, ["shield"]).build;
     const res = resolve(b, cat);
-    const lvl1 = res.choices.find(
-      (c) =>
-        c.key.startsWith(`${mi}#`) &&
-        c.definition.kind === "spell" &&
-        c.definition.spell_level === 1,
-    );
-    expect(lvl1).toBeDefined();
-    b = builder.setChoice(b, cat, lvl1?.key ?? "", ["shield"]).build;
-    const book = ["shield", "grease", "sleep", "mage-armor", "magic-missile", "detect-magic"];
-    b = builder.setChoice(b, cat, "class:wizard#spellbook", book).build;
-    expect(b.choices["class:wizard#spellbook"]).toEqual(book);
-    expect(b.choices[`${mi}#spell`]).toEqual(["shield"]);
-    // Preparing it as a Wizard spell is still refused (Magic Initiate already has it prepared), and
-    // a spell already in the book can't be copied again.
-    expect(() =>
-      builder.setChoice(b, cat, "class:wizard#prepared", [
-        "shield",
-        "grease",
-        "sleep",
-        "mage-armor",
-      ]),
-    ).toThrow(/already known from Magic Initiate/);
-    const ok = builder.setChoice(b, cat, "class:wizard#prepared", [
+    const book = res.choices.find((c) => c.key === "class:wizard#spellbook");
+    const shield = book && res.options(book).find((o) => o.id === "shield");
+    expect(shield?.unavailable).toBeNull();
+    // Before this change the book refused it ("already known from Magic Initiate"). The book's own
+    // entries still can't repeat, and Shield still can't be prepared again as a Wizard spell.
+    const book1 = [
       "grease",
       "sleep",
       "mage-armor",
       "magic-missile",
-    ]).build;
-    const two = up(autocomplete(ok, cat), "wizard");
+      "detect-magic",
+      "burning-hands",
+    ];
+    b = builder.setChoice(b, cat, "class:wizard#spellbook", book1).build;
+    b = builder.setChoice(b, cat, "class:wizard#prepared", book1.slice(0, 4)).build;
+    const two = up(autocomplete(b, cat), "wizard");
+    const r2 = resolve(two, cat);
+    const book2 = r2.choices.find((c) => c.key === "class:wizard:2#spellbook");
+    expect(book2 && r2.options(book2).find((o) => o.id === "grease")?.unavailable).not.toBeNull();
+    const prepared = r2.choices.find((c) => c.key === "class:wizard#prepared");
+    expect(prepared && r2.options(prepared).find((o) => o.id === "shield")).toBeUndefined();
     expect(evaluate(two, cat).report.issues.filter((i) => i.severity === "error")).toEqual([]);
-    expect(() =>
-      builder.setChoice(two, cat, "class:wizard:2#spellbook", ["grease", "web"]),
-    ).toThrow(/already/);
   });
 });

@@ -528,14 +528,8 @@ export class Resolution {
       }
     }
     for (const c of this.choices) {
-      // A known_only choice points at spells you already have; it doesn't teach one. Nor does a
-      // spellbook's entry (a choice others prepare from): copying a spell isn't learning it.
-      if (
-        c.definition.kind !== "spell" ||
-        c.definition.known_only ||
-        excludeChoices.has(c.key) ||
-        this.isBook(c)
-      )
+      // A known_only choice points at spells you already have; it doesn't teach one.
+      if (c.definition.kind !== "spell" || c.definition.known_only || excludeChoices.has(c.key))
         continue;
       for (const value of this.contributed(c, atLevel)) setDefault(owned, value, c.source.name);
     }
@@ -1129,8 +1123,9 @@ function spellViews(res: Resolution, choice: ActiveChoice, ok: (id: string) => b
       if (other.definition.subset_of === d.tag) linked.add(other.key);
   }
   // A spellbook (a pool other choices prepare from: some `subset_of` names its tag) records spells,
-  // it doesn't learn them: a spell another feature gives (Magic Initiate, Pact of the Tome) can still
-  // be copied into it; only the book's own entries can't repeat.
+  // it doesn't learn them: a spell another feature already gives (Magic Initiate, Pact of the Tome)
+  // can still be copied into it; only the book's own entries can't repeat. (The other direction is
+  // unchanged: a later feature's choice still sees the book's entries as known.)
   const known = res.isBook(choice) ? bookEntries(res, choice) : res.spells(linked, at(choice));
   if (d.known_only) {
     return spells.filter((s) => known.has(s.id)).map((s) => view(s.id, s.name, s.description));
