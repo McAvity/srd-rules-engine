@@ -935,6 +935,13 @@ export const MESSAGES_EN = {
   "cast.slot_kept": "{feature}: {die} rolled {rolled}, the level {level} slot isn't expended",
   "cast.slot_not_kept": "{feature}: {die} rolled {rolled}, the level {level} slot is expended",
   "initiative.regained": "{name}: {use} back to {left} ({feature})",
+  "refusal.after_roll_kind": "{feature} is used on a failed ability check or attack roll only",
+  "refusal.after_roll_needs_dc": "{feature}: give the DC or AC the roll failed against",
+  "refusal.after_roll_not_failed": "{feature}: the roll didn't fail",
+  "after_roll.succeeds":
+    "{feature}: {die} rolled {rolled}, total {total} against {dc}: it succeeds, one use spent",
+  "after_roll.still_fails":
+    "{feature}: {die} rolled {rolled}, total {total} against {dc}: it still fails, nothing spent",
   "cast.at_will": "{spell} cast at will with {use}: no spell slot, nothing spent",
   "unarmed.grapple":
     "Grapple, DC {dc}: the target makes a Strength or Dexterity saving throw (its choice) or has the Grappled condition. Only a creature at most one size larger than you, with a hand of yours free.",

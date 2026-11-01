@@ -305,3 +305,14 @@ export function setCritical(attack: AttackDice, critical: boolean, dice: Critica
     damage: attack.damage ? recritical(attack.damage, critical, dice) : null,
   };
 }
+
+/**
+ * kenli F-002 T12 (R14-01): a die added to a roll after it's made (Peerless Skill's Bardic
+ * Inspiration die), as one more bonus die: its total, Critical Hit and success worked out again
+ * from the result's own `resolution`. Nothing is spent here.
+ */
+export function addBonusDie<T extends Rolled>(r: T, die: RolledBonusDie): T {
+  const withDie = { ...r, bonus_dice: [...r.bonus_dice, die] } as T;
+  const { rolls, mode, kept } = r.roll;
+  return settle(withDie, { rolls, mode, kept }, r.resolution, { values: [] });
+}

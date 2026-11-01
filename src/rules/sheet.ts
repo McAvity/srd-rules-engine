@@ -187,6 +187,11 @@ export interface FeatureActionLine {
   readonly restores_per_slot_level?: number;
   /** Temporary Hit Points it gives when used, at this class level (Wild Shape). */
   readonly temp_hp?: number;
+  /** kenli F-002 T12 (R14-01): used on a failed roll of these kinds (`useAfterFailedRoll`). */
+  readonly after_failed_roll?: {
+    readonly kinds: readonly ("check" | "attack")[];
+    readonly spend: "on_success";
+  };
   /** It takes one of the known forms (`use_feature`'s `form`): the class's choice id. */
   readonly shape?: {
     readonly choice: string;
@@ -1267,6 +1272,7 @@ export function computeSheet(
               ? { restores_per_slot_level: a.restores_per_slot_level }
               : {}),
             ...(a.temp_hp ? { temp_hp: a.temp_hp.per_class_level * classLevel } : {}),
+            ...(a.after_failed_roll ? { after_failed_roll: a.after_failed_roll } : {}),
             ...(a.shape
               ? {
                   shape: {

@@ -386,6 +386,39 @@
                   }
                 ]
               },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "uses": {
                 "default": null,
                 "anyOf": [
@@ -968,6 +1001,39 @@
                     "type": "null"
                   }
                 ]
+              },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "uses": {
                 "default": null,
@@ -1552,6 +1618,39 @@
                   }
                 ]
               },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "uses": {
                 "default": null,
                 "anyOf": [
@@ -2134,6 +2233,39 @@
                     "type": "null"
                   }
                 ]
+              },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "uses": {
                 "default": null,
@@ -2718,6 +2850,39 @@
                   }
                 ]
               },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "uses": {
                 "default": null,
                 "anyOf": [
@@ -3301,6 +3466,39 @@
                   }
                 ]
               },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "uses": {
                 "default": null,
                 "anyOf": [
@@ -3883,6 +4081,39 @@
                     "type": "null"
                   }
                 ]
+              },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "uses": {
                 "default": null,
@@ -5809,6 +6040,23 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "payment": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "free"
+                        },
+                        "use": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "use"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -6535,6 +6783,23 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "payment": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "free"
+                },
+                "use": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "use"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [

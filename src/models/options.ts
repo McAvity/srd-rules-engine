@@ -125,6 +125,21 @@ export const OptionEntrySchema = z.object({
   slot_levels: z.array(z.int()).default([]),
   /** A spell: the level of a Pact Magic slot it can use now (`pact: true`), if any. */
   pact_slot: z.int().nullable().default(null),
+  /**
+   * kenli F-002 T12 (R14-02): a character's spell: its free casts (`cast.payment: {type: "free",
+   * use}`), with what's left; absent when it has none.
+   */
+  free_casts: z
+    .array(
+      z.object({
+        use: z.string(),
+        name: z.string(),
+        at_will: z.boolean(),
+        left: z.int(),
+        available: z.boolean(),
+      }),
+    )
+    .optional(),
   /** Limited uses left (a feature's, a monster's daily uses, legendary uses this round). */
   uses: z.object({ left: z.int(), max: z.int() }).nullable().default(null),
   /**

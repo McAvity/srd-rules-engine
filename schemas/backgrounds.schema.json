@@ -1302,6 +1302,33 @@
                 ],
                 "additionalProperties": false
               },
+              "after_failed_roll": {
+                "type": "object",
+                "properties": {
+                  "kinds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "check",
+                        "attack"
+                      ]
+                    }
+                  },
+                  "spend": {
+                    "type": "string",
+                    "enum": [
+                      "on_success"
+                    ]
+                  }
+                },
+                "required": [
+                  "kinds",
+                  "spend"
+                ],
+                "additionalProperties": false
+              },
               "shape": {
                 "type": "object",
                 "properties": {

@@ -535,25 +535,45 @@ export function combatantOptions(
     const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
     const play = sheet.play;
     for (const known of sheet.spells) {
-      const spell = lookup((ref.catalog ?? ctx.catalog).spells, known.id);
-      if (!spell) continue;
+      const def = lookup((ref.catalog ?? ctx.catalog).spells, known.id);
+      if (!def) continue;
+      // kenli F-002 T12 (R14-03): targets within the range this character casts it with.
+      const spell = known.range ? { ...def, range: known.range } : def;
       const cantrip = spell.level === 0;
-      const { slot_levels, pact_slot } = spellSlots(spell.level, play);
+      // kenli F-002 T12 (R14-02): a line cast only through a free cast has no slot.
+      const { slot_levels, pact_slot } = known.slots.length
+        ? spellSlots(spell.level, play)
+        : { slot_levels: [] as number[], pact_slot: null };
+      const free = known.free.map((f) => ({
+        use: f.use,
+        name: f.name,
+        at_will: f.at_will,
+        left: f.left,
+        available: f.available,
+      }));
       const targets = spellTargets(spell);
+      const firstFree = free.find((f) => f.available) ?? free[0];
       const slot = cantrip
         ? {}
         : slot_levels[0] !== undefined
           ? { slot_level: slot_levels[0] }
           : pact_slot !== null
             ? { slot_level: pact_slot, pact: true }
-            : { slot_level: spell.level };
+            : firstFree
+              ? { payment: { type: "free" as const, use: firstFree.use } }
+              : { slot_level: spell.level };
       spells.push(
         entry(
           { type: "cast", id: c.id, spell: spell.id, targets: spellAim(targets), ...slot },
           spellLabel(spell),
           spellCost(spell),
           targets,
-          { slot_levels: [...slot_levels], pact_slot, ...noted(spellNote(spell)) },
+          {
+            slot_levels: [...slot_levels],
+            pact_slot,
+            ...(free.length ? { free_casts: free } : {}),
+            ...noted(spellNote(spell)),
+          },
         ),
       );
     }

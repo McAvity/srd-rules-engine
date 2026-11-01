@@ -796,6 +796,22 @@
                                 "mode"
                               ]
                             }
+                          },
+                          "payment": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "free"
+                              },
+                              "use": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "use"
+                            ]
                           }
                         },
                         "required": [
@@ -3610,6 +3626,22 @@
                           "mode"
                         ]
                       }
+                    },
+                    "payment": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "free"
+                        },
+                        "use": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "use"
+                      ]
                     }
                   },
                   "required": [
@@ -4312,6 +4344,22 @@
                   "mode"
                 ]
               }
+            },
+            "payment": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "free"
+                },
+                "use": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "use"
+              ]
             }
           },
           "required": [

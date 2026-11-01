@@ -12,6 +12,8 @@ import {
   ABILITIES,
   type ArmorDef,
   ArmorSchema,
+  type AutomationDef,
+  AutomationSchema,
   type BackgroundDef,
   BackgroundSchema,
   type ClassDef,
@@ -77,6 +79,11 @@ export interface Catalog {
   readonly conditions: Table<ConditionDef>;
   /** Monster and animal stat blocks. */
   readonly monsters: Table<MonsterDef>;
+  /**
+   * kenli F-002 T12: packs' play automation for features a character already has, in load order
+   * (sources filtered like entities). Empty without such a pack.
+   */
+  readonly automation: readonly AutomationDef[];
   /** The loaded packs, in load order (a pack without `pack.yaml` gets a minimal manifest). */
   readonly packs: readonly PackManifest[];
 }
@@ -109,6 +116,11 @@ export interface ContentPack {
   magic_items?: unknown[];
   conditions?: unknown[];
   monsters?: unknown[];
+  /**
+   * kenli F-002 T12: play automation for features a character already has (`AutomationDef`), a
+   * pack-level list like `patches` (not a table): kept by `splitPack` in the manifest.
+   */
+  automation?: unknown[];
 }
 
 export const TABLE_SCHEMAS = {
@@ -233,6 +245,7 @@ export function createCatalog(...args: unknown[]): Catalog {
   const errors: string[] = [];
   let creation: CreationRules | undefined;
   const manifests: PackManifest[] = [];
+  const automation: AutomationDef[] = [];
   const tables = Object.fromEntries(TABLE_NAMES.map((t) => [t, {}])) as Record<
     TableName,
     Record<string, unknown>
@@ -289,6 +302,16 @@ export function createCatalog(...args: unknown[]): Catalog {
         if (enabled(parsed.source)) tables[table][parsed.id] = parsed;
       });
     }
+    (pack.automation ?? []).forEach((entry, j) => {
+      const where = `${packName}/automation[${j}]`;
+      const parsed = parse(AutomationSchema, withSource(entry), where, errors);
+      if (!parsed) return;
+      if (automation.some((a) => a.id === parsed.id)) {
+        errors.push(`${where}: duplicate automation id '${parsed.id}'`);
+        return;
+      }
+      if (enabled(parsed.source)) automation.push(parsed);
+    });
     (pack.patches ?? []).forEach((entry, j) => {
       const where = `${packName}/patches[${j}]`;
       const patch = parse(PatchSchema, entry, where, errors);
@@ -332,6 +355,7 @@ export function createCatalog(...args: unknown[]): Catalog {
   const catalog = Object.freeze({
     creation: deepFreeze(creation),
     ...loaded,
+    automation: deepFreeze(automation),
     packs: deepFreeze(manifests),
   } as unknown as Catalog);
   validateReferences(catalog);

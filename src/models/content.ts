@@ -475,6 +475,17 @@ export const FeatureActionSchema = z.strictObject({
    */
   temp_hp: z.strictObject({ per_class_level: z.int().min(1) }).optional(),
   /**
+   * kenli F-002 T12 (R14-01): used on a roll that failed (Peerless Skill: an ability check or an
+   * attack roll, never a save): its die is added to that roll; with `spend: on_success` the use is
+   * spent only if the roll then succeeds (otherwise it isn't expended). `useAfterFailedRoll`. Optional.
+   */
+  after_failed_roll: z
+    .strictObject({
+      kinds: z.array(z.enum(["check", "attack"])).min(1),
+      spend: z.enum(["on_success"]),
+    })
+    .optional(),
+  /**
    * Taking a form (Wild Shape): `use_feature` takes the `form`, one of the picks of the class's
    * choice `choice` (known forms), within its CR/Fly limits now; the play state keeps it until
    * `end_shape` or a Long Rest. Optional.
@@ -1219,6 +1230,34 @@ export const SubclassSchema = z.strictObject({
   features: z.record(z.string().regex(/^([1-9]|1[0-9]|20)$/), GrantsSchema).default({}),
 });
 export type SubclassDef = z.infer<typeof SubclassSchema>;
+
+/**
+ * kenli F-002 T12 (R14-04, decision07): play automation a pack adds for features the character
+ * already has, without changing their definitions: `grants` (ordinary grants: actions,
+ * `initiative_regain`, `slot_refund`…) become a source of the character only while `when` holds —
+ * a class at `class_level` or higher, a subclass chosen (with its class at `class_level`), or a
+ * feat taken. Uses it names are the class's (`class`, or the subclass's class); with `feat` only,
+ * the feat's. A pack's own table (`automation`); nothing in it is a choice.
+ */
+export const AutomationSchema = z
+  .strictObject({
+    ...entity,
+    when: z
+      .strictObject({
+        class: z.string().optional(),
+        subclass: z.string().optional(),
+        class_level: z.int().min(1).max(20).optional(),
+        feat: z.string().optional(),
+      })
+      .refine((w) => w.class !== undefined || w.subclass !== undefined || w.feat !== undefined, {
+        message: "an automation names a class, a subclass or a feat",
+      }),
+    grants: GrantsSchema,
+  })
+  .refine((a) => a.grants.choices.length === 0 && a.grants.feats.length === 0, {
+    message: "an automation adds no choice and no feat",
+  });
+export type AutomationDef = z.infer<typeof AutomationSchema>;
 
 /**
  * What you need to take a feat or a class feature option. Every listed condition must hold.

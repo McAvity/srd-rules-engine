@@ -26,11 +26,13 @@ import {
 import { type Resolution, resolve } from "../rules/build-resolution";
 import { choiceIssues } from "../rules/build-validation";
 import {
+  type AttackDice,
   type Combatant,
   conditionRolls,
   type D20TestOptions,
   type D20TestRequest,
   type D20TestResult,
+  type RolledBonusDie,
   rollD20Test,
 } from "../rules/combatant";
 import { coinsFor, formatCp, pay, priceInCp, purseValue } from "../rules/currency";
@@ -38,6 +40,7 @@ import { type Defenses, isBloodied, rollDamage, takeDamage } from "../rules/dama
 import { roll } from "../rules/dice";
 import { spaceForSize } from "../rules/grid";
 import { message, texts, toMessage } from "../rules/messages";
+import { addBonusDie } from "../rules/rerolls";
 import { mathRng, type Rng } from "../rules/rng";
 import {
   type CarriedItem,
@@ -1846,4 +1849,67 @@ function pounds(weight: string): number | null {
   const m = /^(\d+)?(½|\s*1\/2)?(?:\s*lb)?/.exec(weight.trim());
   if (!m || (!m[1] && !m[2])) return null;
   return Number(m[1] ?? 0) + (m[2] ? 0.5 : 0);
+}
+
+/**
+ * kenli F-002 T12 (R14-01): a feature used on a roll that failed (`after_failed_roll`: Peerless
+ * Skill on an ability check or an attack roll). The roll must be of one of its kinds (a save is
+ * refused), must have failed against its DC (or `dc`, the DC or AC the table states when the roll
+ * had none) and the use must have one left. Its die is rolled and added to that roll
+ * (`addBonusDie`); with `spend: on_success` the use is spent only if the roll now succeeds,
+ * otherwise nothing changes ("isn't expended"). The roll's own costs are never paid again.
+ */
+export function useAfterFailedRoll<T extends D20TestResult | AttackDice>(
+  build: CharacterBuild,
+  state: CharacterState,
+  catalog: Catalog,
+  rolled: T,
+  key: string,
+  options: { readonly dc?: number; readonly rng?: Rng } = {},
+): { roll: T; state: CharacterState; success: boolean; spent: boolean; messages: Message[] } {
+  const rng = options.rng ?? mathRng;
+  const sheet = computePlaySheet(build, state, catalog);
+  const line = sheet.actions.find((a) => a.key === key);
+  const after = line?.after_failed_roll;
+  if (!line || !after)
+    throw new PlayError([message("refusal.no_feature", { name: build.name || "?", feature: key })]);
+  const kind = rolled.resolution.kind;
+  if (kind !== "check" && kind !== "attack")
+    throw new PlayError([message("refusal.after_roll_kind", { feature: line.name })]);
+  if (!after.kinds.includes(kind))
+    throw new PlayError([message("refusal.after_roll_kind", { feature: line.name })]);
+  const known = "dc" in rolled ? rolled.dc : null;
+  const dc = known ?? options.dc ?? null;
+  if (dc === null)
+    throw new PlayError([message("refusal.after_roll_needs_dc", { feature: line.name })]);
+  const succeeds = (r: D20TestResult | AttackDice) =>
+    "critical_hit" in r
+      ? !r.critical_miss && (r.critical_hit || r.total >= dc)
+      : r.resolution.automatic_failure
+        ? false
+        : r.total >= dc;
+  if (succeeds(rolled))
+    throw new PlayError([message("refusal.after_roll_not_failed", { feature: line.name })]);
+  const use = line.uses ? sheet.play.uses.find((u) => u.key === line.uses) : undefined;
+  if (!use || use.max - use.spent < line.cost)
+    throw new PlayError([message("refusal.no_uses_left", { toggle: line.name })]);
+  const dice = line.roll_die ?? null;
+  if (!dice)
+    throw new PlayError([message("refusal.no_feature", { name: build.name || "?", feature: key })]);
+  const r = roll(dice, rng);
+  const die: RolledBonusDie = { label: line.name, dice, sign: 1, rolls: r.rolls, total: r.total };
+  const after2 = addBonusDie(rolled, die);
+  const success = succeeds(after2);
+  const spent = success || after.spend !== "on_success";
+  const paid = spent
+    ? applyAction(build, state, catalog, { type: "use", key: use.key, amount: line.cost }).state
+    : state;
+  const note = message(success ? "after_roll.succeeds" : "after_roll.still_fails", {
+    feature: line.name,
+    die: dice,
+    rolled: r.total,
+    total: after2.total,
+    dc,
+  });
+  return { roll: after2, state: paid, success, spent, messages: [note] };
 }

@@ -2154,6 +2154,8 @@ function run(
       unaffected?: readonly string[];
       /** A readied spell, its slot spent when it was readied. */
       held?: boolean;
+      /** kenli F-002 T12 (R14-02): paid by a free cast: no slot; its use spent instead (none at will). */
+      free?: { use: string; at_will: boolean };
       /** A wall's placement (`placeWall`). */
       wall?: PlacedWall;
       /** A smite riding a Critical Hit: its dice are doubled. */
@@ -2263,12 +2265,13 @@ function run(
       ...r.messages,
     );
     // A held spell's slot was spent when it was readied.
-    applyTo(
-      c,
-      r.caster_actions.filter(
-        (a) => !held || (a.type !== "spend_slot" && a.type !== "spend_pact_slot"),
+    const free = options.free;
+    applyTo(c, [
+      ...r.caster_actions.filter(
+        (a) => !(held || free) || (a.type !== "spend_slot" && a.type !== "spend_pact_slot"),
       ),
-    );
+      ...(free && !free.at_will ? [{ type: "use" as const, key: free.use }] : []),
+    ]);
     // "you make … or you cast a spell with a Verbal component": no longer hidden.
     if (/\bV\b/.test(spell.components)) unhide(c, message("why.cast_spell", { spell: spell.name }));
     for (const hit of r.targets) {
@@ -4079,9 +4082,10 @@ function run(
     case "cast": {
       const c = find(action.id);
       canAct(c);
-      const spell =
+      let spell =
         lookup(catalogOf(ctx, c).spells, action.spell) ??
         fail(message("refusal.unknown_spell", { spell: action.spell }));
+      let freeCast: { use: string; at_will: boolean } | undefined;
       let what: "action" | "bonus_action" | "reaction" = "action";
       let slot_level = action.slot_level;
       let spellcasting: string | undefined;
@@ -4094,10 +4098,54 @@ function run(
           ref.catalog ?? ctx.catalog,
         ).spells.find((x) => x.id === spell.id);
         if (!known) fail(message("refusal.cant_cast", { name: c.name, spell: spell.name }));
-        // kenli F-002 T12 (D026): only through its free cast (the sheet's roll), never a slot.
-        if (known.grants.length > 0 && known.grants.every((g) => g.free_only === true))
+        // kenli F-002 T12 (R14-03): the range this character casts it with (Eldritch Spear, Spell
+        // Sniper: the sheet line's `range`), on a copy for this cast only.
+        if (known.range) spell = { ...spell, range: known.range };
+        // kenli F-002 T12 (R14-02): a free cast's payment, checked as the sheet's roll checks it.
+        if (action.payment) {
+          const pay = action.payment;
+          const line = computePlaySheet(
+            ref.build,
+            ref.state,
+            ref.catalog ?? ctx.catalog,
+          ).spells.find((x) => x.id === spell.id);
+          const entry =
+            line?.free.find((f) => f.use === pay.use) ??
+            fail(message("refusal.free_cast_not_for_spell", { use: pay.use, spell: spell.name }));
+          if (!entry.available)
+            refuse(
+              entry.reason?.message ?? message("refusal.free_cast_spent", { use: entry.name }),
+            );
+          if ((action.slot_level !== undefined && action.slot_level !== spell.level) || action.pact)
+            fail(
+              message("refusal.free_cast_base_level", {
+                spell: spell.name,
+                use: entry.name,
+                level: spell.level,
+              }),
+            );
+          if (action.spellcasting !== undefined && action.spellcasting !== entry.spellcasting)
+            fail(
+              message("refusal.free_cast_source", {
+                spell: spell.name,
+                use: entry.name,
+                spellcasting: entry.spellcasting ?? "",
+              }),
+            );
+          if (action.triggers?.length)
+            fail(
+              message("refusal.trigger_needs_slotted_school", {
+                trigger: action.triggers[0]?.key ?? "",
+                school: spell.school,
+              }),
+            );
+          freeCast = { use: entry.use, at_will: entry.at_will };
+          slot_level = spell.level;
+          spellcasting = entry.spellcasting ?? undefined;
+        } else if (known.grants.length > 0 && known.grants.every((g) => g.free_only === true))
+          // kenli F-002 T12 (D026): only through its free cast, never a slot.
           fail(message("refusal.free_cast_only", { spell: spell.name, use: known.source }));
-        spellcasting = action.spellcasting ?? spellcastingOf(known);
+        spellcasting ??= action.spellcasting ?? spellcastingOf(known);
         what = castingEconomy(spell);
       } else {
         // A monster casts it through an action that lists it (legendary ones: `legendary`).
@@ -4189,6 +4237,7 @@ function run(
         point: action.area?.point,
         unaffected: action.unaffected,
         held: released && releasing?.held,
+        ...(freeCast ? { free: freeCast } : {}),
       });
       if (!released) c.used[what] = true;
       // kenli F-002 T12 (D016): cast triggers (Arcane Ward) paid with this cast, after its slot,

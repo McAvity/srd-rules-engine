@@ -433,6 +433,7 @@ export {
 export { attackOdds, averageDamage, failOdds } from "./rules/odds";
 export {
   addAdvantageDie,
+  addBonusDie,
   type CriticalDice,
   type DieSource,
   type RerollResult,
@@ -533,6 +534,7 @@ export {
   type SpellSlotChoice,
   spellSlots,
   startingEquipment,
+  useAfterFailedRoll,
   validateState,
 } from "./services/play";
 export {

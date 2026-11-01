@@ -7,6 +7,19 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — kenli F-002 T12 batch A corrections (review14 R14-01–04; all optional, SRD bytes unchanged)
+- Encounter `cast.payment: {type: "free", use}`: a free or at-will cast in an encounter (no slot;
+  the free cast's use spent once, none at will; its own level and spellcasting; no cast trigger);
+  encounter options list a spell's `free_casts`, and a free-only line defaults to its free cast.
+- Encounter casts and their target/area/zone/wall checks use the character's effective range
+  (`SpellLine.range`: Eldritch Spear, Spell Sniper) on a per-cast copy; options' targets too.
+- `FeatureAction.after_failed_roll` + `useAfterFailedRoll` (Peerless Skill: its die added to a failed
+  check or attack roll; the use spent only if it then succeeds; a save, a roll that didn't fail, no
+  use left refused; the DC/AC the table states when the roll had none) and `addBonusDie`.
+- `ContentPack.automation` (`AutomationDef`): a pack's play automation for features a character
+  already has, as ordinary grants gated by class/subclass level or a feat taken; a pack-level list
+  (like `patches`, kept in the split manifest), source-filtered; it adds no choice and no feat.
+
 ### Added / fixed — play hooks of kenli F-002 T12 batch A (all optional, no defaults: the SRD bundle and older documents keep their bytes)
 - `free_casts[].at_will` (Spell Mastery: no slot, nothing spent; `uses` then absent) and
   `free_casts[].line` (the named spells on the sheet only through that free cast: `SpellGrant.free_only`,

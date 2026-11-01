@@ -738,6 +738,12 @@ const CastActionSchema = z.object({
    * with a spell slot of the trigger's school.
    */
   triggers: z.array(z.object({ key: z.string(), mode: z.enum(["create", "restore"]) })).optional(),
+  /**
+   * kenli F-002 T12 (R14-02): a character's spell paid without a slot: a free cast's use
+   * (`PlaySpellLine.free`: Mystic Arcanum, Shadow Arts' Darkness) or an at-will cast (Spell
+   * Mastery), at the spell's own level, with that free cast's spellcasting feature. Absent: a slot.
+   */
+  payment: z.object({ type: z.literal("free"), use: z.string() }).optional(),
 });
 
 const MoveActionSchema = z.object({
