@@ -113,6 +113,13 @@ export interface PlaySheet extends DerivedSheet {
       recharge: "short" | "long";
       /** What else a use can be spent on (a luck-style resource: `d20_advantage`). */
       spend_for?: readonly ("d20_advantage" | "impose_disadvantage")[];
+      /**
+       * A tracked pool (Arcane Ward): `created` (it exists since a cast created it, until a Long
+       * Rest) and its `current` value (`spent` = `max − current`; all of it while not created).
+       */
+      tracked?: true;
+      created?: boolean;
+      current?: number;
     }[];
     readonly inventory: readonly {
       id: string;
@@ -353,14 +360,29 @@ export function computePlaySheet(
       spent: state.spell_slots_spent[i] ?? 0,
     })),
     pact_magic: sheet.pact_magic ? { ...sheet.pact_magic, spent: state.pact_slots_spent } : null,
-    uses: sheet.limited_uses.map((u) => ({
-      key: u.key,
-      name: u.name,
-      max: u.max,
-      spent: state.uses_spent[u.key] ?? 0,
-      recharge: u.recharge,
-      ...(u.spend_for ? { spend_for: u.spend_for } : {}),
-    })),
+    uses: sheet.limited_uses.map((u) => {
+      if (!u.tracked)
+        return {
+          key: u.key,
+          name: u.name,
+          max: u.max,
+          spent: state.uses_spent[u.key] ?? 0,
+          recharge: u.recharge,
+          ...(u.spend_for ? { spend_for: u.spend_for } : {}),
+        };
+      const stored = state.pools?.[u.key];
+      const current = stored === undefined ? 0 : Math.min(stored, u.max);
+      return {
+        key: u.key,
+        name: u.name,
+        max: u.max,
+        spent: u.max - current,
+        recharge: u.recharge,
+        tracked: true as const,
+        created: stored !== undefined,
+        current,
+      };
+    }),
     inventory,
     attuned: state.inventory.filter((i) => i.attuned).length,
     currency: { ...state.currency },
@@ -830,6 +852,16 @@ export function reconcileState(
   for (const u of p.uses)
     if (s.uses_spent[u.key]) uses[u.key] = Math.min(s.uses_spent[u.key] ?? 0, u.max);
   s.uses_spent = uses;
+  // Tracked pools: only those the sheet still has, capped at their maximum (a higher maximum after a
+  // level-up leaves the current value as it is).
+  if (s.pools) {
+    const pools: Record<string, number> = {};
+    for (const u of p.uses)
+      if (u.tracked && s.pools[u.key] !== undefined)
+        pools[u.key] = Math.min(s.pools[u.key] ?? 0, u.max);
+    if (Object.keys(pools).length) s.pools = pools;
+    else delete s.pools;
+  }
   let attuned = 0;
   for (const i of s.inventory) {
     // A stored item isn't worn (an edited or older document may say so): take it off.
@@ -950,8 +982,73 @@ export function applyAction(
     s.concentration = null;
   };
   const current = p.hp.current;
+  type Use = (typeof p.uses)[number];
+  /** The school a pool is created by (its first cast trigger's), for the refusal's words. */
+  const schoolOf = (use: Use) =>
+    sheet.cast_triggers.find((t) => t.resource === use.key)?.school ?? "";
+  const notCreated = (use: Use) =>
+    message("refusal.pool_not_created", { use: use.name, school: schoolOf(use) });
+  /** Takes from a tracked pool (Arcane Ward): it must exist and hold that much. */
+  const takeFromPool = (use: Use, amount: number) => {
+    if (!use.created) fail(notCreated(use));
+    const left = use.current ?? 0;
+    if (amount > left) fail(message("refusal.pool_low", { use: use.name, current: left }));
+    s.pools = { ...s.pools, [use.key]: left - amount };
+    notes.push(
+      message("play.pool_used", { use: use.name, amount, current: left - amount, max: use.max }),
+    );
+  };
+  /** Adds to a tracked pool up to its maximum: it must exist (it isn't created this way). */
+  const addToPool = (use: Use, amount: number) => {
+    if (!use.created) fail(notCreated(use));
+    const now = use.current ?? 0;
+    if (now >= use.max) fail(message("refusal.pool_full", { use: use.name, max: use.max }));
+    const after = Math.min(use.max, now + amount);
+    s.pools = { ...s.pools, [use.key]: after };
+    notes.push(
+      message("play.pool_restored", {
+        use: use.name,
+        amount: after - now,
+        current: after,
+        max: use.max,
+      }),
+    );
+  };
 
   switch (action.type) {
+    case "cast_trigger": {
+      const trigger =
+        sheet.cast_triggers.find((t) => t.key === action.key) ??
+        fail(message("refusal.no_cast_trigger", { key: action.key }));
+      const spell = lookup(catalog.spells, action.spell);
+      const refuse = (): never =>
+        fail(
+          message("refusal.trigger_needs_slotted_school", {
+            trigger: trigger.name,
+            school: trigger.school,
+          }),
+        );
+      if (
+        !spell ||
+        spell.school !== trigger.school ||
+        spell.level < 1 ||
+        action.slot_level < spell.level
+      )
+        refuse();
+      const use =
+        p.uses.find((u) => u.key === trigger.resource && u.tracked) ??
+        fail(message("refusal.no_limited_use", { key: trigger.resource }));
+      if (action.mode === "create") {
+        if (!trigger.create) refuse();
+        if (use.created) fail(message("refusal.pool_already_created", { use: use.name }));
+        s.pools = { ...s.pools, [use.key]: use.max };
+        notes.push(message("play.pool_created", { use: use.name, max: use.max }));
+      } else {
+        if (!trigger.restore_per_slot_level) refuse();
+        addToPool(use, trigger.restore_per_slot_level * action.slot_level);
+      }
+      break;
+    }
     case "damage": {
       if (s.dead) fail(message("refusal.character_dead"));
       if ((action.amount === undefined) === (action.instances === undefined)) {
@@ -1083,6 +1180,8 @@ export function applyAction(
       s.spell_slots_spent = [];
       s.pact_slots_spent = 0;
       s.uses_spent = {};
+      // Tracked pools end (Arcane Ward): not refilled, created again by their trigger.
+      delete s.pools;
       if (s.exhaustion > 0) {
         s.exhaustion -= 1;
         notes.push(message("rest.exhaustion", { level: s.exhaustion }));
@@ -1125,6 +1224,10 @@ export function applyAction(
         p.uses.find((u) => u.key === action.key) ??
         fail(message("refusal.no_limited_use", { key: action.key }));
       const amount = action.amount ?? 1;
+      if (use.tracked) {
+        takeFromPool(use, amount);
+        break;
+      }
       if (use.spent + amount > use.max)
         fail(message("refusal.uses_left_count", { name: use.name, left: use.max - use.spent }));
       s.uses_spent[use.key] = use.spent + amount;
@@ -1164,7 +1267,18 @@ export function applyAction(
       const restored = feature.restores
         ? p.uses.find((u) => u.key === feature.restores)
         : undefined;
-      if (feature.restores && !restored?.spent) {
+      // A tracked pool restored (Arcane Ward): it must exist and not be full; by the slot's level.
+      const slotLevel =
+        payment?.type === "slot"
+          ? payment.level
+          : payment?.type === "pact"
+            ? (p.pact_magic?.slot_level ?? 0)
+            : 0;
+      if (restored?.tracked) {
+        if (!restored.created) fail(notCreated(restored));
+        if ((restored.current ?? 0) >= restored.max)
+          fail(message("refusal.pool_full", { use: restored.name, max: restored.max }));
+      } else if (feature.restores && !restored?.spent) {
         const use = restored?.name ?? feature.restores;
         fail(message("refusal.nothing_to_restore", { feature: feature.name, use }));
       }
@@ -1172,7 +1286,9 @@ export function applyAction(
         s.spell_slots_spent[payment.level - 1] = (s.spell_slots_spent[payment.level - 1] ?? 0) + 1;
         for (let i = 0; i < s.spell_slots_spent.length; i++) s.spell_slots_spent[i] ??= 0;
       } else if (payment?.type === "pact") s.pact_slots_spent += 1;
-      if (restored) {
+      if (restored?.tracked) {
+        addToPool(restored, (feature.restores_per_slot_level ?? 1) * Math.max(1, slotLevel));
+      } else if (restored) {
         s.uses_spent[restored.key] = restored.spent - 1;
         notes.push(message("play.feature_restores", { feature: feature.name, use: restored.name }));
       }
@@ -1181,7 +1297,8 @@ export function applyAction(
         const use =
           p.uses.find((u) => u.key === feature.uses) ??
           fail(message("refusal.no_uses", { feature: feature.name }));
-        if (use.spent + amount > use.max)
+        if (use.tracked) takeFromPool(use, amount);
+        else if (use.spent + amount > use.max)
           fail(
             message("refusal.uses_left_count", {
               name: feature.name,
@@ -1189,7 +1306,23 @@ export function applyAction(
               ...(feature.slot_payment === "instead" ? { slot_payment: true } : {}),
             }),
           );
-        s.uses_spent[use.key] = use.spent + amount;
+        else s.uses_spent[use.key] = use.spent + amount;
+      }
+      // Temporary Hit Points it gives (Wild Shape): they don't stack, the higher ones stay.
+      if (feature.temp_hp && !action.manual) {
+        if (feature.temp_hp > s.hp.temp) {
+          s.hp.temp = feature.temp_hp;
+          notes.push(
+            message("play.temp_hp_gained", { feature: feature.name, amount: feature.temp_hp }),
+          );
+        } else
+          notes.push(
+            message("play.feature_temp_hp_kept", {
+              feature: feature.name,
+              amount: feature.temp_hp,
+              temp: s.hp.temp,
+            }),
+          );
       }
       if (feature.heal && feature.target === "self" && !action.manual) {
         if (s.dead) fail(message("refusal.character_dead"));
@@ -1216,6 +1349,10 @@ export function applyAction(
       const use =
         p.uses.find((u) => u.key === action.key) ??
         fail(message("refusal.no_limited_use", { key: action.key }));
+      if (use.tracked) {
+        addToPool(use, action.amount ?? 1);
+        break;
+      }
       s.uses_spent[use.key] = Math.max(0, use.spent - (action.amount ?? 1));
       break;
     }

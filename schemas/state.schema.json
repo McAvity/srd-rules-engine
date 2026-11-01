@@ -129,6 +129,17 @@
         "maximum": 9007199254740991
       }
     },
+    "pools": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      }
+    },
     "choices": {
       "default": {},
       "type": "object",

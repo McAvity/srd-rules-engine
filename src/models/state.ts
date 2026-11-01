@@ -162,6 +162,12 @@ export const CharacterStateSchema = z.object({
   /** Spent uses of limited features by key (`barbarian:rage`). */
   uses_spent: z.record(z.string(), z.int().min(0)).default({}),
   /**
+   * Current values of tracked pools by key (`wizard:arcane-ward`, `ResourceDef.tracked`): absent
+   * until created, removed by a Long Rest. Optional (kenli F-002 T10): a state without pools keeps
+   * its bytes.
+   */
+  pools: z.record(z.string(), z.int().min(0)).optional(),
+  /**
    * Today's picks for choices you can change after a rest (Cleric prepared spells, Weapon
    * Mastery…), by choice key. They replace the build's starting picks while playing.
    */
@@ -261,6 +267,19 @@ export const PlayActionSchema = z
     /** A limited-use feature by its key (see the play sheet's `uses`). */
     z.object({ type: z.literal("use"), key: z.string(), amount: n.min(1).optional() }),
     z.object({ type: z.literal("restore_use"), key: z.string(), amount: n.min(1).optional() }),
+    /**
+     * What a cast with a spell slot does to a tracked pool (`sheet.cast_triggers`, Arcane Ward):
+     * `create` it at its maximum (refused if it exists) or `restore` 2 × the slot's level to it
+     * (refused if it doesn't). Sent as a cost of that cast (a roll's `triggers`); the spell must be
+     * of the trigger's school and `slot_level` the slot it was cast with.
+     */
+    z.object({
+      type: z.literal("cast_trigger"),
+      key: z.string(),
+      mode: z.enum(["create", "restore"]),
+      spell: z.string(),
+      slot_level: n.min(1).max(9),
+    }),
     /**
      * Use a feature (`sheet.actions`: `fighter:second-wind`): spends its resource (`amount` for a
      * pool like Lay on Hands) and, for one that heals you (Second Wind), rolls and heals. Its other

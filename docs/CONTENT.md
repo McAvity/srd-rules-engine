@@ -441,6 +441,14 @@ Choices that can change later:
                                   # state keeps today's picks, the build keeps the starting ones
 ```
 
+A `tracked` resource is a pool whose current value the play state keeps (`pools`), created by a
+slotted cast of a school (`cast_triggers: [{id, name, school, resource, create: true,
+restore_per_slot_level: 2}]`, chosen with that cast) and ended by a Long Rest; its maximum can add
+an ability (`max: {per_class_level: 2, plus_ability: int}`: Arcane Ward). A feature action with
+`restores` + `restores_per_slot_level` and `slot_payment: required` refills it by the slot's level;
+one with `uses` + `pool: true` spends from it. `temp_hp: {per_class_level: 1}` on an action gives
+Temporary Hit Points when it's used (Wild Shape).
+
 Limited-use features declare `resources` in their grants; the play sheet lists them with their
 maximum and the state tracks what's spent:
 

@@ -205,6 +205,8 @@ export function rollWith(
     costs: readonly RollCost[] = [],
     /** Without a slot: a free cast's use spent instead, or a ritual (nothing instead). */
     instead?: { use: string; message: Message } | { ritual: Message },
+    /** Cast triggers paid with this cast (Arcane Ward), after its slot. */
+    triggers: readonly { key: string; mode: "create" | "restore" }[] = [],
   ): ByHandRoll => {
     const { dm, ...rest } = cast;
     const r = castSpell(combatant, spell, [], {
@@ -225,10 +227,34 @@ export function rollWith(
         ? [{ type: "play", action: { type: "use", key: instead.use } }]
         : [];
     const note = instead ? ["use" in instead ? instead.message : instead.ritual] : [];
+    // kenli F-002 T10 (H2): a trigger needs this cast's spell slot; a ritual or a free cast has none.
+    const slotted = !instead && r.slot_level !== null && r.slot_level > 0;
+    const sheetNow = sheetOf();
+    const triggered: RollCost[] = triggers.map((t) => {
+      if (!slotted) {
+        const line = sheetNow?.cast_triggers.find((x) => x.key === t.key);
+        fail(
+          message("refusal.trigger_needs_slotted_school", {
+            trigger: line?.name ?? t.key,
+            school: line?.school ?? "",
+          }),
+        );
+      }
+      return {
+        type: "play",
+        action: {
+          type: "cast_trigger",
+          key: t.key,
+          mode: t.mode,
+          spell: spell.id,
+          slot_level: r.slot_level as number,
+        },
+      };
+    });
     return roll(r.by_hand ?? {}, {
       name: as,
       slot_level: r.slot_level,
-      costs: [...costs, ...use, ...paid],
+      costs: [...costs, ...use, ...paid, ...triggered],
       messages: [...r.messages, ...note],
     });
   };
@@ -338,6 +364,7 @@ export function rollWith(
           { ...common, slot_level: spell.level, spellcasting: entry.spellcasting ?? undefined },
           [],
           { use: entry.use, message: free },
+          what.triggers,
         );
       }
       if (payment.type === "ritual") {
@@ -357,14 +384,22 @@ export function rollWith(
           },
           [],
           { ritual: message("cast.ritual", { spell: spell.name }) },
+          what.triggers,
         );
       }
-      return spellRoll(spell, spell.name, {
-        ...common,
-        slot_level: what.slot_level,
-        pact: what.pact,
-        spellcasting: what.spellcasting ?? spellcastingOf(known),
-      });
+      return spellRoll(
+        spell,
+        spell.name,
+        {
+          ...common,
+          slot_level: what.slot_level,
+          pact: what.pact,
+          spellcasting: what.spellcasting ?? spellcastingOf(known),
+        },
+        [],
+        undefined,
+        what.triggers,
+      );
     }
     case "feature": {
       const s = sheetOf() ?? fail(message("refusal.no_class_features", { name }));

@@ -893,6 +893,20 @@ export const MESSAGES_EN = {
   "refusal.no_heroic_inspiration": "{name} has no Heroic Inspiration",
   "refusal.armor_untrained_no_spellcasting": "{name} can't cast spells in {armor} without training",
   "play.feature_restores": "{feature}: one use of {use} regained",
+  "play.pool_created": "{use}: created at {max}",
+  "play.pool_restored": "{use}: +{amount} ({current} of {max})",
+  "play.pool_used": "{use}: −{amount} ({current} of {max})",
+  "play.temp_hp_gained": "{feature}: {amount} Temporary Hit Points",
+  "play.feature_temp_hp_kept":
+    "{feature}: {amount} Temporary Hit Points, but the {temp} you have are more and stay",
+  "refusal.pool_not_created":
+    "{use} isn't there: it's created by casting a {school} spell with a spell slot",
+  "refusal.pool_already_created": "{use} was already created: again only after a Long Rest",
+  "refusal.pool_full": "{use} is full ({max})",
+  "refusal.pool_low": "{use} has {current} left",
+  "refusal.trigger_needs_slotted_school":
+    "{trigger}: needs a {school} spell cast with a spell slot",
+  "refusal.no_cast_trigger": "No cast trigger {key}",
   "play.forced": "{feature}: used anyway (the GM's override)",
   "feature.manual_effect": "{feature}: what it does is the table's to resolve",
   "feature.hit_on_miss_by_hand":

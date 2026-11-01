@@ -536,6 +536,12 @@ export class Resolution {
     return owned;
   }
 
+  /** A spellbook choice: its `tag` is what other choices prepare from (`subset_of`). */
+  isBook(choice: ActiveChoice): boolean {
+    const tag = choice.definition.tag;
+    return tag !== null && this.choices.some((c) => c.definition.subset_of === tag);
+  }
+
   /** Skill → name of the source that gave you Expertise in it. */
   expertise(excludeChoice?: string, atLevel = Number.POSITIVE_INFINITY): Map<Skill, string> {
     const owned = new Map<Skill, string>();
@@ -1116,11 +1122,25 @@ function spellViews(res: Resolution, choice: ActiveChoice, ok: (id: string) => b
     for (const other of res.choices)
       if (other.definition.subset_of === d.tag) linked.add(other.key);
   }
-  const known = res.spells(linked, at(choice));
+  // A spellbook (a pool other choices prepare from: some `subset_of` names its tag) records spells,
+  // it doesn't learn them: a spell another feature already gives (Magic Initiate, Pact of the Tome)
+  // can still be copied into it; only the book's own entries can't repeat (kenli F-002 D006). A
+  // later feature's choice still sees the book's entries as known.
+  const known = res.isBook(choice) ? bookEntries(res, choice) : res.spells(linked, at(choice));
   if (d.known_only) {
     return spells.filter((s) => known.has(s.id)).map((s) => view(s.id, s.name, s.description));
   }
   return spells.map((s) => view(s.id, s.name, s.description, knownFrom(known.get(s.id))));
+}
+
+/** Spells already in the same book: its other choices with the same `tag`, as of this choice's level. */
+function bookEntries(res: Resolution, choice: ActiveChoice): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const c of res.choices) {
+    if (c.key === choice.key || c.definition.tag !== choice.definition.tag) continue;
+    for (const id of res.contributed(c, at(choice))) if (!out.has(id)) out.set(id, c.source.name);
+  }
+  return out;
 }
 
 function knownFrom(src: string | undefined): Message | null {

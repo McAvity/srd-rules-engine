@@ -7,6 +7,26 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — play hooks for the 2024 plans (kenli F-002 T10)
+- Tracked pools (`ResourceDef.tracked`, Arcane Ward): the play state keeps their current value in
+  `pools` (optional: a state without them keeps its bytes); absent until created, ended (not
+  refilled) by a Long Rest, a higher maximum after a level-up leaves the current value as it is.
+  `use`/`restore_use` take from/add to them; the play sheet's uses line has `tracked`, `created`,
+  `current`. A resource maximum can add an ability modifier (`max.plus_ability`).
+- `Grants.cast_triggers` + play action `cast_trigger`: a slotted cast of the trigger's school
+  creates the pool at its maximum (once until it ends) or restores `restore_per_slot_level` × the
+  slot's level. A by-hand cast takes `triggers` and pays them as costs after its slot; a ritual or
+  a free cast is refused. Sheet `cast_triggers`.
+- Feature actions: `restores_per_slot_level` (a slot-paid restore of a tracked pool: 2 × the slot's
+  level) and `temp_hp.per_class_level` (Wild Shape's Temporary Hit Points; the higher ones stay).
+
+### Fixed (kenli F-002 D001, D002, D006)
+- A Speed of 0 (Halt, Grappled…) leaves no movement, whatever an earlier Dash added (`moveBudget`).
+- Savage Attacker: rolling the weapon's damage dice twice uses it for the turn, whichever roll is
+  kept (a kept first roll no longer leaves it for a later hit).
+- A spellbook records spells, it doesn't learn them: a spell another feature already gives (Magic
+  Initiate, Pact of the Tome) can be copied into it; the book's own entries still can't repeat.
+
 ### Added — builder legality for 2024 multiclass plans (kenli F-002 T09)
 - A skill choice needs no more picks than the skills it can still give (`Resolution.required`, as
   Expertise and spell choices already did): a character proficient in every allowed skill gains

@@ -280,7 +280,9 @@ describe("Savage Attacker (Soldier's origin feat)", () => {
     expect((s.result() as AttackResult).savage).toBeNull();
   });
 
-  it("declined (the first roll kept), it stays for a later hit; an Unarmed Strike isn't a weapon", () => {
+  // kenli F-002 D002: "you can roll the weapon's damage dice twice and use either roll" — rolling
+  // twice is the use (once per turn), whichever roll is kept.
+  it("declined (the first roll kept), it's still used this turn; an Unarmed Strike isn't a weapon", () => {
     const s = session(brakka(5), ["ogre"]);
     s.act(ask);
     s.act(
@@ -295,7 +297,7 @@ describe("Savage Attacker (Soldier's origin feat)", () => {
       second: [1, 1],
       used: false,
     });
-    expect(s.get("brakka")?.riders_used).not.toContain("savage_attacker");
+    expect(s.get("brakka")?.riders_used).toContain("savage_attacker");
   });
 });
 

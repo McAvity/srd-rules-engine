@@ -2206,6 +2206,17 @@
                       "maximum": 9007199254740991
                     }
                   },
+                  "pools": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
                   "choices": {
                     "default": {},
                     "type": "object",
@@ -5199,6 +5210,40 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "cast_trigger"
+            },
+            "key": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "create",
+                "restore"
+              ]
+            },
+            "spell": {
+              "type": "string"
+            },
+            "slot_level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "mode",
+            "spell",
+            "slot_level"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "use_feature"
             },
             "key": {
@@ -5909,6 +5954,28 @@
             },
             "dm": {
               "$ref": "#/$defs/DmOptions"
+            },
+            "triggers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "create",
+                      "restore"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "mode"
+                ]
+              }
             }
           },
           "required": [

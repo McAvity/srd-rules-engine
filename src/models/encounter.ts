@@ -577,6 +577,13 @@ export const RollWhatSchema = z
       payment: SpellPaymentSchema.optional(),
       /** The GM's additions to its attack rolls and damage (`DmOptions`). */
       dm: DmOptionsSchema.optional(),
+      /**
+       * What this cast does to a tracked pool (`sheet.cast_triggers`: Arcane Ward created or
+       * restored), paid with it: a `cast_trigger` cost after the slot. Only with a spell slot.
+       */
+      triggers: z
+        .array(z.object({ key: z.string(), mode: z.enum(["create", "restore"]) }))
+        .optional(),
     }),
     /** A character's feature (`sheet.actions`, by key or name); `amount` for a pool. */
     z.object({

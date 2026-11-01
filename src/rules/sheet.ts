@@ -183,10 +183,25 @@ export interface FeatureActionLine {
   readonly halves_attack_damage: boolean;
   /** The limited use it gives one back of (`bard:bardic-inspiration`), when it does. */
   readonly restores?: string;
+  /** With `restores` and a slot: this many × the slot's level are restored (Arcane Ward). */
+  readonly restores_per_slot_level?: number;
+  /** Temporary Hit Points it gives when used, at this class level (Wild Shape). */
+  readonly temp_hp?: number;
   /** Paid with a spell slot instead of its uses, or always (`FeatureActionDef.slot_payment`). */
   readonly slot_payment?: "instead" | "required";
   /** The die the user rolls when using it (`1d8`), when it has one; `null`: no column value. */
   readonly roll_die?: string | null;
+}
+
+/** A cast trigger on the sheet (`Grants.cast_triggers`), its keys scoped like resources. */
+export interface CastTriggerLine {
+  readonly key: string;
+  readonly name: string;
+  readonly school: string;
+  /** The tracked pool it creates or restores (`wizard:arcane-ward`). */
+  readonly resource: string;
+  readonly create: boolean;
+  readonly restore_per_slot_level: number;
 }
 
 /** A spell cast without a slot through a limited use (`Grants.free_casts`), on the sheet. */
@@ -244,6 +259,8 @@ export interface UsesLine {
   readonly short_rest_regain: number | null;
   /** What else a use can be spent on (`ResourceDef.spend_for`), when anything. */
   readonly spend_for?: readonly ("d20_advantage" | "impose_disadvantage")[];
+  /** A pool whose current value is kept (`ResourceDef.tracked`, Arcane Ward): see the play sheet. */
+  readonly tracked?: true;
 }
 
 /** An item the character carries (play state), resolved against the catalog. */
@@ -360,6 +377,11 @@ export interface DerivedSheet {
   readonly spellbook: readonly string[];
   /** Spells you can cast without a slot by spending a use (Magic Initiate). */
   readonly free_casts: readonly FreeCastLine[];
+  /**
+   * What casting a spell of a school with a slot can do to a tracked pool (`Grants.cast_triggers`):
+   * the caster picks it with that cast (a roll's `triggers`).
+   */
+  readonly cast_triggers: readonly CastTriggerLine[];
   /** d20 floors on ability checks from features (besides the named rule Reliable Talent). */
   readonly d20_floors: readonly D20FloorLine[];
   /**
@@ -1015,6 +1037,10 @@ export function computeSheet(
           inspiration_die: die ? Number(die) : null,
           halves_attack_damage: a.halves_attack_damage,
           ...(a.restores ? { restores: `${scope}:${a.restores}` } : {}),
+          ...(a.restores_per_slot_level
+            ? { restores_per_slot_level: a.restores_per_slot_level }
+            : {}),
+          ...(a.temp_hp ? { temp_hp: a.temp_hp.per_class_level * classLevel } : {}),
           ...(a.slot_payment ? { slot_payment: a.slot_payment } : {}),
           ...(a.roll ? { roll_die: rollDie(a.roll) } : {}),
         };
@@ -1056,6 +1082,16 @@ export function computeSheet(
       ...f,
       name: uses.find((u) => u.key === f.use)?.name ?? f.use,
     })),
+    cast_triggers: res.sources.flatMap((src) =>
+      (src.grants.cast_triggers ?? []).map((t) => ({
+        key: `${usesScope(src)}:${t.id}`,
+        name: t.name,
+        school: t.school,
+        resource: `${usesScope(src)}:${t.resource}`,
+        create: t.create,
+        restore_per_slot_level: t.restore_per_slot_level,
+      })),
+    ),
     d20_floors: res.sources.flatMap((src) =>
       (src.grants.d20_floors ?? []).map((f) => ({
         min: f.min,
@@ -1286,6 +1322,7 @@ function limitedUses(
       } else if (r.max.ability !== null) max = mod[r.max.ability];
       else if (r.max.proficiency) max = pb;
       else if (r.max.per_class_level !== null) max = r.max.per_class_level * classLevel;
+      if (r.max.plus_ability) max += mod[r.max.plus_ability];
       max = Math.max(max, r.max.min);
       const previous = byKey.get(key);
       if (!previous || src.level >= previous.level) {
@@ -1297,6 +1334,7 @@ function limitedUses(
             recharge: r.recharge,
             short_rest_regain: r.short_rest_regain,
             ...(r.spend_for?.length ? { spend_for: r.spend_for } : {}),
+            ...(r.tracked ? { tracked: true } : {}),
           },
           level: src.level,
         });

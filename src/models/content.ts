@@ -463,6 +463,16 @@ export const FeatureActionSchema = z.strictObject({
    */
   counts_as: z.string().optional(),
   /**
+   * With `restores` and a slot payment: the resource regains this many × the slot's level (Arcane
+   * Ward's Bonus Action: 2 per slot level), not one use. Optional.
+   */
+  restores_per_slot_level: z.int().min(1).optional(),
+  /**
+   * Temporary Hit Points it gives you when used: `per_class_level` × the class level (Wild Shape:
+   * 1, Circle Forms: 3), kept only if higher than the ones you have. Optional.
+   */
+  temp_hp: z.strictObject({ per_class_level: z.int().min(1) }).optional(),
+  /**
    * Used when one of your attack rolls misses: it hits instead (a decision after the roll, the
    * roll kept); then not again until the start of your next turn (Peerless Aim). Optional.
    */
@@ -620,6 +630,11 @@ export const ResourceSchema = z.strictObject({
     proficiency: z.boolean().default(false),
     per_class_level: z.int().nullable().default(null),
     min: z.int().default(0),
+    /**
+     * Added to the maximum: an ability modifier (Arcane Ward: 2 × Wizard level + Intelligence
+     * modifier, `per_class_level: 2, plus_ability: int`). Optional, so older content keeps its bytes.
+     */
+    plus_ability: z.enum(ABILITIES).optional(),
   }),
   /** `short`: all uses back on a Short or Long Rest; `long`: on a Long Rest. */
   recharge: z.enum(["short", "long"]),
@@ -631,6 +646,13 @@ export const ResourceSchema = z.strictObject({
    * you (`impose_disadvantage`). Optional, so older content parses to the same object.
    */
   spend_for: z.array(z.enum(["d20_advantage", "impose_disadvantage"])).optional(),
+  /**
+   * A pool whose current value is kept (the play state's `pools`), not its uses spent: it doesn't
+   * exist until something creates it (a `cast_triggers` entry), a Long Rest ends it (it isn't
+   * refilled), and a higher maximum after a level-up leaves its current value as it is (Arcane
+   * Ward). `use` takes from it, `restore_use` adds to it up to the maximum. Optional.
+   */
+  tracked: z.boolean().optional(),
 });
 export type ResourceDef = z.infer<typeof ResourceSchema>;
 
@@ -645,6 +667,22 @@ export const FreeCastSchema = z.strictObject({
   choice: z.string().optional(),
 });
 export type FreeCast = z.infer<typeof FreeCastSchema>;
+
+/**
+ * Something casting a spell of `school` with a spell slot can do to a `tracked` resource of the
+ * same source, chosen by the caster with that cast (a roll's `triggers`): `create` it at its maximum
+ * (once until it ends) or `restore_per_slot_level` × the slot's level to it (Arcane Ward). A cast
+ * without a slot (a ritual, a free cast) can't. Optional, absent from older content.
+ */
+export const CastTriggerSchema = z.strictObject({
+  id: z.string(),
+  name: z.string(),
+  school: z.string(),
+  resource: z.string(),
+  create: z.boolean().default(false),
+  restore_per_slot_level: z.int().min(0).default(0),
+});
+export type CastTrigger = z.infer<typeof CastTriggerSchema>;
 
 /**
  * A d20 roll of `min - 1` or lower counts as `min` on some ability checks (Reliable Talent-like):
@@ -809,6 +847,7 @@ export interface Grants {
   toggles: ToggleDef[];
   /** Spells cast without a slot, spending a use (Magic Initiate). Optional. */
   free_casts?: FreeCast[];
+  cast_triggers?: CastTrigger[];
   /** d20 floors on ability checks (Reliable Talent-like features in packs). Optional. */
   d20_floors?: D20Floor[];
   /** Extra attack lines made with a carried weapon (Polearm Master's Pole Strike). Optional. */
@@ -943,6 +982,7 @@ export const GrantsSchema: z.ZodType<Grants, unknown> = z
       actions: z.array(FeatureActionSchema).default([]),
       toggles: z.array(ToggleSchema).default([]),
       free_casts: z.array(FreeCastSchema).optional(),
+      cast_triggers: z.array(CastTriggerSchema).optional(),
       d20_floors: z.array(D20FloorSchema).optional(),
       weapon_strikes: z.array(WeaponStrikeSchema).optional(),
       items: z.array(ItemGrantSchema).default([]),

@@ -1709,7 +1709,9 @@ function run(
         );
       }
       if (hit.savage) {
-        if (hit.savage.used) c.riders_used.push(SAVAGE_ATTACKER);
+        // kenli F-002 D002: rolling the weapon's damage dice twice IS using Savage Attacker (once
+        // per turn), whichever roll the attacker then keeps.
+        c.riders_used.push(SAVAGE_ATTACKER);
         notes.push(
           message(hit.savage.used ? "savage_attacker.used" : "savage_attacker.kept", {
             name: c.name,
@@ -2898,7 +2900,7 @@ function run(
       if (action.to && action.path) fail(message("refusal.give_square_move_path"));
       // A readied move: up to its Speed, apart from its own turn's movement.
       const released = releasing?.id === c.id;
-      const budget = released ? speedOf(ctx, c, e) : speedOf(ctx, c, e) + c.extra_movement;
+      const budget = released ? speedOf(ctx, c, e) : moveBudget(ctx, c, e);
       const spent = released ? 0 : c.moved;
       const left = Math.max(0, budget - spent);
       const planned =
@@ -3076,7 +3078,7 @@ function run(
       notes.push(
         message("action.dash", {
           name: c.name,
-          feet: speedOf(ctx, c, e) + c.extra_movement - c.moved,
+          feet: Math.max(0, moveBudget(ctx, c, e) - c.moved),
         }),
       );
       break;
@@ -4265,6 +4267,16 @@ export function conditionsOf(ctx: EncounterContext, c: EncounterCombatant): Set<
 }
 
 /** Walking Speed now (0 while a condition sets it to 0: Grappled, Restrained…). */
+/**
+ * The movement a combatant has this turn: its Speed plus extra movement (Dash). With a Speed of 0
+ * (Halt, Grappled, Restrained…) it has none, whatever an earlier Dash added (kenli F-002 D001):
+ * Dash's extra movement is "equal to your Speed", and a Speed of 0 can't be increased.
+ */
+export function moveBudget(ctx: EncounterContext, c: EncounterCombatant, e: Encounter): number {
+  const speed = speedOf(ctx, c, e);
+  return speed === 0 ? 0 : speed + c.extra_movement;
+}
+
 export function speedOf(ctx: EncounterContext, c: EncounterCombatant, e: Encounter): number {
   let speed: number;
   if (c.monster === null) {
@@ -4816,7 +4828,7 @@ export function planMove(
   c: EncounterCombatant,
   move: { to?: GridPoint; path?: readonly GridPoint[] },
   /** The movement it has (default: what's left this turn). */
-  { left = Math.max(0, speedOf(ctx, c, e) + c.extra_movement - c.moved) }: { left?: number } = {},
+  { left = Math.max(0, moveBudget(ctx, c, e) - c.moved) }: { left?: number } = {},
 ): { path: GridPoint[]; steps: number[] } {
   const from = c.position ?? fail(message("refusal.no_position_place", { name: c.name }));
   if (move.to && move.path) fail(message("refusal.give_square_move_path"));
