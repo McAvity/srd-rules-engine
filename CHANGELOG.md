@@ -20,6 +20,11 @@ migrated when it's loaded.
   default: older content, the bundled SRD included, parses to the same object.
 - A background's `ability_scores` may list up to all six abilities (older-book backgrounds in the
   2024 rules, XPHB p.38); 2024 backgrounds keep three.
+- A spellbook (a spell choice whose `tag` other choices prepare from) records spells, it doesn't
+  learn them: a spell another feature gives (Magic Initiate, Pact of the Tome) can be copied into
+  it, and its entries don't make that feature's spell "already known"; the book's own entries
+  still can't repeat, and preparing such a spell again as a Wizard spell is still refused
+  (`Resolution.isBook`).
 
 ### Changed — explicit opt-in rules, never trait names (kenli F-002 T08, R09-02)
 - `tactical_mind`, `reactive_strike`, `guardian` and `halt` are no longer derived from trait

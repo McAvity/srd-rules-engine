@@ -203,3 +203,45 @@ describe("a background from an older book: increases to any ability", () => {
     ).toThrow();
   });
 });
+
+describe("a spellbook records spells, it doesn't learn them", () => {
+  it("copies a spell another feature gives (Magic Initiate) but not one already in the book", () => {
+    // Sage: Magic Initiate (Wizard) from the background.
+    let b = start("wizard", "human");
+    const mi = "feat:magic-initiate@background:sage";
+    const res = resolve(b, cat);
+    const lvl1 = res.choices.find(
+      (c) =>
+        c.key.startsWith(`${mi}#`) &&
+        c.definition.kind === "spell" &&
+        c.definition.spell_level === 1,
+    );
+    expect(lvl1).toBeDefined();
+    b = builder.setChoice(b, cat, lvl1?.key ?? "", ["shield"]).build;
+    const book = ["shield", "grease", "sleep", "mage-armor", "magic-missile", "detect-magic"];
+    b = builder.setChoice(b, cat, "class:wizard#spellbook", book).build;
+    expect(b.choices["class:wizard#spellbook"]).toEqual(book);
+    expect(b.choices[`${mi}#spell`]).toEqual(["shield"]);
+    // Preparing it as a Wizard spell is still refused (Magic Initiate already has it prepared), and
+    // a spell already in the book can't be copied again.
+    expect(() =>
+      builder.setChoice(b, cat, "class:wizard#prepared", [
+        "shield",
+        "grease",
+        "sleep",
+        "mage-armor",
+      ]),
+    ).toThrow(/already known from Magic Initiate/);
+    const ok = builder.setChoice(b, cat, "class:wizard#prepared", [
+      "grease",
+      "sleep",
+      "mage-armor",
+      "magic-missile",
+    ]).build;
+    const two = up(autocomplete(ok, cat), "wizard");
+    expect(evaluate(two, cat).report.issues.filter((i) => i.severity === "error")).toEqual([]);
+    expect(() =>
+      builder.setChoice(two, cat, "class:wizard:2#spellbook", ["grease", "web"]),
+    ).toThrow(/already/);
+  });
+});
