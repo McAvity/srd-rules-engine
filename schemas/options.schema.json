@@ -5387,6 +5387,12 @@
                     "opportunity": {
                       "type": "boolean"
                     },
+                    "reactive_strike": {
+                      "type": "boolean"
+                    },
+                    "guardian": {
+                      "type": "boolean"
+                    },
                     "light_extra": {
                       "type": "boolean"
                     },
@@ -5977,6 +5983,12 @@
               "type": "boolean"
             },
             "opportunity": {
+              "type": "boolean"
+            },
+            "reactive_strike": {
+              "type": "boolean"
+            },
+            "guardian": {
               "type": "boolean"
             },
             "light_extra": {

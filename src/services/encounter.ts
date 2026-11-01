@@ -1740,6 +1740,25 @@ function run(
       applyMastery(c, t, attacker, line, hit, options.cleave ?? false);
     }
     if (hit.hit) applyStrikes(c, t, attacker, options);
+    // kenli F-002 T08: Halt, an Opportunity Attack's hit: Speed 0 for the rest of the turn.
+    const now = current();
+    if (
+      hit.hit &&
+      options.opportunity &&
+      attacker.rules.includes("halt") &&
+      now &&
+      !outOfFight(ctx, t)
+    ) {
+      e.marks.push({
+        kind: "speed_zero",
+        label: "Halt",
+        by: c.id,
+        on: t.id,
+        ends: { at: "end", of: now.id, count: 1, skip_current: false },
+        damage: null,
+      });
+      notes.push(message("halt.speed_zero", { target: t.name, name: c.name }));
+    }
     return hit;
   };
   /**
@@ -2537,6 +2556,16 @@ function run(
     });
     result = check;
     useInspiration(c, check.inspiration);
+    // Tactical Mind: the Second Wind use is spent only when the d10 turned the check into a success.
+    if (check.tactical_mind && c.character !== null) {
+      if (check.tactical_mind.spent) play(c, { type: "use", key: check.tactical_mind.use });
+      notes.push(
+        message(check.tactical_mind.spent ? "tactical_mind.used" : "tactical_mind.kept", {
+          name: c.name,
+          roll: check.tactical_mind.roll,
+        }),
+      );
+    }
     notes.push(
       message("check.result", {
         name: c.name,
@@ -3476,14 +3505,34 @@ function run(
           c.used.bonus_action = true;
         }
       } else {
-        const reaction = action.reaction || action.opportunity;
+        const reaction = action.reaction || action.opportunity || action.reactive_strike;
+        // kenli F-002 T08: Reactive Strike, a Reaction melee attack that isn't an Opportunity
+        // Attack (no Halt, a Disengage doesn't stop it), with a held qualifying weapon; the target
+        // in its reach (it entered it: the trigger is the table's).
+        if (action.reactive_strike) {
+          if (action.opportunity) fail(message("refusal.reactive_strike_not_opportunity"));
+          if (!attacker.rules.includes("reactive_strike"))
+            fail(message("refusal.no_reactive_strike", { name: c.name }));
+          if (!(attacker.reactive_strike ?? []).includes(action.attack))
+            fail(message("refusal.reactive_strike_weapon", { attack: action.attack }));
+        }
+        // kenli F-002 T08: Guardian, an Opportunity Attack against a creature within 5 feet
+        // (immediately after it Disengages or hits another target: the trigger is the table's).
+        if (action.guardian) {
+          if (!action.opportunity) fail(message("refusal.guardian_is_opportunity"));
+          if (!attacker.rules.includes("guardian"))
+            fail(message("refusal.no_guardian", { name: c.name }));
+          const feet = checkedFeet(c, t);
+          if (feet !== null && feet > 5)
+            refuse(message("refusal.guardian_within_5ft", { target: t.name, distance: feet }));
+        }
         if (action.opportunity) {
           if (line && line.kind !== "melee")
             fail(message("refusal.opportunity_attack_melee_attack"));
           if (e.marks.some((m) => m.kind === "staggered" && m.on === c.id)) {
             fail(message("refusal.cant_make_opportunity_attacks", { name: c.name }));
           }
-          if (t.disengaged)
+          if (t.disengaged && !action.guardian)
             fail(message("refusal.disengaged_movement_doesnt_provoke", { target: t.name }));
         }
         spendAttack(c, reaction);
@@ -4121,6 +4170,8 @@ export function speedOf(ctx: EncounterContext, c: EncounterCombatant, e: Encount
     );
     speed = stopped ? 0 : (monsterDef(ctx, c).speed.walk ?? 0);
   }
+  // Halt: Speed 0 for the rest of the turn.
+  if (e.marks.some((m) => m.kind === "speed_zero" && m.on === c.id)) return 0;
   // Slow: −10 feet, however many times it was hit by Slow weapons.
   const slowed = e.masteries.some((m) => m.mastery === "slow" && m.on === c.id);
   const after = slowed ? Math.max(0, speed - 10) : speed;

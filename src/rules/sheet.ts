@@ -341,6 +341,8 @@ export interface DerivedSheet {
   readonly actions: readonly FeatureActionLine[];
   /** Rules in code switched on by features (`evasion`, `reliable_talent`, `potent_cantrip`). */
   readonly rules: readonly FeatureRule[];
+  /** kenli F-002 T08: the attack lines of the held weapons a Reactive Strike can be made with. */
+  readonly reactive_strike: readonly string[];
   /** Ability modifiers added to some spells' damage, with the modifier now (`bonus`). */
   readonly spell_damage: readonly (SpellDamage & { readonly bonus: number })[];
   /** Features you can switch on in play. */
@@ -755,6 +757,18 @@ export function computeSheet(
     const weapon = lookup(catalog.weapons, id);
     return weapon ? [{ name: name ?? weapon.name, weapon }] : [];
   });
+  // Held (equipped) weapons, with their attack lines' names (Reactive Strike: "while holding").
+  const heldWeapons = (
+    play
+      ? play.items.filter((i) => i.equipped).map((i) => ({ name: i.name, id: i.base }))
+      : Object.keys(equipment).map((id) => ({ name: lookup(catalog.weapons, id)?.name, id }))
+  ).flatMap(({ name, id }) => {
+    const weapon = lookup(catalog.weapons, id);
+    return weapon ? [{ name: name ?? weapon.name, weapon }] : [];
+  });
+  /** A feat (not a class feature) grants a trait of this name. */
+  const featTrait = (name: string) =>
+    res.sources.some((src) => src.feat !== null && src.grants.traits.some((t) => t.name === name));
   // Weapon strikes (Pole Strike): one line per strike, from the first carried weapon that
   // qualifies, its damage die and type replaced.
   for (const strike of res.sources.flatMap((src) => src.grants.weapon_strikes ?? [])) {
@@ -907,7 +921,26 @@ export function computeSheet(
         return [{ target: grant.target, source: src.name, class_id: classScope(src) }];
       }),
     ),
-    rules: [...new Set([...res.sources, ...itemSources].flatMap((src) => src.grants.rules))],
+    rules: [
+      ...new Set([
+        ...[...res.sources, ...itemSources].flatMap((src) => src.grants.rules),
+        // kenli F-002 T08: the SRD 5.2.1 Fighter's Tactical Mind is a trait only (its content is
+        // immutable), so its named rule is derived from that source: a Fighter class feature
+        // granting a trait of that name, never a feat's or another class's trait.
+        ...(res.sources.some(
+          (src) =>
+            src.class_id === "fighter" &&
+            src.feat === null &&
+            src.grants.traits.some((t) => t.name === "Tactical Mind"),
+        )
+          ? (["tactical_mind"] as const)
+          : []),
+        ...FEAT_TRAIT_RULES.filter(([name]) => featTrait(name)).map(([, rule]) => rule),
+      ]),
+    ],
+    reactive_strike: featTrait("Reactive Strike")
+      ? heldWeapons.filter((x) => weaponQualifies(x.weapon, REACTIVE_STRIKE)).map((x) => x.name)
+      : [],
     actions: res.sources.flatMap((src) =>
       src.grants.actions.map((a): FeatureActionLine => {
         const scope = usesScope(src);
@@ -1555,6 +1588,18 @@ function attackLine(
 }
 
 /** A weapon one of these ids, or with all of these properties (when some are given). */
+/**
+ * kenli F-002 T08: named rules from a feat's traits (the T02 private pack's Polearm Master and
+ * Sentinel give them as text only; their bytes are pinned by the plans, so they aren't rewritten).
+ */
+const FEAT_TRAIT_RULES = [
+  ["Reactive Strike", "reactive_strike"],
+  ["Guardian", "guardian"],
+  ["Halt", "halt"],
+] as const;
+/** Reactive Strike: "a Quarterstaff, a Spear, or a weapon that has the Heavy and Reach properties". */
+const REACTIVE_STRIKE = { weapons: ["quarterstaff", "spear"], properties: ["heavy", "reach"] };
+
 function weaponQualifies(
   w: WeaponDef,
   q: { readonly weapons: readonly string[]; readonly properties: readonly string[] },

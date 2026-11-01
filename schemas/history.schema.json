@@ -490,6 +490,12 @@
                                       "opportunity": {
                                         "type": "boolean"
                                       },
+                                      "reactive_strike": {
+                                        "type": "boolean"
+                                      },
+                                      "guardian": {
+                                        "type": "boolean"
+                                      },
                                       "light_extra": {
                                         "type": "boolean"
                                       },
@@ -1217,6 +1223,7 @@
                         "enum": [
                           "advantage_against",
                           "speed_halved",
+                          "speed_zero",
                           "hamstrung",
                           "staggered",
                           "sundered",
@@ -1783,7 +1790,8 @@
                             "indomitable",
                             "deflect_attacks",
                             "relentless_rage",
-                            "hit_on_miss"
+                            "hit_on_miss",
+                            "tactical_mind"
                           ]
                         },
                         "question": {
@@ -3579,6 +3587,12 @@
                     "opportunity": {
                       "type": "boolean"
                     },
+                    "reactive_strike": {
+                      "type": "boolean"
+                    },
+                    "guardian": {
+                      "type": "boolean"
+                    },
                     "light_extra": {
                       "type": "boolean"
                     },
@@ -4150,6 +4164,12 @@
               "type": "boolean"
             },
             "opportunity": {
+              "type": "boolean"
+            },
+            "reactive_strike": {
+              "type": "boolean"
+            },
+            "guardian": {
               "type": "boolean"
             },
             "light_extra": {

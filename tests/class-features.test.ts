@@ -4,6 +4,7 @@ import {
   applyEncounterAction,
   type CharacterBuild,
   type CharacterState,
+  type CheckResult,
   computePlaySheet,
   createEncounter,
   createState,
@@ -98,6 +99,71 @@ describe("Fighter: Indomitable", () => {
     expect(s.notes).toContain("Brakka rerolls the save with Indomitable.");
     const sheet = computePlaySheet(brakka, s.states.brakka as CharacterState, catalog);
     expect(sheet.play.uses.find((u) => u.key.endsWith(":indomitable"))?.spent).toBe(1);
+  });
+});
+
+describe("Fighter: Tactical Mind (kenli F-002 T08, C8)", () => {
+  const spent = (b: CharacterBuild, st: CharacterState | undefined) =>
+    computePlaySheet(b, st as CharacterState, catalog).play.uses.find((u) =>
+      u.key.endsWith(":second-wind"),
+    )?.spent ?? 0;
+  /** Brakka (Fighter 2) asked; the check's bonus read from a check with no DC (no question). */
+  const setup = () => {
+    const brakka = level("fighter", 2, "Brakka", fighterBuild());
+    const s = session({ brakka });
+    s.act([], { type: "set_decisions", id: "brakka", mode: "ask" });
+    s.act([10], { type: "check", id: "brakka", skill: "athletics" });
+    const bonus = (s.result() as CheckResult).bonus;
+    return { brakka, s, dc: 1 + bonus + 6 };
+  };
+
+  it("a level 1 Fighter has no Tactical Mind: a failed check asks nothing", () => {
+    const brakka = level("fighter", 1, "Brakka", fighterBuild());
+    const s = session({ brakka });
+    s.act([], { type: "set_decisions", id: "brakka", mode: "ask" });
+    s.act([1], { type: "check", id: "brakka", skill: "athletics", dc: 25 });
+    expect(s.encounter().pending).toBeNull();
+    expect((s.result() as CheckResult).success).toBe(false);
+  });
+
+  it("a failed check: +1d10; turned into a success, one use of Second Wind is spent", () => {
+    const { brakka, s, dc } = setup();
+    s.act([1], { type: "check", id: "brakka", skill: "athletics", dc });
+    expect(s.encounter().pending?.kind).toBe("tactical_mind");
+    expect(s.encounter().pending?.question).toMatch(/Use Tactical Mind/);
+    expect(spent(brakka, s.states.brakka)).toBe(0);
+    s.act([7], { type: "decide", use: true });
+    const check = s.result() as CheckResult;
+    expect(check).toMatchObject({ success: true, tactical_mind: { roll: 7, spent: true } });
+    expect(check.total).toBe(dc + 1);
+    expect(spent(brakka, s.states.brakka)).toBe(1);
+    expect(s.notes.at(-2)).toMatch(/adds 7 with Tactical Mind and spends a use of Second Wind/);
+  });
+
+  it("still failed after the d10: Second Wind isn't spent; declined: no d10, nothing spent", () => {
+    const { brakka, s, dc } = setup();
+    s.act([1], { type: "check", id: "brakka", skill: "athletics", dc });
+    s.act([3], { type: "decide", use: true });
+    expect(s.result()).toMatchObject({ success: false, tactical_mind: { roll: 3, spent: false } });
+    expect(spent(brakka, s.states.brakka)).toBe(0);
+    s.act([1], { type: "check", id: "brakka", skill: "athletics", dc });
+    s.act([], { type: "decide", use: false });
+    expect(s.result()).toMatchObject({ success: false, tactical_mind: null });
+    expect(spent(brakka, s.states.brakka)).toBe(0);
+  });
+
+  it("no Second Wind left: no question, no d10, nothing spent", () => {
+    const { brakka, s, dc } = setup();
+    for (let i = 0; i < 2; i++)
+      s.states.brakka = applyAction(brakka, s.states.brakka as CharacterState, catalog, {
+        type: "use",
+        key: "fighter:second-wind",
+      }).state;
+    expect(spent(brakka, s.states.brakka)).toBe(2);
+    s.act([1, 9], { type: "check", id: "brakka", skill: "athletics", dc });
+    expect(s.encounter().pending).toBeNull();
+    expect(s.result()).toMatchObject({ success: false, tactical_mind: null });
+    expect(spent(brakka, s.states.brakka)).toBe(2);
   });
 });
 

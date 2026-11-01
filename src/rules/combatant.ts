@@ -131,6 +131,14 @@ export interface Combatant {
    * left; `null` without it.
    */
   readonly indomitable?: number | null;
+  /**
+   * kenli F-002 T08, Tactical Mind (SRD Fighter 2): "When you fail an ability check, you can expend
+   * a use of Second Wind to roll 1d10 and add it… If the check still fails, this use of Second Wind
+   * isn't expended." The Second Wind use key while a use is left; `null` or absent without it.
+   */
+  readonly tactical_mind?: string | null;
+  /** kenli F-002 T08: attack lines a Reactive Strike can be made with (`DerivedSheet.reactive_strike`). */
+  readonly reactive_strike?: readonly string[];
   /** d20 floors on its ability checks from features (`DerivedSheet.d20_floors`). */
   readonly d20_floors?: readonly D20FloorLine[];
   /**
@@ -177,7 +185,8 @@ export interface Decision {
     | "indomitable"
     | "deflect_attacks"
     | "relentless_rage"
-    | "hit_on_miss";
+    | "hit_on_miss"
+    | "tactical_mind";
   /** Who decides. */
   readonly combatant: Combatant;
   /** The question for the table, with the roll: "Brakka: Dexterity saving throw 7 vs 15…". */
@@ -1468,6 +1477,12 @@ export interface CheckResult {
   readonly reason_messages: readonly Message[];
   /** The Bardic Inspiration die rolled and added, if any. */
   readonly inspiration: number | null;
+  /** Tactical Mind used on it: its d10, and whether the Second Wind use is spent (it succeeded). */
+  readonly tactical_mind?: {
+    readonly roll: number;
+    readonly spent: boolean;
+    readonly use: string;
+  } | null;
 }
 
 /**
@@ -1499,6 +1514,21 @@ export function rollAbilityCheck(
     rng,
   });
   let total = r.total;
+  // Tactical Mind: a failed check against a DC, 1d10 added; Second Wind spent only if it succeeds.
+  let tactical: CheckResult["tactical_mind"] = null;
+  if (dc !== null && total < dc && combatant.tactical_mind) {
+    const question = message("decision.tactical_mind", {
+      name: combatant.name,
+      what: rolled,
+      total,
+      dc,
+    });
+    if (decide(decision("tactical_mind", combatant, question, total + 10 >= dc))) {
+      const d10 = rng.int(1, 10);
+      total += d10;
+      tactical = { roll: d10, spent: total >= dc, use: combatant.tactical_mind };
+    }
+  }
   const inspiration = dc === null ? null : inspire(combatant, total, dc, rolled, decide, rng);
   total += inspiration ?? 0;
   return {
@@ -1513,6 +1543,7 @@ export function rollAbilityCheck(
     reasons: r.reasons,
     reason_messages: r.reason_messages,
     inspiration,
+    tactical_mind: tactical,
   };
 }
 

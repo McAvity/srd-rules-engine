@@ -571,6 +571,8 @@ export function combatantFromCharacter(
     inspiration_die: null,
     // Indomitable (a named rule): the Fighter level, while a use is left.
     indomitable: sheet.rules.includes("indomitable") ? indomitableBonus(sheet) : null,
+    tactical_mind: sheet.rules.includes("tactical_mind") ? secondWindLeft(sheet) : null,
+    reactive_strike: sheet.reactive_strike,
     spellcasting: sheet.spellcasting.flatMap((line) =>
       line.ability === null || line.save_dc === null || line.attack_bonus === null
         ? []
@@ -1597,6 +1599,12 @@ function indomitableBonus(sheet: PlaySheet): number | null {
   const use = sheet.play.uses.find((u) => u.key.endsWith(":indomitable"));
   if (!use || use.spent >= use.max) return null;
   return sheet.classes.find((c) => c.class_id === "fighter")?.level ?? null;
+}
+
+/** Tactical Mind: the Second Wind use's key while a use is left, else `null`. */
+function secondWindLeft(sheet: PlaySheet): string | null {
+  const use = sheet.play.uses.find((u) => u.key.endsWith(":second-wind"));
+  return use && use.spent < use.max ? use.key : null;
 }
 
 /** An item's listed price (copper, per bundle) and its bundle size. */

@@ -74,6 +74,10 @@ export const MESSAGES_EN = {
   "recharge.no": "{name}'s {action} doesn't recharge ({roll}).",
   "inspiration.used": "{name} adds its Bardic Inspiration die: {roll}.",
   "indomitable.used": "{name} rerolls the save with Indomitable.",
+  "halt.speed_zero": "{target}'s Speed is 0 for the rest of the turn ({name}'s Halt).",
+  "tactical_mind.used": "{name} adds {roll} with Tactical Mind and spends a use of Second Wind.",
+  "tactical_mind.kept":
+    "{name} adds {roll} with Tactical Mind; the check still fails, so Second Wind isn't spent.",
   "legendary_resistance.used":
     "{name} uses Legendary Resistance to succeed instead ({left} left today).",
   "explore.notices": "{name} notices something.",
@@ -419,6 +423,15 @@ export const MESSAGES_EN = {
     "{name} can't make Opportunity Attacks (Staggering Blow)",
   "refusal.disengaged_movement_doesnt_provoke":
     "{target} Disengaged: its movement doesn't provoke Opportunity Attacks",
+  "refusal.reactive_strike_not_opportunity":
+    "A Reactive Strike is a Reaction attack, not an Opportunity Attack",
+  "refusal.no_reactive_strike": "{name} has no Reactive Strike",
+  "refusal.reactive_strike_weapon":
+    "{attack} can't make a Reactive Strike (a held Quarterstaff, Spear, or Heavy and Reach weapon)",
+  "refusal.guardian_is_opportunity": "Guardian's attack is an Opportunity Attack",
+  "refusal.no_guardian": "{name} has no Guardian",
+  "refusal.guardian_within_5ft":
+    "{target} is {distance} feet away: Guardian's Opportunity Attack is against a creature within 5 feet",
   "refusal.hasnt_recharged": "{name}'s {ability} hasn't recharged",
   "refusal.already_used_action_turn": "{name} has already used its action this turn",
   "refusal.no_legendary_actions": "{name} has no legendary actions",
@@ -622,6 +635,8 @@ export const MESSAGES_EN = {
     "{name} fails a {ability} saving throw{rolled, select, true { ({total} vs DC {dc})} other {}}. Use Legendary Resistance ({left} left)?",
   "decision.indomitable":
     "{name} fails a {what} ({total} vs DC {dc}). Reroll it with Indomitable (+{bonus})?",
+  "decision.tactical_mind":
+    "{name} fails a {what} ({total} vs DC {dc}). Use Tactical Mind (+1d10, a use of Second Wind only if it succeeds)?",
   "decision.relentless_rage":
     "{name} drops to 0 Hit Points while raging. Make a DC {dc} Constitution saving throw (Relentless Rage)?",
   "decision.hit_on_miss":
@@ -753,6 +768,8 @@ export const MESSAGES_EN = {
   "label.damage": "{dice} {type}",
   "label.attack_thrown": "{attack} (thrown, {normal}/{long} ft)",
   "label.attack_opportunity": "{attack} (Opportunity Attack)",
+  "label.attack_reactive_strike": "{attack} (Reactive Strike)",
+  "label.attack_guardian": "{attack} (Opportunity Attack, Guardian: within 5 ft)",
   "label.attack_light": "{attack} (Light extra attack)",
   "label.attack_cleave": "{attack} (Cleave)",
   "label.attack_granted": "{attack} (granted)",

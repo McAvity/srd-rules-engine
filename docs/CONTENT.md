@@ -309,11 +309,25 @@ that misses or is saved against deals half damage), `indomitable` (a failed save
 with the Fighter level, a decision, spending the `indomitable` resource), `cunning_strike` and
 `improved_cunning_strike`, `brutal_strike` and `improved_brutal_strike` (the encounter `attack`
 options `cunning` and `brutal`), `relentless_rage` (with the `relentless-rage` resource counting
-its uses). The effect target `attack.weapon` adds to every weapon attack roll (Sacred Weapon), and
+its uses), `tactical_mind`, `reactive_strike`, `guardian` and `halt` (below). The effect target `attack.weapon` adds to every weapon attack roll (Sacred Weapon), and
 a `spell_damage` grant's `spell` limits it to one spell (`$cantrip`: Agonizing Blast's choice).
 
 Anything effects, riders, Advantage and toggles can't express goes in a trait's text, or in a
 feat's `unsupported` note, which the builder shows to the player.
+
+Some rules are derived from a trait's name, for content whose bytes are pinned elsewhere (kenli
+F-002 T08), never set in `rules` by hand:
+- `tactical_mind`: a Fighter class feature's trait "Tactical Mind" (SRD Fighter 2). A failed
+  check against a DC in an encounter asks (decision `tactical_mind`) to add 1d10; the Second Wind
+  use is spent only if the check then succeeds (`CheckResult.tactical_mind`); none left, no
+  question.
+- `reactive_strike`, `guardian`, `halt`: a feat's traits "Reactive Strike", "Guardian" and
+  "Halt". Reactive Strike is the encounter `attack` with `reactive_strike: true` (a Reaction, not
+  an Opportunity Attack, with a held Quarterstaff, Spear or Heavy and Reach weapon:
+  `sheet.reactive_strike`); Guardian is `opportunity: true, guardian: true` (only within 5 feet,
+  allowed after a Disengage); Halt marks the target of an Opportunity Attack's hit `speed_zero`
+  until the end of the current turn. The triggers (a creature entering the reach, a Disengage, a
+  hit on another) are the table's: the options list these attacks in the reaction group off turn.
 
 ### Choices
 

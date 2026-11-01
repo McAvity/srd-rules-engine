@@ -325,6 +325,19 @@ export const FEATURE_RULES = [
   "reliable_talent",
   "potent_cantrip",
   "indomitable",
+  /** kenli F-002 T08: Tactical Mind (SRD Fighter 2), derived in `rules/sheet.ts` (a named rule). */
+  "tactical_mind",
+  /**
+   * kenli F-002 T08: a feat's traits given only as text in the T02 private pack (its bytes are
+   * pinned by the plans), derived in `rules/sheet.ts` from the feat's trait names:
+   * `reactive_strike` (a Reaction melee attack against a creature entering the reach of a held
+   * Quarterstaff, Spear or Heavy and Reach weapon; not an Opportunity Attack), `guardian` (an
+   * Opportunity Attack against a creature within 5 feet after it Disengages or hits another) and
+   * `halt` (an Opportunity Attack's hit: the target's Speed is 0 for the rest of the turn).
+   */
+  "reactive_strike",
+  "guardian",
+  "halt",
   "cunning_strike",
   "improved_cunning_strike",
   "brutal_strike",

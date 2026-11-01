@@ -215,11 +215,12 @@ export const SpellMarkSchema = z.object({
    * `speed_halved`: `on`'s Speed is halved (Stunning Strike's successful save); `hamstrung`: −15
    * feet (Hamstring Blow); `staggered`: Disadvantage on its next save, no Opportunity Attacks
    * (Staggering Blow); `sundered`: +5 to the next attack roll against it by someone else than
-   * `by` (Sundering Blow).
+   * `by` (Sundering Blow); `speed_zero`: its Speed is 0 (Halt, for the rest of the turn).
    */
   kind: z.enum([
     "advantage_against",
     "speed_halved",
+    "speed_zero",
     "hamstrung",
     "staggered",
     "sundered",
@@ -328,6 +329,7 @@ export const PendingSchema = z.object({
     "deflect_attacks",
     "relentless_rage",
     "hit_on_miss",
+    "tactical_mind",
   ]),
   question: z.string(),
   /** `question` as a message (for translation); absent in documents saved before it. */
@@ -635,6 +637,10 @@ const AttackActionSchema = z.object({
   within_5ft: z.boolean().optional(),
   reaction: z.boolean().optional(),
   opportunity: z.boolean().optional(),
+  /** kenli F-002 T08: a Reactive Strike (a Reaction, not an Opportunity Attack). */
+  reactive_strike: z.boolean().optional(),
+  /** kenli F-002 T08: Guardian's Opportunity Attack (within 5 feet; after a Disengage too). */
+  guardian: z.boolean().optional(),
   light_extra: z.boolean().optional(),
   cleave: z.boolean().optional(),
   mastery: z.boolean().optional(),

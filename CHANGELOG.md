@@ -7,6 +7,19 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — Tactical Mind, Reactive Strike, Guardian and Halt (kenli F-002 T08)
+- Named rules derived from trait names (the content is text only and its bytes are pinned):
+  `tactical_mind` (SRD Fighter 2's trait), `reactive_strike`, `guardian`, `halt` (feat traits).
+- Tactical Mind: an encounter check failed against a DC asks (decision kind `tactical_mind`,
+  `Combatant.tactical_mind` = the Second Wind use key) to add 1d10; `CheckResult.tactical_mind`
+  `{roll, spent, use}`; the Second Wind use is spent only if the check then succeeds.
+- Encounter `attack` options `reactive_strike` (a Reaction attack, not an Opportunity Attack:
+  no Halt, not stopped by a Disengage; a held qualifying weapon, `DerivedSheet.reactive_strike`)
+  and `guardian` (with `opportunity`: only within 5 feet, allowed after a Disengage). Halt: an
+  Opportunity Attack's hit marks the target `speed_zero` (new mark kind) until the end of the
+  current turn; `speedOf` is 0 while marked. `combatantOptions` lists both off turn in the
+  reaction group. New messages and refusals; all fields optional, older documents parse.
+
 ### Fixed — Action Surge once per turn (kenli F-002 T08)
 - A feature action that grants an extra action (`extra_action`: Action Surge) is refused a second
   time in the same turn (`refusal.already_used_turn_2`), even with uses left (SRD 5.2.1: "Once on

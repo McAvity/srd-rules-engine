@@ -374,6 +374,28 @@ export function combatantOptions(
           creature(reach, ids),
         ),
       );
+      // kenli F-002 T08: Guardian (within 5 feet) and Reactive Strike (not an Opportunity Attack).
+      if (view.rules.includes("guardian")) {
+        const near = candidates(5);
+        attacks.push(
+          entry(
+            { ...base, target: near[0] ?? "", opportunity: true, guardian: true },
+            message("label.attack_guardian", { attack: label }),
+            "reaction",
+            creature(5, near),
+          ),
+        );
+      }
+      if (view.rules.includes("reactive_strike") && view.reactive_strike?.includes(line.name)) {
+        attacks.push(
+          entry(
+            { ...base, target: first, reactive_strike: true },
+            message("label.attack_reactive_strike", { attack: label }),
+            "reaction",
+            creature(reach, ids),
+          ),
+        );
+      }
     }
     if (!turn) continue;
     if (line.properties.includes("light") && c.light_attacks.length) {
