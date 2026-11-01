@@ -77,6 +77,8 @@ export const MESSAGES_EN = {
   "halt.speed_zero": "{target}'s Speed is 0 for the rest of the turn ({name}'s Halt).",
   "concentration_breaker.applies":
     "Concentration Breaker: {target} saves with Disadvantage to keep its Concentration ({name}'s damage).",
+  "great_weapon_fighting.applied":
+    "Great Weapon Fighting: {name}'s damage dice {rolls} count as 3.",
   "guarded_mind.used": "{name} succeeds instead with Guarded Mind (Mage Slayer).",
   "studied_attacks.mark":
     "{name} has Advantage on its next attack roll against {target} before the end of its next turn (Studied Attacks).",

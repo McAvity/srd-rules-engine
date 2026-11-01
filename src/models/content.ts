@@ -345,6 +345,8 @@ export const FEATURE_RULES = [
    *   the `guarded-mind` resource.
    * - `concentration_breaker`: a creature this one damages has Disadvantage on the save to keep
    *   its Concentration.
+   * - `great_weapon_fighting`: a melee weapon attack's damage dice with a weapon held in two hands
+   *   (Two-Handed, or Versatile used two-handed): a 1 or 2 counts as 3.
    */
   "tactical_mind",
   "tactical_shift",
@@ -356,6 +358,7 @@ export const FEATURE_RULES = [
   "savage_attacker",
   "guarded_mind",
   "concentration_breaker",
+  "great_weapon_fighting",
   "cunning_strike",
   "improved_cunning_strike",
   "brutal_strike",

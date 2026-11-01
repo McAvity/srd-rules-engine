@@ -1699,6 +1699,15 @@ function run(
         notes.push(message("studied_attacks.mark", { name: c.name, target: t.name }));
       }
     } else {
+      // Great Weapon Fighting: the damage dice that counted as 3.
+      const raised = (hit.damage?.parts ?? []).flatMap((p) =>
+        p.raw_rolls ? p.raw_rolls.filter((r, i) => r !== p.rolls[i]) : [],
+      );
+      if (raised.length) {
+        notes.push(
+          message("great_weapon_fighting.applied", { name: c.name, rolls: raised.join(", ") }),
+        );
+      }
       if (hit.savage) {
         if (hit.savage.used) c.riders_used.push(SAVAGE_ATTACKER);
         notes.push(

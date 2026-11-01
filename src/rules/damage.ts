@@ -39,6 +39,11 @@ export interface RolledDamagePart extends DamagePart {
    * the first set, then the second); absent otherwise.
    */
   readonly critical_from?: number;
+  /**
+   * kenli F-002 T08: the dice as rolled, when a minimum changed some (Great Weapon Fighting:
+   * `rolls` holds them as counted, a 1 or 2 counted as 3).
+   */
+  readonly raw_rolls?: readonly number[];
 }
 
 export interface RolledDamage {
@@ -53,16 +58,25 @@ export interface RolledDamage {
  */
 export function rollDamage(
   parts: readonly DamagePart[],
-  { critical = false, rng = mathRng }: { critical?: boolean; rng?: Rng } = {},
+  {
+    critical = false,
+    rng = mathRng,
+    min_die,
+  }: { critical?: boolean; rng?: Rng; min_die?: number } = {},
 ): RolledDamage {
   const rolled = parts.map((part): RolledDamagePart => {
     if (part.dice === null) return { ...part, rolls: [], total: Math.max(0, part.bonus) };
     const { count, sides } = parseDiceExpression(part.dice);
     const result = roll(`${critical ? count * 2 : count}d${sides}`, rng);
-    const total = Math.max(0, result.total + part.bonus);
+    // A minimum per die (Great Weapon Fighting: "treat any 1 or 2 on a damage die as a 3").
+    const counted = min_die ? result.rolls.map((r) => Math.max(r, min_die)) : result.rolls;
+    const changed = counted.some((r, i) => r !== result.rolls[i]);
+    const dice = counted.reduce((n, r) => n + r, 0) + result.modifier;
+    const total = Math.max(0, dice + part.bonus);
+    const raw = changed ? { raw_rolls: result.rolls } : {};
     return critical
-      ? { ...part, rolls: result.rolls, total, critical_from: count }
-      : { ...part, rolls: result.rolls, total };
+      ? { ...part, rolls: counted, total, critical_from: count, ...raw }
+      : { ...part, rolls: counted, total, ...raw };
   });
   return { parts: rolled, total: rolled.reduce((n, p) => n + p.total, 0), critical };
 }

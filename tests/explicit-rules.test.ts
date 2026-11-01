@@ -55,6 +55,12 @@ const pack = {
       path: "grants.rules",
       value: "savage_attacker",
     },
+    {
+      target: "feats/great-weapon-fighting",
+      op: "append",
+      path: "grants.rules",
+      value: "great_weapon_fighting",
+    },
   ],
 };
 const catalog = createCatalog([srdPack, pack], {});
@@ -329,5 +335,32 @@ describe("Mage Slayer-like: Guarded Mind and Concentration Breaker", () => {
     plain.act(next);
     plain.act(swing("cultist-fanatic"), fixedRng(18));
     expect(plain.notes.join("\n")).not.toMatch(/Concentration Breaker/);
+  });
+});
+
+describe("Great Weapon Fighting", () => {
+  const gwf = (cat = catalog) =>
+    builder.setChoice(brakka(1), cat, "class:fighter#fighting_style", ["great-weapon-fighting"])
+      .build;
+  const hit = (b: CharacterBuild, attack: string, cat = catalog) => {
+    const s = session(b, ["ogre"], cat);
+    // Hit (18); the weapon's dice 1 and 2 (Flail: 1); Savage Attacker's second roll 1, 1.
+    s.act(swing("ogre", { attack }), scriptedRng([18, 1, 2, 1, 1]));
+    return { s, hit: s.result() as AttackResult };
+  };
+
+  it("two hands: a 1 or 2 on the damage dice counts as 3 (noted); one hand or no rule: not", () => {
+    const { s, hit: two } = hit(gwf(), "Greatsword");
+    expect(two.damage?.parts[0]).toMatchObject({ rolls: [3, 3], raw_rolls: [1, 2] });
+    expect(s.notes.join("\n")).toMatch(
+      /Great Weapon Fighting: Brakka's damage dice 1, 2 count as 3/,
+    );
+    // One hand (Flail): Savage Attacker's second roll (2) is used (automatic decisions), not a 3.
+    const one = hit(gwf(), "Flail").hit;
+    expect(one.savage).toEqual({ first: [1], second: [2], used: true });
+    expect(one.damage?.parts[0]?.rolls).toEqual([2]);
+    expect(one.damage?.parts[0]?.raw_rolls).toBeUndefined();
+    const plain = hit(gwf(srd), "Greatsword", srd).hit;
+    expect(plain.damage?.parts[0]?.rolls).toEqual([1, 2]);
   });
 });

@@ -985,14 +985,16 @@ export function makeAttack(
   else if (cleave && line.cleave_damage_parts) base_parts = line.cleave_damage_parts;
   else if (two_handed && line.two_handed_damage_parts) base_parts = line.two_handed_damage_parts;
   const parts = [...base_parts, ...extra];
-  let damage = rollDamage(parts, { critical: critical_hit, rng });
+  const min_die = greatWeaponFighting(attacker, line, two_handed);
+  let damage = rollDamage(parts, { critical: critical_hit, rng, min_die });
   // Savage Attacker: "roll the weapon's damage dice twice and use either roll" (its first part:
   // the weapon's own dice; riders and extra dice are never rolled again).
   let savage: AttackResult["savage"] = null;
   const own = damage.parts[0];
   const ownPart = parts[0];
   if (options.savage && line.weapon && own && ownPart && ownPart.dice !== null) {
-    const again = rollDamage([ownPart], { critical: critical_hit, rng }).parts[0] as typeof own;
+    const again = rollDamage([ownPart], { critical: critical_hit, rng, min_die })
+      .parts[0] as typeof own;
     const question = message("decision.savage_attacker", {
       name: attacker.name,
       attack: line.name,
@@ -1019,6 +1021,23 @@ export function makeAttack(
     { critical: critical_hit },
   );
   return { ...base, damage, riders: riderNames, instances, outcome, savage };
+}
+
+/**
+ * kenli F-002 T08, Great Weapon Fighting (`great_weapon_fighting`): "When you roll damage for a
+ * Melee attack with a weapon held in two hands (Two-Handed or Versatile), treat any 1 or 2 on a
+ * damage die as a 3": every damage die of that attack (riders' too). `undefined` otherwise.
+ */
+function greatWeaponFighting(
+  attacker: Combatant,
+  line: AttackLine,
+  twoHanded: boolean,
+): number | undefined {
+  if (!attacker.rules.includes("great_weapon_fighting") || line.kind !== "melee" || !line.weapon)
+    return undefined;
+  const held =
+    line.properties.includes("two-handed") || (line.properties.includes("versatile") && twoHanded);
+  return held ? 3 : undefined;
 }
 
 /** One attack's dice rolled without a target (`rollAttack`). */
@@ -1101,7 +1120,13 @@ export function rollAttack(
     critical_miss,
     reasons: r.reasons,
     reason_messages: r.reason_messages,
-    damage: parts.length ? rollDamage(parts, { critical: critical_hit, rng }) : null,
+    damage: parts.length
+      ? rollDamage(parts, {
+          critical: critical_hit,
+          rng,
+          min_die: greatWeaponFighting(attacker, line, two_handed),
+        })
+      : null,
     riders: riderNames,
     resolution: r.resolution,
     modifiers: r.modifiers,

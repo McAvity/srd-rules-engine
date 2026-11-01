@@ -341,6 +341,9 @@ is display text, and a renamed or translated label changes nothing.
 - `guarded_mind` (with a `guarded-mind` resource): a failed Intelligence, Wisdom or Charisma save
   can succeed instead (decision `guarded_mind`, one use).
 - `concentration_breaker`: a creature it damages saves with Disadvantage to keep Concentration.
+- `great_weapon_fighting`: a melee weapon attack with a weapon held in two hands (Two-Handed, or
+  Versatile used two-handed): every damage die of 1 or 2 counts as 3 (`rollDamage`'s `min_die`;
+  the dice as rolled in the part's `raw_rolls`).
 
 ### Choices
 

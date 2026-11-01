@@ -22,6 +22,8 @@ migrated when it's loaded.
   `guarded_mind` (decision kind `guarded_mind`, `SaveResult.guarded_mind`, `Combatant.guarded_mind`)
   and `concentration_breaker` (Disadvantage on the damaged creature's Concentration save;
   `rollSavingThrow` takes extra `modes`). All fields optional; older documents parse.
+- `great_weapon_fighting`: two-handed melee weapon damage dice count a 1 or 2 as 3 (the sheet
+  only noted it): `rollDamage` option `min_die`, `RolledDamagePart.raw_rolls`.
 
 ### Fixed — Extra Attack's unused attacks carried into the next turn (kenli F-002 T08)
 - The start of a creature's turn clears `attacks_left`: the attacks of an Attack action not all
