@@ -578,6 +578,12 @@ describe("H3: known forms, their CR/Fly limits, the form's attacks and AC (Wild 
     expect(s.uses_spent["druid:wild-shape"]).toBe(1);
     expect(s.concentration).toBe("Shillelagh"); // taking the form doesn't end Concentration
     const sheet = computePlaySheet(b, s, cb);
+    expect(
+      sheet.actions
+        .find((a) => a.key === "druid:shape")
+        ?.shape?.forms.map((f) => f.id)
+        .sort(),
+    ).toEqual(["rat", "wolf"]);
     expect(sheet.shape).toMatchObject({ name: "Wolf", armor_class: 12 });
     expect(sheet.armor_class.total).toBe(12);
     const bite = sheet.attacks.find((a) => a.name === "Bite (Wolf)");

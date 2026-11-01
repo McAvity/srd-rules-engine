@@ -188,11 +188,37 @@ export interface FeatureActionLine {
   /** Temporary Hit Points it gives when used, at this class level (Wild Shape). */
   readonly temp_hp?: number;
   /** It takes one of the known forms (`use_feature`'s `form`): the class's choice id. */
-  readonly shape?: { readonly choice: string; readonly class_id: string | null };
+  readonly shape?: {
+    readonly choice: string;
+    readonly class_id: string | null;
+    /** The known forms (the choice's picks), each with why it can't be taken now, if so. */
+    readonly forms: readonly {
+      readonly id: string;
+      readonly name: string;
+      readonly unavailable: string | null;
+    }[];
+  };
   /** Paid with a spell slot instead of its uses, or always (`FeatureActionDef.slot_payment`). */
   readonly slot_payment?: "instead" | "required";
   /** The die the user rolls when using it (`1d8`), when it has one; `null`: no column value. */
   readonly roll_die?: string | null;
+}
+
+/** kenli F-002 T10 (H3): a form choice's picks with the engine's availability now. */
+function knownForms(
+  res: Resolution,
+  choiceId: string,
+  classId: string | null,
+): { id: string; name: string; unavailable: string | null }[] {
+  const choice = res.choices.find(
+    (c) => c.definition.id === choiceId && c.source.class_id === classId,
+  );
+  if (!choice) return [];
+  const picks = res.selected(choice);
+  return res
+    .options(choice)
+    .filter((o) => picks.includes(o.id))
+    .map((o) => ({ id: o.id, name: o.name, unavailable: o.unavailable }));
 }
 
 /** The last line per key, in the place of the first (a later definition replaces an earlier one). */
@@ -1215,7 +1241,15 @@ export function computeSheet(
               ? { restores_per_slot_level: a.restores_per_slot_level }
               : {}),
             ...(a.temp_hp ? { temp_hp: a.temp_hp.per_class_level * classLevel } : {}),
-            ...(a.shape ? { shape: { choice: a.shape.choice, class_id: src.class_id } } : {}),
+            ...(a.shape
+              ? {
+                  shape: {
+                    choice: a.shape.choice,
+                    class_id: src.class_id,
+                    forms: knownForms(res, a.shape.choice, src.class_id),
+                  },
+                }
+              : {}),
             ...(a.slot_payment ? { slot_payment: a.slot_payment } : {}),
             ...(a.roll ? { roll_die: rollDie(a.roll) } : {}),
           };
