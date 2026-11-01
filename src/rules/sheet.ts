@@ -699,6 +699,12 @@ export function computeSheet(
       `You aren't trained with ${armorUntrained}: Disadvantage on Str and Dex tests and attacks, and no spellcasting.`,
     );
   }
+  // kenli F-013 T01: a Shield held without Shield training gives no AC (see `wornArmorClass`).
+  if (play && ac.shield && !training.includes("shield")) {
+    warnings.push(
+      `You aren't trained with Shields: ${ac.shield.name} gives no Armor Class while you hold it.`,
+    );
+  }
   const { armor, shield } = ac;
   const conditions = armorConditions(armor, shield);
   const effects = (target: EffectTarget) => effectsFor(target, conditions);
@@ -1409,7 +1415,7 @@ function bestArmorClass(
   effectsFor: (target: EffectTarget, conditions: Conditions) => ResolvedEffect[],
   play?: PlayContext,
 ): ArmorClassOption {
-  if (play) return wornArmorClass(res, catalog, mod, effectsFor, play);
+  if (play) return wornArmorClass(res, catalog, mod, effectsFor, play, training);
   const owned = Object.keys(equipment)
     .map((id) => lookup(catalog.armor, id))
     .filter((a): a is ArmorDef => a !== undefined);
@@ -1473,6 +1479,9 @@ function bestArmorClass(
 /**
  * In play, AC comes from what the character actually wears: the equipped armor (or no armor,
  * with the best unarmored calculation) and the equipped Shield, plus magic bonuses.
+ * Without Shield training a held Shield gives no AC, its magic AC bonus included (SRD "Armor
+ * Training"), but it's still wielded: rules that need no Shield (Unarmored Defense, Bracers of
+ * Defense) still see it, and its other magic keeps working.
  */
 function wornArmorClass(
   res: Resolution,
@@ -1480,6 +1489,7 @@ function wornArmorClass(
   mod: Record<Ability, number>,
   effectsFor: (target: EffectTarget, conditions: Conditions) => ResolvedEffect[],
   play: PlayContext,
+  training: readonly string[],
 ): ArmorClassOption {
   const worn = (category: (c: string) => boolean) => {
     const item = play.items.find((i) => {
@@ -1527,11 +1537,13 @@ function wornArmorClass(
     }
   }
   const conditions = armorConditions(body?.def ?? null, shield?.def ?? null);
+  const shieldAc = shield && training.includes("shield") ? shield : null;
   let best: ArmorClassOption | null = null;
   let bestTotal = Number.NEGATIVE_INFINITY;
   for (const option of options.filter((o) => o.ok)) {
     const parts = [...option.parts];
-    if (shield) parts.push({ source: shield.def.name, value: shield.def.base_ac + shield.bonus });
+    if (shieldAc)
+      parts.push({ source: shieldAc.def.name, value: shieldAc.def.base_ac + shieldAc.bonus });
     for (const [op, value, source] of effectsFor("ac", conditions)) {
       if (op === "add") parts.push({ source, value });
     }
