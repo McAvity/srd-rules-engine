@@ -119,6 +119,30 @@ describe("Fighter", () => {
     expect(s.get("brakka")?.used.action).toBe(true);
   });
 
+  it("Extra Attack's attacks left unused don't carry into the next turn (kenli F-002 T08)", () => {
+    // SRD "Extra Attack": the attacks are part of the Attack action on that turn. Found by the
+    // F-002 T08 browser pilot: one attack at 19, then the next turn took the leftover attacks
+    // without the action, and a whole Attack action on top.
+    const brakka = levelUpIn(fighterBuild(), "fighter", 4); // Fighter 5: two attacks
+    const s = session({ brakka });
+    const swing = {
+      type: "attack",
+      id: "brakka",
+      target: "goblin-warrior",
+      attack: "Greatsword",
+    } as const;
+    s.act([2], swing); // one of the two; one left this turn
+    expect(s.get("brakka")?.attacks_left).toBe(1);
+    s.act([], next, next); // the goblin's turn, then Brakka's again
+    expect(s.get("brakka")?.used.action).toBe(false);
+    expect(s.get("brakka")?.attacks_left).toBe(0);
+    s.act([2], swing); // takes the Attack action: one more left in it
+    expect(s.get("brakka")?.used.action).toBe(true);
+    expect(s.get("brakka")?.attacks_left).toBe(1);
+    s.act([2], swing);
+    expect(() => s.act([2], swing)).toThrow(/no attacks left/);
+  });
+
   it("the additional action can't cast a spell", () => {
     const ilse = levelUpIn(level("wizard", 1, "Ilse"), "fighter", 2);
     const s = session({ ilse });

@@ -4205,6 +4205,9 @@ export function outOfFight(ctx: EncounterContext, c: EncounterCombatant): boolea
 /** The start of a creature's turn: action, Bonus Action, reaction and movement come back. */
 function resetTurn(c: EncounterCombatant): void {
   c.used = { action: false, bonus_action: false, reaction: false };
+  // kenli F-002 T08: Extra Attack's attacks belong to that turn's Attack action (SRD); none left
+  // over is carried into this one.
+  c.attacks_left = 0;
   c.moved = 0;
   c.extra_movement = 0;
 }

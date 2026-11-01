@@ -7,6 +7,12 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Fixed — Extra Attack's unused attacks carried into the next turn (kenli F-002 T08)
+- The start of a creature's turn clears `attacks_left`: the attacks of an Attack action not all
+  made in one turn are no longer available on the next turn without the action, before a whole
+  new Attack action (SRD "Extra Attack": part of the Attack action on your turn). Found by the
+  F-002 T08 browser pilot (Fighter 19→20 in one fight: 1–2 leftover attacks, then 4).
+
 ### Added — Tactical Mind, Reactive Strike, Guardian and Halt (kenli F-002 T08)
 - Named rules derived from trait names (the content is text only and its bytes are pinned):
   `tactical_mind` (SRD Fighter 2's trait), `reactive_strike`, `guardian`, `halt` (feat traits).
