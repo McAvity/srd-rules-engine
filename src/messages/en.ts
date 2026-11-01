@@ -266,6 +266,7 @@ export const MESSAGES_EN = {
     "{feature}: regains {amount} Hit Points{capped, select, true { (rolled {rolled})} other {}}.",
   "play.exhaustion_dies": "Exhaustion 6: the character dies.",
   "play.starting_equipment": "Starting equipment added: {items}.",
+  "play.level_items": "Granted with this level: {items}.",
   "play.took_off": "Took off {item}.",
   "play.item_stored": "{item} put away (stored: not carried).",
   "play.item_retrieved": "{item} taken back (carried).",

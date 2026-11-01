@@ -7,6 +7,12 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — kenli F-002 T12 final integration (no document change; SRD bytes unchanged)
+- D043: `levelItems(before, after, catalog)` — the items the grants of a build give beyond an
+  earlier one's (a gained level's new features, e.g. the XPHB Assassin's Tools at Rogue 3) — and
+  `gainLevelItems(before, after, state, catalog)`, which adds them free (`add_item`) once; the next
+  level's diff is empty. Message `play.level_items`. Public API snapshot updated (`LevelItem`).
+
 ### Fixed — kenli F-002 T12 final corrections (SRD bytes unchanged; older documents still parse)
 - D035: an automation (`AutomationSchema`) adding a choice or a feat is refused also in nested
   grants (`at_class_level`, a toggle's grants, any depth); `addsChoiceOrFeat(grants)`.

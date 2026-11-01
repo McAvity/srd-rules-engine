@@ -2040,6 +2040,59 @@ export function stockItems(
   return { state: s, lines: final, before_cp, after_cp, spent_cp: before_cp - after_cp, messages };
 }
 
+/** kenli F-002 T12 (D043): an item a gained level's grants give that the previous build's didn't. */
+export interface LevelItem {
+  readonly item: string;
+  readonly name: string;
+  readonly qty: number;
+}
+
+/**
+ * kenli F-002 T12 (D043): the items the grants of `after` give beyond those of `before` (the
+ * equipment its sources grant, e.g. the XPHB Assassin's Tools at Rogue 3), each with the missing
+ * quantity. Pure; nothing is bought or written. Starting-equipment choices of level 1 are the same
+ * in both builds, so a level gained adds only what its new features grant.
+ */
+export function levelItems(
+  before: CharacterBuild,
+  after: CharacterBuild,
+  catalog: Catalog,
+): LevelItem[] {
+  const had = computeSheet(before, catalog).equipment;
+  const has = computeSheet(after, catalog).equipment;
+  return Object.entries(has).flatMap(([item, qty]) => {
+    const more = qty - (had[item] ?? 0);
+    return more > 0 ? [{ item, name: mundaneName(catalog, item) ?? item, qty: more }] : [];
+  });
+}
+
+/**
+ * kenli F-002 T12 (D043): a level gained in play adds what its new features grant (`levelItems`)
+ * to the inventory, free (`add_item`), once: the next level's diff no longer has them. The rest of
+ * the state (coins, other items, spent HP/slots/uses) is unchanged. `items` empty: `state` as given.
+ */
+export function gainLevelItems(
+  before: CharacterBuild,
+  after: CharacterBuild,
+  state: CharacterState,
+  catalog: Catalog,
+): { state: CharacterState; items: LevelItem[]; messages: Message[] } {
+  const items = levelItems(before, after, catalog);
+  let s = state;
+  const messages: Message[] = [];
+  for (const g of items) {
+    const r = applyAction(after, s, catalog, { type: "add_item", item: g.item, qty: g.qty });
+    s = r.state;
+  }
+  if (items.length)
+    messages.push(
+      message("play.level_items", {
+        items: items.map((i) => message("item.qty", { item: i.name, qty: i.qty })),
+      }),
+    );
+  return { state: s, items, messages };
+}
+
 /**
  * kenli F-002 T12 B2b, Empowered Spell on a spell rolled by hand, after its damage: `rolls` are
  * the damage rolls of that one cast (a beam's each, or the one roll), `roll` the one whose `dice`
