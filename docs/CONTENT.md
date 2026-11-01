@@ -102,7 +102,7 @@ grants:
   resistances: [poison]
   cantrips: [prestidigitation]
   spells: [hunters-mark]                # always prepared
-  spellcasting: {list: wizard, ability: int, slots: [2]}   # slots per spell level; pact: true for Warlocks
+  spellcasting: {list: wizard, ability: int, progression: full}   # full | half | third | pact
   ac_calculations: [{name: Unarmored Defense, abilities: [dex, con], shield: true}]
   items: [{item: javelin, qty: 8}]
   gp: 15
@@ -132,6 +132,7 @@ grants:
 | `saves` / `save.<ability>` | `add` | Aura of Protection: `cha`, `min: 1` |
 | `skill.unproficient` | `add` | Jack of All Trades: `half_prof` |
 | `hp_per_class_level` | `add` | Draconic Resilience: `1` × Sorcerer level |
+| `hp_max` | `add` | Boon of Fortitude: `40` (once, not per level) |
 | `checks` | `add` | Stone of Good Luck: `1` (ability checks) |
 | `score.<ability>` | `max` | Gauntlets of Ogre Power: Strength `19` |
 
@@ -372,7 +373,11 @@ Spell choices add filters:
     ritual: false            # true: Ritual spells only
     subset_of: spellbook     # only spells a sibling choice picked
     always_prepared: false   # true: doesn't count against the class's prepared spells
+    casting_time: Action     # optional: only spells with this casting time (Spell Mastery)
 ```
+
+A skill choice, like Expertise and spell choices, needs no more picks than it can still give: a
+character already proficient in every skill it allows gains nothing from it.
 
 Weapon Mastery choices accept `weapon_kind: melee` (Barbarian). `kind: expertise` offers the
 skills you're proficient in.

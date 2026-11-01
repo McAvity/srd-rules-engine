@@ -146,6 +146,7 @@ const EFFECT_TARGET_NAMES = [
   "darkvision",
   "hp_per_class_level",
   "hp_per_level",
+  "hp_max",
   "initiative",
   "martial_arts.die",
   "saves",
@@ -583,10 +584,12 @@ export const SpellcastingSchema = z.strictObject({
   ability: z.string(),
   /**
    * How class levels turn into spell slots: `full` (each level counts), `half` (half, rounded
-   * up), both through the Multiclass Spellcaster table in the creation rules; `pact` (Warlock
+   * up), `third` (a third: Arcane Trickster, Eldritch Knight; rounded up when it is the
+   * character's only spellcasting class, its own table, rounded down when multiclassed), all
+   * through the Multiclass Spellcaster table in the creation rules; `pact` (Warlock
    * Pact Magic, from `pact_slots`); `null` for spells cast without class slots.
    */
-  progression: z.enum(["full", "half", "pact"]).nullable().default(null),
+  progression: z.enum(["full", "half", "third", "pact"]).nullable().default(null),
   /** Pact Magic by class level (20 entries): number of slots and their level. */
   pact_slots: z.array(z.strictObject({ count: z.int(), level: z.int() })).default([]),
 });
@@ -718,6 +721,8 @@ export interface ChoiceDef {
   ritual: boolean;
   /** `kind: spell`: only spells of this school (Evoker: evocation). */
   school: string | null;
+  /** `kind: spell`: only spells with this casting time (Spell Mastery: `Action`). */
+  casting_time?: string;
   /** `kind: spell`: the picks are always prepared (they don't count against a class's limit). */
   always_prepared: boolean;
   /**
@@ -868,6 +873,8 @@ export const ChoiceDefSchema: z.ZodType<ChoiceDef, unknown> = z
         max_score: z.int().default(20),
         ritual: z.boolean().default(false),
         school: z.string().nullable().default(null),
+        // Optional (no default): content without it parses to the same object, so the bundled SRD keeps its bytes.
+        casting_time: z.string().optional(),
         always_prepared: z.boolean().default(false),
         subset_of: z.string().nullable().default(null),
         scaling: z
@@ -976,7 +983,11 @@ export type SpeciesDef = z.infer<typeof SpeciesSchema>;
 
 export const BackgroundSchema = z.strictObject({
   ...entity,
-  ability_scores: z.array(z.enum(ABILITIES)).length(3),
+  /**
+   * The abilities its +2/+1 or +1/+1/+1 may go to: three for a 2024 background; up to all six for
+   * a background from an older book used with the 2024 rules ("increase any", XPHB p.38).
+   */
+  ability_scores: z.array(z.enum(ABILITIES)).min(3).max(6),
   grants: GrantsSchema,
 });
 export type BackgroundDef = z.infer<typeof BackgroundSchema>;

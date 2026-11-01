@@ -260,14 +260,16 @@ export class Resolution {
   /**
    * How many answers a choice needs. Usually its `count`, but an Expertise choice ("in which you
    * have proficiency") or a spell choice (you can't learn a spell twice) needs no more than the
-   * options left, e.g. when a multiclass caster already knows every cantrip on a short list.
+   * options left, e.g. when a multiclass caster already knows every cantrip on a short list; so
+   * does a skill choice (a proficiency you already have isn't gained again): a character
+   * proficient in every skill it allows gains nothing from it (Lore's Bonus Proficiencies).
    * A spell choice whose list depends on an unanswered choice still needs its full count.
    */
   required(choice: ActiveChoice): number {
     if (choice.replaces) return 0;
     const count = this.countOf(choice);
     const { kind, spell_list } = choice.definition;
-    if (kind !== "expertise" && kind !== "spell") return count;
+    if (kind !== "expertise" && kind !== "spell" && kind !== "skill") return count;
     if (kind === "spell" && spell_list?.some((l) => this.resolveRef(choice.source, l) === null)) {
       return count;
     }
@@ -1099,7 +1101,8 @@ function spellViews(res: Resolution, choice: ActiveChoice, ok: (id: string) => b
       (maxLevel === null || (s.level >= 1 && s.level <= maxLevel)) &&
       (lists === null || s.lists.some((l) => lists.includes(l))) &&
       (!d.ritual || s.ritual) &&
-      (d.school === null || s.school === d.school),
+      (d.school === null || s.school === d.school) &&
+      (d.casting_time === undefined || s.casting_time === d.casting_time),
   );
   // Choices tied by subset_of (spellbook ⊇ prepared) share spells by design.
   const linked = new Set([choice.key]);

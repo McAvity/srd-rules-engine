@@ -21,7 +21,7 @@
         },
         "ability_scores": {
           "minItems": 3,
-          "maxItems": 3,
+          "maxItems": 6,
           "type": "array",
           "items": {
             "type": "string",
@@ -69,7 +69,7 @@
           },
           "ability_scores": {
             "minItems": 3,
-            "maxItems": 3,
+            "maxItems": 6,
             "type": "array",
             "items": {
               "type": "string",
@@ -257,6 +257,7 @@
                       "enum": [
                         "full",
                         "half",
+                        "third",
                         "pact"
                       ]
                     },
@@ -524,6 +525,7 @@
                   "darkvision",
                   "hp_per_class_level",
                   "hp_per_level",
+                  "hp_max",
                   "initiative",
                   "martial_arts.die",
                   "saves",
@@ -2088,6 +2090,9 @@
             "string",
             "null"
           ]
+        },
+        "casting_time": {
+          "type": "string"
         },
         "always_prepared": {
           "default": false,

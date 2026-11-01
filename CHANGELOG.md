@@ -7,6 +7,20 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — builder legality for 2024 multiclass plans (kenli F-002 T09)
+- A skill choice needs no more picks than the skills it can still give (`Resolution.required`, as
+  Expertise and spell choices already did): a character proficient in every allowed skill gains
+  nothing from it and the level is complete (Lore's Bonus Proficiencies after all 18 skills). A
+  skill already known is still refused.
+- Spellcasting `progression: third` (Arcane Trickster, Eldritch Knight): a third of the class
+  levels, rounded up when it is the only slot-granting class (its own table), rounded down when
+  multiclassed (XPHB Multiclass Spellcaster).
+- Effect target `hp_max` (`add`): a flat Hit Point maximum bonus (Boon of Fortitude +40).
+- Spell choices take an optional `casting_time` filter (Spell Mastery: `Action`). Optional, no
+  default: older content, the bundled SRD included, parses to the same object.
+- A background's `ability_scores` may list up to all six abilities (older-book backgrounds in the
+  2024 rules, XPHB p.38); 2024 backgrounds keep three.
+
 ### Changed — explicit opt-in rules, never trait names (kenli F-002 T08, R09-02)
 - `tactical_mind`, `reactive_strike`, `guardian` and `halt` are no longer derived from trait
   names (an unrelated trait called "Guardian" switched a rule on): a pack opts in with

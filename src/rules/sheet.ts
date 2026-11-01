@@ -434,7 +434,7 @@ export interface SpellcastingLine {
   readonly save_dc: number | null;
   readonly attack_bonus: number | null;
   /** How the class's levels count toward spell slots (`full`, `half`, `pact`), if at all. */
-  readonly progression: "full" | "half" | "pact" | null;
+  readonly progression: "full" | "half" | "third" | "pact" | null;
 }
 
 export interface SpellLine {
@@ -623,6 +623,9 @@ export function computeSheet(
     if (minimumBump) parts.push({ source: "minimum 1 HP per level", value: minimumBump });
     for (const [op, value, source] of effects("hp_per_level")) {
       if (op === "add") parts.push({ source, value: value * level });
+    }
+    for (const [op, value, source] of effects("hp_max")) {
+      if (op === "add") parts.push({ source, value });
     }
     for (const [op, value, source, from] of effects("hp_per_class_level")) {
       const classLevel = from.class_id ? (classLevels.get(from.class_id) ?? 0) : 0;
@@ -1335,6 +1338,15 @@ function spellcastingSummary(
   const spellcasting: SpellcastingLine[] = [];
   let casterLevel = 0;
   let pact: DerivedSheet["pact_magic"] = null;
+  // XPHB Multiclass Spellcaster: a third-caster's levels are rounded down when it shares slots with
+  // another spellcasting class, and up (its own table) when it is the only one.
+  const slotClasses = new Set(
+    res.sources
+      .filter(
+        (s) => s.grants.spellcasting?.progression && s.grants.spellcasting.progression !== "pact",
+      )
+      .map((s) => s.class_id),
+  );
   for (const src of res.sources) {
     const sc = src.grants.spellcasting;
     if (!sc) continue;
@@ -1354,6 +1366,8 @@ function spellcastingSummary(
     const classLevel = src.class_id ? (classLevels.get(src.class_id) ?? 0) : 0;
     if (sc.progression === "full") casterLevel += classLevel;
     else if (sc.progression === "half") casterLevel += Math.ceil(classLevel / 2);
+    else if (sc.progression === "third")
+      casterLevel += slotClasses.size > 1 ? Math.floor(classLevel / 3) : Math.ceil(classLevel / 3);
     else if (sc.progression === "pact") {
       const row = sc.pact_slots[classLevel - 1];
       if (row) pact = { slots: row.count, slot_level: row.level };
