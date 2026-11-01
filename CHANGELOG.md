@@ -7,6 +7,12 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Fixed — Action Surge once per turn (kenli F-002 T08)
+- A feature action that grants an extra action (`extra_action`: Action Surge) is refused a second
+  time in the same turn (`refusal.already_used_turn_2`), even with uses left (SRD 5.2.1: "Once on
+  each of your turns…"; at level 17, two uses "but only once on a turn"). Found by the F-002 T08
+  browser pilot at Fighter 20, where a second surge in one turn was accepted.
+
 ### Added — shared alternative, qualifying strike, hit on a miss (kenli F-002 T02 R04, round 7)
 - `FeatureAction.alternative` (`{label}`): the action uses the once-per-turn budget shared with
   riders' `alternative` of the same label (encounter marker `alternative:<label>` in

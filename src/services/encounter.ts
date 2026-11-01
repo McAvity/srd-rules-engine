@@ -3753,7 +3753,9 @@ function run(
         onTurn(c, `use ${f.name}`);
         canAct(c);
       } else takeAction(c, f.name, f.economy === "bonus_action");
-      if (f.once_per_turn && c.features_used.includes(f.key)) {
+      // An extra action (Action Surge) is once per turn too (SRD: "Once on each of your turns…";
+      // at 17 "only once on a turn"), whatever its uses left.
+      if ((f.once_per_turn || f.extra_action) && c.features_used.includes(f.key)) {
         refuse(message("refusal.already_used_turn_2", { name: c.name, feature: f.name }));
       }
       // Relentless: one alternative per turn per label, shared with the riders' (`alternative:`).

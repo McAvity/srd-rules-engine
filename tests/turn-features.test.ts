@@ -104,6 +104,21 @@ describe("Fighter", () => {
     expect(() => s.act([], swing)).toThrow("Brakka has no attacks left this turn");
   });
 
+  it("Action Surge at 17: two uses, but only once per turn (SRD); the next turn again", () => {
+    const brakka = levelUpIn(fighterBuild(), "fighter", 16);
+    const s = session({ brakka });
+    const swing = {
+      type: "attack",
+      id: "brakka",
+      target: "goblin-warrior",
+      attack: "Greatsword",
+    } as const;
+    s.act([2, 2, 2], swing, swing, swing, feature("brakka", "Action Surge"));
+    s.act([2, 2, 2], swing, swing, swing);
+    expect(() => s.act([], feature("brakka", "Action Surge"))).toThrow(/Action Surge/);
+    expect(s.get("brakka")?.used.action).toBe(true);
+  });
+
   it("the additional action can't cast a spell", () => {
     const ilse = levelUpIn(level("wizard", 1, "Ilse"), "fighter", 2);
     const s = session({ ilse });
