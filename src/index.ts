@@ -513,6 +513,22 @@ export {
   undoAction,
 } from "./services/history";
 export {
+  assessInventoryItems,
+  ITEM_TABLES,
+  type ItemAssessment,
+  type ItemAssessmentRequest,
+  type ItemBaseOption,
+  type ItemBases,
+  type ItemKind,
+  type ItemMastery,
+  type ItemProficiency,
+  type ItemProficiencyStatus,
+  type ItemRequestIssue,
+  type ItemRestriction,
+  type ItemRestrictionCode,
+  type ItemTable,
+} from "./services/inventory-assessment";
+export {
   checkAction,
   combatantOptions,
   type OptionsSettings,
@@ -523,6 +539,8 @@ export {
   computePlaySheet,
   createState,
   type FreeCastChoice,
+  type ListedPrice,
+  listedPrice,
   magicItemBases,
   PlayError,
   type PlaySheet,

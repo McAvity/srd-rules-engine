@@ -941,6 +941,48 @@ export const MESSAGES_EN = {
   "unarmed.shove":
     "Shove, DC {dc}: the target makes a Strength or Dexterity saving throw (its choice) or you push it 5 feet away or knock it Prone. Only a creature at most one size larger than you.",
   "roll.initiative": "Initiative",
+  // kenli F-013 T02: assessing a catalog item for a character (`assessInventoryItems`).
+  "item.proficient_weapon":
+    "Proficient with {item} ({via}): add your Proficiency Bonus (+{bonus}) to attack rolls with it",
+  "item.not_proficient_weapon": "Not proficient with {item}",
+  "item.trained_armor": "Trained in {category} armor: you can wear {item} without penalty",
+  "item.untrained_armor": "No {category} armor training for {item}",
+  "item.trained_shield": "Shield training: {item} adds its Armor Class while you hold it",
+  "item.untrained_shield": "No Shield training for {item}",
+  "item.proficient_tool":
+    "Proficient with {item} ({via}): add your Proficiency Bonus (+{bonus}) to ability checks that use it",
+  "item.not_proficient_tool": "Not proficient with {item}",
+  "item.no_proficiency_needed": "No proficiency applies to {item}",
+  "item.choose_base":
+    "{item}: choose the {kind} it is made from ({proficient} of {count} with your proficiency)",
+  "item.mastery_yes": "Weapon Mastery: you can use the {mastery} property of {item}",
+  "item.mastery_no": "No Weapon Mastery with {item} (its property: {mastery})",
+  "item.mastery_not_applicable": "{item} has no mastery property",
+  "item.base_not_used": "{item} isn't made from another item: {base} is ignored",
+  "item.variant_not_used": "{item} has no kinds to choose: {variant} is ignored",
+  "item.restriction.weapon_not_proficient":
+    "Attacking with {item}: no Proficiency Bonus to the attack roll",
+  "item.restriction.heavy_weapon":
+    "Heavy: Disadvantage on attack rolls with {item} ({ability} {score}, below 13)",
+  "item.restriction.two_handed_with_shield":
+    "Two-Handed: attacking with {item} takes both hands, and you're holding {shield}",
+  "item.restriction.armor_untrained":
+    "Wearing {item} without training: Disadvantage on D20 Tests that use Strength or Dexterity, and you can't cast spells",
+  "item.restriction.armor_strength":
+    "Wearing {item}: your Speed drops by 10 feet (it needs Strength {strength}, yours is {score})",
+  "item.restriction.armor_stealth": "Wearing {item}: Disadvantage on Dexterity (Stealth) checks",
+  "item.restriction.shield_untrained":
+    "Holding {item} without Shield training: it gives you no Armor Class",
+  "item.restriction.tool_not_proficient": "Ability checks with {item}: no Proficiency Bonus",
+  "item.restriction.tool_activity":
+    "Which ability check and DC apply depends on what you do with {item}: check the activity. If a skill you're proficient in also applies, you have Advantage on the check",
+  "item.restriction.attunement_required":
+    "{item} requires Attunement: its magic works only while you're attuned to it",
+  "item.restriction.attunement_not_allowed": "You can't attune to {item}: {reason}",
+  "item.restriction.attunement_manual":
+    "Attunement to {item} requires {by}: the table judges whether you qualify",
+  "item.restriction.attunement_limit":
+    "You're attuned to {count} items, the most you can be ({max}): end an Attunement first",
 } as const;
 
 export type MessageCode = keyof typeof MESSAGES_EN;

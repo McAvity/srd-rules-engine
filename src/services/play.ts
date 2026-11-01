@@ -232,13 +232,27 @@ function itemName(
   base: string | null,
 ): string {
   if (!magic) return mundaneName(catalog, i.item ?? "") ?? labelOf(i);
+  return magicItemName(catalog, magic, base, i.variant);
+}
+
+/**
+ * A magic item's name made from a base and a variant: "Weapon, +1" on a Longsword reads
+ * "Longsword, +1"; "Flame Tongue (Longsword)"; "Ring of Resistance (Fire)". Shared by the
+ * inventory and `assessInventoryItems` (kenli F-013 T02).
+ */
+export function magicItemName(
+  catalog: Catalog,
+  magic: MagicItemDef,
+  base: string | null,
+  variantId: string | null,
+): string {
   const baseName = base ? mundaneName(catalog, base) : null;
   // "Weapon, +1" on a Longsword reads "Longsword, +1".
   let name = magic.name;
   const generic = /^(Weapon|Armor|Shield|Ammunition)(, \+\d)$/.exec(magic.name);
   if (generic && baseName) name = `${baseName}${generic[2]}`;
   else if (baseName && magic.base && !magic.base.ids) name = `${magic.name} (${baseName})`;
-  const variant = magic.variants.find((v) => v.id === i.variant);
+  const variant = magic.variants.find((v) => v.id === variantId);
   return variant ? `${name} (${variant.name})` : name;
 }
 
@@ -247,7 +261,7 @@ function labelOf(i: ItemInstance): string {
   return i.custom?.name ?? i.item ?? i.id;
 }
 
-function mundaneName(catalog: Catalog, id: string): string | undefined {
+export function mundaneName(catalog: Catalog, id: string): string | undefined {
   return (
     lookup(catalog.weapons, id)?.name ??
     lookup(catalog.armor, id)?.name ??
@@ -912,7 +926,7 @@ export function magicItemBases(catalog: Catalog, magicItemId: string): string[] 
   return magic ? allowedBases(catalog, magic) : [];
 }
 
-function allowedBases(catalog: Catalog, magic: MagicItemDef): string[] {
+export function allowedBases(catalog: Catalog, magic: MagicItemDef): string[] {
   const base = magic.base;
   if (!base) return [];
   const fits = (id: string, category: string | null) =>
@@ -946,7 +960,7 @@ function wornKind(catalog: Catalog, base: string | null): "armor" | "shield" | n
 }
 
 /** Why this character can't attune to an item, or `null`. */
-function attunementBlocker(res: Resolution, magic: MagicItemDef): Message | null {
+export function attunementBlocker(res: Resolution, magic: MagicItemDef): Message | null {
   if (magic.attunement_classes.length) {
     const classes = res.classLevels();
     if (!magic.attunement_classes.some((c) => classes.has(c))) {
@@ -1813,11 +1827,19 @@ function useLeft(sheet: PlaySheet, ending: string): string | null {
   return use && use.spent < use.max ? use.key : null;
 }
 
-/** An item's listed price (copper, per bundle) and its bundle size. */
-function itemPrice(
-  catalog: Catalog,
-  id: string,
-): { name: string; cp: number | null; bundle: number } {
+/** A catalog item's listed price: copper for one `bundle` (Arrows: 20), `null` when unlisted. */
+export interface ListedPrice {
+  readonly name: string;
+  readonly cp: number | null;
+  readonly bundle: number;
+}
+
+/**
+ * An item's listed price (copper, per bundle) and its bundle size, as `buy` and `sell` charge
+ * it; `null` for an id in no item table. A magic item has no listed price (`cp: null`), never 0.
+ * kenli F-013 T02: shared with `assessInventoryItems`, so a list shows exactly what Buy charges.
+ */
+export function listedPrice(catalog: Catalog, id: string): ListedPrice | null {
   const gear = lookup(catalog.gear, id);
   if (gear) return { name: gear.name, cp: priceInCp(gear.cost), bundle: gear.bundle };
   const priced = lookup(catalog.weapons, id) ?? lookup(catalog.armor, id);
@@ -1826,7 +1848,14 @@ function itemPrice(
   if (tool) return { name: tool.name, cp: listedToolCost(tool.cost), bundle: 1 };
   const magic = lookup(catalog.magic_items, id);
   if (magic) return { name: magic.name, cp: null, bundle: 1 };
-  throw new PlayError([message("refusal.unknown_item", { item: id })]);
+  return null;
+}
+
+/** `listedPrice`, refusing an unknown id. */
+function itemPrice(catalog: Catalog, id: string): ListedPrice {
+  const price = listedPrice(catalog, id);
+  if (!price) throw new PlayError([message("refusal.unknown_item", { item: id })]);
+  return price;
 }
 
 /**
