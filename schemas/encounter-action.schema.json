@@ -1229,6 +1229,14 @@
                     "guardian": {
                       "type": "boolean"
                     },
+                    "mastery_as": {
+                      "type": "string",
+                      "enum": [
+                        "push",
+                        "sap",
+                        "slow"
+                      ]
+                    },
                     "light_extra": {
                       "type": "boolean"
                     },
@@ -1807,6 +1815,14 @@
             },
             "guardian": {
               "type": "boolean"
+            },
+            "mastery_as": {
+              "type": "string",
+              "enum": [
+                "push",
+                "sap",
+                "slow"
+              ]
             },
             "light_extra": {
               "type": "boolean"

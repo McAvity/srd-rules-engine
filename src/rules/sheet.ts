@@ -766,9 +766,6 @@ export function computeSheet(
     const weapon = lookup(catalog.weapons, id);
     return weapon ? [{ name: name ?? weapon.name, weapon }] : [];
   });
-  /** A feat (not a class feature) grants a trait of this name. */
-  const featTrait = (name: string) =>
-    res.sources.some((src) => src.feat !== null && src.grants.traits.some((t) => t.name === name));
   // Weapon strikes (Pole Strike): one line per strike, from the first carried weapon that
   // qualifies, its damage die and type replaced.
   for (const strike of res.sources.flatMap((src) => src.grants.weapon_strikes ?? [])) {
@@ -921,24 +918,11 @@ export function computeSheet(
         return [{ target: grant.target, source: src.name, class_id: classScope(src) }];
       }),
     ),
-    rules: [
-      ...new Set([
-        ...[...res.sources, ...itemSources].flatMap((src) => src.grants.rules),
-        // kenli F-002 T08: the SRD 5.2.1 Fighter's Tactical Mind is a trait only (its content is
-        // immutable), so its named rule is derived from that source: a Fighter class feature
-        // granting a trait of that name, never a feat's or another class's trait.
-        ...(res.sources.some(
-          (src) =>
-            src.class_id === "fighter" &&
-            src.feat === null &&
-            src.grants.traits.some((t) => t.name === "Tactical Mind"),
-        )
-          ? (["tactical_mind"] as const)
-          : []),
-        ...FEAT_TRAIT_RULES.filter(([name]) => featTrait(name)).map(([, rule]) => rule),
-      ]),
-    ],
-    reactive_strike: featTrait("Reactive Strike")
+    rules: [...new Set([...res.sources, ...itemSources].flatMap((src) => src.grants.rules))],
+    // kenli F-002 T08: the explicit `reactive_strike` rule (never a trait's name): its weapons.
+    reactive_strike: [...res.sources, ...itemSources].some((src) =>
+      src.grants.rules.includes("reactive_strike"),
+    )
       ? heldWeapons.filter((x) => weaponQualifies(x.weapon, REACTIVE_STRIKE)).map((x) => x.name)
       : [],
     actions: res.sources.flatMap((src) =>
@@ -1589,15 +1573,9 @@ function attackLine(
 
 /** A weapon one of these ids, or with all of these properties (when some are given). */
 /**
- * kenli F-002 T08: named rules from a feat's traits (the T02 private pack's Polearm Master and
- * Sentinel give them as text only; their bytes are pinned by the plans, so they aren't rewritten).
+ * kenli F-002 T08: the `reactive_strike` rule's weapons (Polearm Master's Reactive Strike: "a
+ * Quarterstaff, a Spear, or a weapon that has the Heavy and Reach properties").
  */
-const FEAT_TRAIT_RULES = [
-  ["Reactive Strike", "reactive_strike"],
-  ["Guardian", "guardian"],
-  ["Halt", "halt"],
-] as const;
-/** Reactive Strike: "a Quarterstaff, a Spear, or a weapon that has the Heavy and Reach properties". */
 const REACTIVE_STRIKE = { weapons: ["quarterstaff", "spear"], properties: ["heavy", "reach"] };
 
 function weaponQualifies(

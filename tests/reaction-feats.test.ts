@@ -20,8 +20,9 @@ import {
 import { srdPack } from "../src/srd";
 import { fighterBuild } from "./helpers";
 
-// kenli F-002 T08: feat traits given as text only (Reactive Strike, Guardian, Halt), their named
-// rules derived from the trait names. Invented test content only: a feat with those three traits.
+// kenli F-002 T08 (R09-02): Reactive Strike, Guardian and Halt are explicit named rules a pack opts
+// into (`grants.rules`), never inferred from a trait's name. Invented test content only: a feat with
+// the three rules and renamed labels, and an unrelated feat whose traits share those names.
 const pack = {
   manifest: {
     id: "test-reaction-feats",
@@ -35,10 +36,26 @@ const pack = {
       name: "Test Warden",
       category: "origin",
       grants: {
+        rules: ["reactive_strike", "guardian", "halt"],
+        // Labels renamed (a translation, a house name): the rules don't depend on them.
         traits: [
-          { name: "Reactive Strike", text: "A Reaction attack when a creature enters your reach." },
-          { name: "Guardian", text: "An Opportunity Attack against a creature within 5 feet." },
-          { name: "Halt", text: "An Opportunity Attack's hit: Speed 0 for the rest of the turn." },
+          { name: "Long Reach", text: "A Reaction attack when a creature enters your reach." },
+          { name: "Watchful", text: "An Opportunity Attack against a creature within 5 feet." },
+          { name: "Stop", text: "An Opportunity Attack's hit: Speed 0 for the rest of the turn." },
+        ],
+      },
+    },
+    {
+      id: "test-lighthouse",
+      name: "Test Lighthouse",
+      category: "origin",
+      grants: {
+        // The same names, unrelated text, no rules: nothing is switched on.
+        traits: [
+          { name: "Guardian", text: "You keep a lighthouse lit; no reaction attacks." },
+          { name: "Reactive Strike", text: "You strike a match when the wind rises." },
+          { name: "Halt", text: "Ships halt at your signal." },
+          { name: "Tactical Mind", text: "You plan the keeper's rounds." },
         ],
       },
     },
@@ -46,14 +63,13 @@ const pack = {
 };
 const catalog = createCatalog([srdPack, pack], {});
 
-function brakka(feat = true): CharacterBuild {
+function brakka(feat: string | false = "test-warden"): CharacterBuild {
   const b = fighterBuild();
   if (!feat) return b;
   const choices = Object.fromEntries(
     Object.entries(b.choices).filter(([k]) => !k.startsWith("feat:skilled@")),
   );
-  return builder.setChoice({ ...b, choices }, catalog, "species:human#versatile", ["test-warden"])
-    .build;
+  return builder.setChoice({ ...b, choices }, catalog, "species:human#versatile", [feat]).build;
 }
 /** Brakka's state holding a Glaive (Heavy, Reach), or with only the Greatsword. */
 function holding(b: CharacterBuild, glaive = true): CharacterState {
@@ -105,8 +121,8 @@ function session(b: CharacterBuild, state: CharacterState) {
 const attack = (target: string, extra: object): EncounterAction =>
   ({ type: "attack", id: "brakka", target, attack: "Glaive", ...extra }) as EncounterAction;
 
-describe("rules derived from feat traits", () => {
-  it("the feat's three traits give reactive_strike, guardian and halt; the held Glaive qualifies", () => {
+describe("explicit rules, never trait names", () => {
+  it("the feat's rules give reactive_strike, guardian and halt (labels renamed); the Glaive qualifies", () => {
     const b = brakka();
     const sheet = computePlaySheet(b, holding(b), catalog);
     expect(sheet.rules).toEqual(expect.arrayContaining(["reactive_strike", "guardian", "halt"]));
@@ -117,6 +133,21 @@ describe("rules derived from feat traits", () => {
     const none = computePlaySheet(plain, holding(plain), catalog);
     expect(none.rules).not.toContain("reactive_strike");
     expect(none.reactive_strike).toEqual([]);
+  });
+
+  it("an unrelated feat with traits named Guardian, Reactive Strike, Halt, Tactical Mind: no rule, no tile", () => {
+    const keeper = brakka("test-lighthouse");
+    const state = holding(keeper);
+    const sheet = computePlaySheet(keeper, state, catalog);
+    for (const rule of ["guardian", "reactive_strike", "halt", "tactical_mind"])
+      expect(sheet.rules).not.toContain(rule);
+    expect(sheet.reactive_strike).toEqual([]);
+    const s = session(keeper, state);
+    const labels = s.options().attacks.map((o) => String(o.label));
+    expect(labels.some((l) => /Guardian|Reactive Strike/.test(l))).toBe(false);
+    expect(() => s.act(attack("goblin-warrior", { opportunity: true, guardian: true }))).toThrow(
+      /has no Guardian/,
+    );
   });
 });
 

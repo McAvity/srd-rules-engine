@@ -315,19 +315,32 @@ a `spell_damage` grant's `spell` limits it to one spell (`$cantrip`: Agonizing B
 Anything effects, riders, Advantage and toggles can't express goes in a trait's text, or in a
 feat's `unsupported` note, which the builder shows to the player.
 
-Some rules are derived from a trait's name, for content whose bytes are pinned elsewhere (kenli
-F-002 T08), never set in `rules` by hand:
-- `tactical_mind`: a Fighter class feature's trait "Tactical Mind" (SRD Fighter 2). A failed
-  check against a DC in an encounter asks (decision `tactical_mind`) to add 1d10; the Second Wind
-  use is spent only if the check then succeeds (`CheckResult.tactical_mind`); none left, no
-  question.
-- `reactive_strike`, `guardian`, `halt`: a feat's traits "Reactive Strike", "Guardian" and
-  "Halt". Reactive Strike is the encounter `attack` with `reactive_strike: true` (a Reaction, not
-  an Opportunity Attack, with a held Quarterstaff, Spear or Heavy and Reach weapon:
-  `sheet.reactive_strike`); Guardian is `opportunity: true, guardian: true` (only within 5 feet,
-  allowed after a Disengage); Halt marks the target of an Opportunity Attack's hit `speed_zero`
-  until the end of the current turn. The triggers (a creature entering the reach, a Disengage, a
-  hit on another) are the table's: the options list these attacks in the reaction group off turn.
+Rules a pack opts into explicitly (kenli F-002 T08), in `grants.rules`; a pack can append them to
+an earlier pack's entity with a patch (`{ target: "classes/fighter", op: "append", path:
+"features.2.rules", value: "tactical_mind" }`). They are never inferred from a trait's name: a trait
+is display text, and a renamed or translated label changes nothing.
+- `tactical_mind`: a check failed against a DC in an encounter asks (decision `tactical_mind`) to
+  add 1d10; the Second Wind use is spent only if the check then succeeds
+  (`CheckResult.tactical_mind`); none left, no question.
+- `tactical_shift`: Second Wind used with a Bonus Action notes the move of half the Speed without
+  provoking Opportunity Attacks (the move is the table's).
+- `tactical_master`: an attack with a weapon whose mastery property it uses may take `mastery_as`
+  (Push, Sap or Slow) instead; the attack's option lists them (`OptionEntry.mastery_as`).
+- `studied_attacks`: a missed attack roll marks the target `studied`: the attacker's next attack
+  roll against it has Advantage, until the end of the attacker's next turn.
+- `reactive_strike`, `guardian`, `halt`: Reactive Strike is the encounter `attack` with
+  `reactive_strike: true` (a Reaction, not an Opportunity Attack, with a held Quarterstaff, Spear
+  or Heavy and Reach weapon: `sheet.reactive_strike`); Guardian is `opportunity: true, guardian:
+  true` (only within 5 feet, allowed after a Disengage); Halt marks the target of an Opportunity
+  Attack's hit `speed_zero` until the end of the current turn. The triggers (a creature entering
+  the reach, a Disengage, a hit on another) are the table's: the options list these attacks in
+  the reaction group off turn.
+- `savage_attacker`: once per turn, on a hit with a weapon, its own damage dice are rolled again
+  and the attacker decides (`savage_attacker`) whether to use the second roll (riders' and extra
+  dice never).
+- `guarded_mind` (with a `guarded-mind` resource): a failed Intelligence, Wisdom or Charisma save
+  can succeed instead (decision `guarded_mind`, one use).
+- `concentration_breaker`: a creature it damages saves with Disadvantage to keep Concentration.
 
 ### Choices
 

@@ -7,6 +7,22 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Changed — explicit opt-in rules, never trait names (kenli F-002 T08, R09-02)
+- `tactical_mind`, `reactive_strike`, `guardian` and `halt` are no longer derived from trait
+  names (an unrelated trait called "Guardian" switched a rule on): a pack opts in with
+  `grants.rules` or a patch appending to an earlier pack's entity. `sheet.reactive_strike` follows
+  the explicit rule, whatever the trait's label.
+
+### Added — Tactical Shift, Tactical Master, Studied Attacks, Savage Attacker, Mage Slayer (kenli F-002 T08, R09-03)
+- Named rules `tactical_shift` (a note with the half Speed on Second Wind as a Bonus Action),
+  `tactical_master` (attack `mastery_as`: push, sap or slow; `OptionEntry.mastery_as`),
+  `studied_attacks` (mark kind `studied`: Advantage on the next attack roll against the creature
+  missed, until the end of the attacker's next turn), `savage_attacker` (decision kind
+  `savage_attacker`, `AttackResult.savage`; once per turn, the weapon's own dice only),
+  `guarded_mind` (decision kind `guarded_mind`, `SaveResult.guarded_mind`, `Combatant.guarded_mind`)
+  and `concentration_breaker` (Disadvantage on the damaged creature's Concentration save;
+  `rollSavingThrow` takes extra `modes`). All fields optional; older documents parse.
+
 ### Fixed — Extra Attack's unused attacks carried into the next turn (kenli F-002 T08)
 - The start of a creature's turn clears `attacks_left`: the attacks of an Attack action not all
   made in one turn are no longer available on the next turn without the action, before a whole

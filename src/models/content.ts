@@ -325,19 +325,37 @@ export const FEATURE_RULES = [
   "reliable_talent",
   "potent_cantrip",
   "indomitable",
-  /** kenli F-002 T08: Tactical Mind (SRD Fighter 2), derived in `rules/sheet.ts` (a named rule). */
-  "tactical_mind",
   /**
-   * kenli F-002 T08: a feat's traits given only as text in the T02 private pack (its bytes are
-   * pinned by the plans), derived in `rules/sheet.ts` from the feat's trait names:
-   * `reactive_strike` (a Reaction melee attack against a creature entering the reach of a held
-   * Quarterstaff, Spear or Heavy and Reach weapon; not an Opportunity Attack), `guardian` (an
-   * Opportunity Attack against a creature within 5 feet after it Disengages or hits another) and
-   * `halt` (an Opportunity Attack's hit: the target's Speed is 0 for the rest of the turn).
+   * kenli F-002 T08: rules a pack opts into explicitly (`grants.rules`; a pack can append them to
+   * an earlier pack's entity with a patch): never inferred from a trait's name.
+   * - `tactical_mind`: a failed ability check against a DC asks to add 1d10, spending a Second
+   *   Wind use only if the check then succeeds.
+   * - `tactical_shift`: Second Wind used as a Bonus Action notes the move of half the Speed
+   *   without provoking Opportunity Attacks (moved at the table).
+   * - `tactical_master`: an attack with a weapon whose mastery it uses may use Push, Sap or Slow.
+   * - `studied_attacks`: a missed attack roll gives Advantage on the next one against that
+   *   creature before the end of its next turn.
+   * - `reactive_strike`: a Reaction melee attack, not an Opportunity Attack, against a creature
+   *   entering the reach of a held Quarterstaff, Spear, or Heavy and Reach weapon.
+   * - `guardian`: an Opportunity Attack against a creature within 5 feet (after it Disengages or
+   *   hits another creature; the trigger is the table's).
+   * - `halt`: an Opportunity Attack's hit sets the target's Speed to 0 for the rest of the turn.
+   * - `savage_attacker`: once per turn, on a weapon hit, the weapon's damage dice rolled twice.
+   * - `guarded_mind`: a failed Intelligence, Wisdom or Charisma save succeeds instead, spending
+   *   the `guarded-mind` resource.
+   * - `concentration_breaker`: a creature this one damages has Disadvantage on the save to keep
+   *   its Concentration.
    */
+  "tactical_mind",
+  "tactical_shift",
+  "tactical_master",
+  "studied_attacks",
   "reactive_strike",
   "guardian",
   "halt",
+  "savage_attacker",
+  "guarded_mind",
+  "concentration_breaker",
   "cunning_strike",
   "improved_cunning_strike",
   "brutal_strike",

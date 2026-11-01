@@ -543,8 +543,15 @@ function run(
   };
   const concentrationOf = (c: EncounterCombatant): string | null =>
     c.monster !== null ? c.concentration : characterRef(ctx, c).state.concentration;
-  /** Apply play actions to a combatant; a concentrating one saves against damage. */
-  const applyTo = (c: EncounterCombatant, actions: readonly PlayAction[]): void => {
+  /**
+   * Apply play actions to a combatant; a concentrating one saves against damage. `from`: who dealt
+   * it (Concentration Breaker: Disadvantage on that save).
+   */
+  const applyTo = (
+    c: EncounterCombatant,
+    actions: readonly PlayAction[],
+    from?: EncounterCombatant,
+  ): void => {
     for (const a of actions) {
       let dc: number | null = null;
       let dealt = 0;
@@ -594,7 +601,27 @@ function run(
       }
       const spell = concentrationOf(c);
       if (dc !== null && spell) {
-        const save = rollSavingThrow(encounterCombatant(e, c.id, ctx), "con", dc, { rng, decide });
+        // kenli F-002 T08, Mage Slayer's Concentration Breaker (`concentration_breaker`).
+        const breaker =
+          from &&
+          from !== c &&
+          encounterCombatant(e, from.id, ctx).rules.includes("concentration_breaker");
+        const modes = breaker
+          ? [
+              modeReason(
+                "disadvantage",
+                message("reason.concentration_breaker", { name: from.name }),
+              ),
+            ]
+          : [];
+        if (breaker) {
+          notes.push(message("concentration_breaker.applies", { name: from.name, target: c.name }));
+        }
+        const save = rollSavingThrow(encounterCombatant(e, c.id, ctx), "con", dc, {
+          rng,
+          decide,
+          modes,
+        });
         spendLegendaryResistance(c, save);
         const outcome = saveText(save);
         if (save.success) {
@@ -813,7 +840,7 @@ function run(
       z.saved.push(t.id);
       spendLegendaryResistance(t, hit.save);
       notes.push(targetNote(t.name, hit));
-      applyTo(t, hit.actions);
+      applyTo(t, hit.actions, caster);
       if (hit.save?.success) continue;
       if (hit.conditions.length && (z.concentration || z.until)) {
         addEffects(t, hit.conditions, {
@@ -1169,6 +1196,11 @@ function run(
       if (use) play(c, { type: "use", key: use.key });
       notes.push(message("indomitable.used", { name: c.name }));
     }
+    // kenli F-002 T08, Mage Slayer's Guarded Mind: the failed save succeeded instead (one use).
+    if (save?.guarded_mind && c.character !== null) {
+      play(c, { type: "use", key: save.guarded_mind });
+      notes.push(message("guarded_mind.used", { name: c.name }));
+    }
     useInspiration(c, save?.inspiration);
     if (!save?.legendary_resistance || c.monster === null) return;
     c.legendary_resistance_used += 1;
@@ -1482,6 +1514,7 @@ function run(
       opportunity?: boolean;
       cunning?: readonly ("poison" | "trip" | "withdraw")[];
       brutal?: readonly ("forceful" | "hamstring" | "staggering" | "sundering")[];
+      mastery_as?: "push" | "sap" | "slow";
     },
   ): AttackResult => {
     const attacker = encounterCombatant(e, c.id, ctx);
@@ -1584,6 +1617,11 @@ function run(
     // Guiding Bolt: Advantage on the next attack roll against t, whoever makes it.
     const mark = e.marks.find((m) => m.on === t.id && m.kind === "advantage_against");
     if (mark) modes.push(modeReason("advantage", markReason(mark)));
+    // kenli F-002 T08, Studied Attacks: Advantage on its next attack roll against t.
+    const studied = e.marks.find((m) => m.kind === "studied" && m.by === c.id && m.on === t.id);
+    if (studied) {
+      modes.push(modeReason("advantage", message("reason.studied_attacks", { name: c.name })));
+    }
     // Aura of Authority: Advantage on attack rolls.
     const authority = authorityOver(e, ctx, c);
     if (authority) {
@@ -1622,6 +1660,9 @@ function run(
         forgo_advantage: strikes.forgo_advantage,
         bonus: sundered ? 5 : 0,
         ...(aim ? { hit_on_miss: aim.name } : {}),
+        // Savage Attacker: once per turn (any creature's turn).
+        savage:
+          attacker.rules.includes("savage_attacker") && !c.riders_used.includes(SAVAGE_ATTACKER),
       });
     } catch (error) {
       if (error instanceof RangeError) fail(ruleReason(error));
@@ -1632,7 +1673,7 @@ function run(
     useInspiration(c, hit.inspiration);
     if (help) e.helps = e.helps.filter((h) => h !== help);
     e.masteries = e.masteries.filter((m) => m !== vex && m !== sap);
-    e.marks = e.marks.filter((m) => m !== mark && m !== sundered);
+    e.marks = e.marks.filter((m) => m !== mark && m !== sundered && m !== studied);
     const rollMsg = message("attack.roll", {
       total: hit.total,
       ac: hit.target_ac,
@@ -1643,7 +1684,31 @@ function run(
       notes.push(
         message("attack.miss", { name: c.name, target: t.name, attack: hit.attack, roll: rollMsg }),
       );
+      // Studied Attacks: "Advantage on your next attack roll against that creature before the end
+      // of your next turn" (made on its own turn: the next one's end; else its coming turn's).
+      if (attacker.rules.includes("studied_attacks") && !outOfFight(ctx, t)) {
+        e.marks = e.marks.filter((m) => !(m.kind === "studied" && m.by === c.id && m.on === t.id));
+        e.marks.push({
+          kind: "studied",
+          label: "Studied Attacks",
+          by: c.id,
+          on: t.id,
+          ends: { at: "end", of: c.id, count: 1, skip_current: current()?.id === c.id },
+          damage: null,
+        });
+        notes.push(message("studied_attacks.mark", { name: c.name, target: t.name }));
+      }
     } else {
+      if (hit.savage) {
+        if (hit.savage.used) c.riders_used.push(SAVAGE_ATTACKER);
+        notes.push(
+          message(hit.savage.used ? "savage_attacker.used" : "savage_attacker.kept", {
+            name: c.name,
+            first: hit.savage.first.join("+"),
+            second: hit.savage.second.join("+"),
+          }),
+        );
+      }
       if (hit.hit_instead && aim) {
         c.used_until_turn.push(aim.key);
         notes.push(message("attack.hit_instead", { name: c.name, feature: aim.name }));
@@ -1734,10 +1799,10 @@ function run(
           });
         }
       }
-      applyTo(t, [{ type: "damage", instances, critical: hit.critical_hit }]);
+      applyTo(t, [{ type: "damage", instances, critical: hit.critical_hit }], c);
     }
     if (line?.mastery && options.mastery !== false) {
-      applyMastery(c, t, attacker, line, hit, options.cleave ?? false);
+      applyMastery(c, t, attacker, line, hit, options.cleave ?? false, options.mastery_as);
     }
     if (hit.hit) applyStrikes(c, t, attacker, options);
     // kenli F-002 T08: Halt, an Opportunity Attack's hit: Speed 0 for the rest of the turn.
@@ -1875,8 +1940,15 @@ function run(
     line: AttackLine,
     hit: AttackResult,
     cleaving: boolean,
+    instead?: "push" | "sap" | "slow",
   ): void => {
-    const mastery = line.mastery?.toLowerCase();
+    // Tactical Master: Push, Sap or Slow instead of the weapon's own property, for this attack.
+    const mastery = instead ?? line.mastery?.toLowerCase();
+    if (instead) {
+      notes.push(
+        message("tactical_master.used", { name: c.name, mastery: instead, attack: line.name }),
+      );
+    }
     const modifier = line.ability ? attacker.modifiers[line.ability] : 0;
     const dealt = (hit.outcome?.dealt ?? 0) > 0;
     const until = (at: "start" | "end") => ({
@@ -1891,7 +1963,11 @@ function run(
         notes.push(
           message("mastery.graze", { target: t.name, amount: modifier, type: line.damage_type }),
         );
-        applyTo(t, [{ type: "damage", instances: [{ amount: modifier, type: line.damage_type }] }]);
+        applyTo(
+          t,
+          [{ type: "damage", instances: [{ amount: modifier, type: line.damage_type }] }],
+          c,
+        );
       }
       return;
     }
@@ -1953,7 +2029,7 @@ function run(
       const t = targets[hit.target] as EncounterCombatant;
       spendLegendaryResistance(t, hit.save); // notes Bardic Inspiration first: it changed the roll
       notes.push(targetNote(t.name, hit));
-      applyTo(t, hit.actions);
+      applyTo(t, hit.actions, c);
     }
     return r;
   };
@@ -2189,7 +2265,7 @@ function run(
       useInspiration(c, hit.attack?.inspiration);
       spendLegendaryResistance(t, hit.save);
       notes.push(targetNote(t.name, hit, views[hit.target]?.armor_class));
-      applyTo(t, hit.actions);
+      applyTo(t, hit.actions, c);
       if (hit.on_hit.includes("advantage_against") && !outOfFight(ctx, t)) {
         e.marks = e.marks.filter((m) => !(m.on === t.id && m.label === spell.name));
         e.marks.push({
@@ -2269,7 +2345,7 @@ function run(
         const t = all[hit.target] as EncounterCombatant;
         spendLegendaryResistance(t, hit.save);
         notes.push(targetNote(t.name, hit));
-        applyTo(t, hit.actions);
+        applyTo(t, hit.actions, c);
       }
     }
     // A hold that an action's check ends (Black Tentacles, Web).
@@ -3462,6 +3538,13 @@ function run(
       const attacker = encounterCombatant(e, c.id, ctx);
       const line = attacker.attacks.find((a) => a.name === action.attack);
       const light = line?.properties.includes("light") ?? false;
+      // kenli F-002 T08, Tactical Master: only with a weapon whose mastery property it uses.
+      if (action.mastery_as) {
+        if (!attacker.rules.includes("tactical_master"))
+          fail(message("refusal.no_tactical_master", { name: c.name }));
+        if (!line?.mastery || action.mastery === false)
+          fail(message("refusal.tactical_master_mastery", { attack: action.attack }));
+      }
       if (action.granted) {
         // An attack a feature granted this turn (Flurry of Blows), without spending an action.
         onTurn(c, "attack");
@@ -3834,6 +3917,20 @@ function run(
           f.alternative ? alternativeMark(f.counts_as, f.alternative.label) : f.counts_as,
         );
       if (alternative) c.riders_used.push(alternative);
+      // kenli F-002 T08, Tactical Shift: Second Wind with a Bonus Action lets it "move up to half
+      // your Speed without provoking Opportunity Attacks": the move is the table's (map), noted.
+      if (
+        f.key.endsWith(":second-wind") &&
+        f.economy === "bonus_action" &&
+        encounterCombatant(e, c.id, ctx).rules.includes("tactical_shift")
+      ) {
+        notes.push(
+          message("tactical_shift.move", {
+            name: c.name,
+            feet: Math.floor(speedOf(ctx, c, e) / 2),
+          }),
+        );
+      }
       if (f.heal && f.target !== "self") {
         const amount = f.heal.pooled
           ? (action.amount as number)
@@ -4542,6 +4639,8 @@ function sizeOf(ctx: EncounterContext, c: EncounterCombatant): string | null | u
 const SIZES = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 /** `features_used` marker: the Attack action was taken this turn (Pole Strike needs it). */
 const ATTACK_ACTION = "action:attack";
+/** kenli F-002 T08: Savage Attacker used this turn (in `riders_used`, reset at every turn). */
+const SAVAGE_ATTACKER = "savage_attacker";
 /** `features_used` marker: an attack with this line was made as part of the Attack action. */
 const attackMark = (attack: string): string => `${ATTACK_ACTION}:${attack}`;
 /** `features_used` marker: `feature` was used this turn under the alternative `label`. */

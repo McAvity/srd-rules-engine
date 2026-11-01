@@ -75,6 +75,19 @@ export const MESSAGES_EN = {
   "inspiration.used": "{name} adds its Bardic Inspiration die: {roll}.",
   "indomitable.used": "{name} rerolls the save with Indomitable.",
   "halt.speed_zero": "{target}'s Speed is 0 for the rest of the turn ({name}'s Halt).",
+  "concentration_breaker.applies":
+    "Concentration Breaker: {target} saves with Disadvantage to keep its Concentration ({name}'s damage).",
+  "guarded_mind.used": "{name} succeeds instead with Guarded Mind (Mage Slayer).",
+  "studied_attacks.mark":
+    "{name} has Advantage on its next attack roll against {target} before the end of its next turn (Studied Attacks).",
+  "savage_attacker.used":
+    "{name} uses Savage Attacker: the weapon's damage dice {first}, then {second}; the second roll is used.",
+  "savage_attacker.kept":
+    "{name}'s Savage Attacker roll ({second}) isn't used: the first ({first}) stays, and Savage Attacker stays available this turn.",
+  "tactical_master.used":
+    "{name} uses {mastery} instead of {attack}'s mastery property (Tactical Master).",
+  "tactical_shift.move":
+    "Tactical Shift: {name} can move up to {feet} feet (half its Speed) without provoking Opportunity Attacks (move it on the map).",
   "tactical_mind.used": "{name} adds {roll} with Tactical Mind and spends a use of Second Wind.",
   "tactical_mind.kept":
     "{name} adds {roll} with Tactical Mind; the check still fails, so Second Wind isn't spent.",
@@ -273,6 +286,8 @@ export const MESSAGES_EN = {
   "shop.sold": "Sold {qty} × {item} for {price}.",
   "spell.manual": "{spell}: its effects aren't automated; see the spell's text.",
   "roll.reason": "{mode, select, advantage {Advantage} other {Disadvantage}}: {why}",
+  "reason.concentration_breaker": "{name}'s Concentration Breaker (Mage Slayer)",
+  "reason.studied_attacks": "{name}'s Studied Attacks",
   "reason.features": "{name}'s features",
   "reason.reckless": "{name} attacks recklessly",
   "reason.is": "{name} is {condition}",
@@ -423,6 +438,9 @@ export const MESSAGES_EN = {
     "{name} can't make Opportunity Attacks (Staggering Blow)",
   "refusal.disengaged_movement_doesnt_provoke":
     "{target} Disengaged: its movement doesn't provoke Opportunity Attacks",
+  "refusal.no_tactical_master": "{name} has no Tactical Master",
+  "refusal.tactical_master_mastery":
+    "{attack}: Tactical Master needs a weapon whose mastery property it uses",
   "refusal.reactive_strike_not_opportunity":
     "A Reactive Strike is a Reaction attack, not an Opportunity Attack",
   "refusal.no_reactive_strike": "{name} has no Reactive Strike",
@@ -635,6 +653,10 @@ export const MESSAGES_EN = {
     "{name} fails a {ability} saving throw{rolled, select, true { ({total} vs DC {dc})} other {}}. Use Legendary Resistance ({left} left)?",
   "decision.indomitable":
     "{name} fails a {what} ({total} vs DC {dc}). Reroll it with Indomitable (+{bonus})?",
+  "decision.guarded_mind":
+    "{name} fails a {what} ({total} vs DC {dc}). Succeed instead with Guarded Mind (Mage Slayer)?",
+  "decision.savage_attacker":
+    "{name}: {attack}'s damage dice rolled {first}, then {second} (Savage Attacker). Use the second roll?",
   "decision.tactical_mind":
     "{name} fails a {what} ({total} vs DC {dc}). Use Tactical Mind (+1d10, a use of Second Wind only if it succeeds)?",
   "decision.relentless_rage":

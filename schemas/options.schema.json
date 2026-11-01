@@ -669,6 +669,18 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "mastery_as": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "push",
+                    "sap",
+                    "slow"
+                  ]
+                }
               }
             },
             "required": [
@@ -689,7 +701,8 @@
               "odds",
               "note",
               "note_message",
-              "strikes"
+              "strikes",
+              "mastery_as"
             ],
             "additionalProperties": false
           }
@@ -1239,6 +1252,18 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "mastery_as": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "push",
+                    "sap",
+                    "slow"
+                  ]
+                }
               }
             },
             "required": [
@@ -1259,7 +1284,8 @@
               "odds",
               "note",
               "note_message",
-              "strikes"
+              "strikes",
+              "mastery_as"
             ],
             "additionalProperties": false
           }
@@ -1809,6 +1835,18 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "mastery_as": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "push",
+                    "sap",
+                    "slow"
+                  ]
+                }
               }
             },
             "required": [
@@ -1829,7 +1867,8 @@
               "odds",
               "note",
               "note_message",
-              "strikes"
+              "strikes",
+              "mastery_as"
             ],
             "additionalProperties": false
           }
@@ -2379,6 +2418,18 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "mastery_as": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "push",
+                    "sap",
+                    "slow"
+                  ]
+                }
               }
             },
             "required": [
@@ -2399,7 +2450,8 @@
               "odds",
               "note",
               "note_message",
-              "strikes"
+              "strikes",
+              "mastery_as"
             ],
             "additionalProperties": false
           }
@@ -2949,6 +3001,18 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "mastery_as": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "push",
+                    "sap",
+                    "slow"
+                  ]
+                }
               }
             },
             "required": [
@@ -2969,7 +3033,8 @@
               "odds",
               "note",
               "note_message",
-              "strikes"
+              "strikes",
+              "mastery_as"
             ],
             "additionalProperties": false
           }
@@ -3519,6 +3584,18 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "mastery_as": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "push",
+                    "sap",
+                    "slow"
+                  ]
+                }
               }
             },
             "required": [
@@ -3539,7 +3616,8 @@
               "odds",
               "note",
               "note_message",
-              "strikes"
+              "strikes",
+              "mastery_as"
             ],
             "additionalProperties": false
           }
@@ -4089,6 +4167,18 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "mastery_as": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "push",
+                    "sap",
+                    "slow"
+                  ]
+                }
               }
             },
             "required": [
@@ -4109,7 +4199,8 @@
               "odds",
               "note",
               "note_message",
-              "strikes"
+              "strikes",
+              "mastery_as"
             ],
             "additionalProperties": false
           }
@@ -5393,6 +5484,14 @@
                     "guardian": {
                       "type": "boolean"
                     },
+                    "mastery_as": {
+                      "type": "string",
+                      "enum": [
+                        "push",
+                        "sap",
+                        "slow"
+                      ]
+                    },
                     "light_extra": {
                       "type": "boolean"
                     },
@@ -5990,6 +6089,14 @@
             },
             "guardian": {
               "type": "boolean"
+            },
+            "mastery_as": {
+              "type": "string",
+              "enum": [
+                "push",
+                "sap",
+                "slow"
+              ]
             },
             "light_extra": {
               "type": "boolean"

@@ -291,6 +291,7 @@ export function combatantOptions(
       note: null,
       note_message: null,
       strikes: [],
+      mastery_as: [],
       ...extra,
     };
   };
@@ -349,7 +350,14 @@ export function combatantOptions(
     const reach = line.kind === "melee" ? (line.reach ?? 5) : (line.range?.long ?? null);
     const ids = candidates(reach);
     const first = ids[0] ?? "";
-    attacks.push(entry({ ...base, target: first }, label, "attack", creature(reach, ids)));
+    // kenli F-002 T08, Tactical Master: Push, Sap or Slow instead, with a weapon it masters.
+    const masteryAs =
+      view.rules.includes("tactical_master") && line.mastery
+        ? { mastery_as: ["push", "sap", "slow"] as ("push" | "sap" | "slow")[] }
+        : undefined;
+    attacks.push(
+      entry({ ...base, target: first }, label, "attack", creature(reach, ids), masteryAs),
+    );
     if (line.kind === "melee" && line.properties.includes("thrown") && line.range) {
       const far = candidates(line.range.long);
       attacks.push(

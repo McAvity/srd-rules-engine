@@ -137,6 +137,11 @@ export interface Combatant {
    * isn't expended." The Second Wind use key while a use is left; `null` or absent without it.
    */
   readonly tactical_mind?: string | null;
+  /**
+   * kenli F-002 T08, Mage Slayer's Guarded Mind: the `guarded-mind` use key while a use is left
+   * (`guarded_mind` rule); `null` or absent without it.
+   */
+  readonly guarded_mind?: string | null;
   /** kenli F-002 T08: attack lines a Reactive Strike can be made with (`DerivedSheet.reactive_strike`). */
   readonly reactive_strike?: readonly string[];
   /** d20 floors on its ability checks from features (`DerivedSheet.d20_floors`). */
@@ -186,7 +191,9 @@ export interface Decision {
     | "deflect_attacks"
     | "relentless_rage"
     | "hit_on_miss"
-    | "tactical_mind";
+    | "tactical_mind"
+    | "guarded_mind"
+    | "savage_attacker";
   /** Who decides. */
   readonly combatant: Combatant;
   /** The question for the table, with the roll: "Brakka: Dexterity saving throw 7 vs 15…". */
@@ -703,6 +710,12 @@ export interface AttackResult {
   readonly instances: readonly DamageInstance[];
   /** The damage applied to the target as it is now (a preview; nothing is changed). */
   readonly outcome: DamageResult | null;
+  /** kenli F-002 T08: Savage Attacker's two rolls of the weapon's dice and whether it was used. */
+  readonly savage?: {
+    readonly first: readonly number[];
+    readonly second: readonly number[];
+    readonly used: boolean;
+  } | null;
 }
 
 export interface AttackOptions {
@@ -746,6 +759,12 @@ export interface AttackOptions {
    * decides (`hit_on_miss`) whether the attack hits instead; the roll is kept.
    */
   hit_on_miss?: string;
+  /**
+   * kenli F-002 T08, Savage Attacker (`savage_attacker` rule, unused this turn): on a hit with a
+   * weapon, its damage dice are rolled again and the attacker decides (`savage_attacker`) whether
+   * to use the second roll; only the weapon's own dice, never a rider's or an extra die.
+   */
+  savage?: boolean;
   /** The GM's mode for this roll, replacing the computed one (`DmOptions.mode_override`). */
   mode_override?: { mode: RollMode; reason: string };
   /** Labelled modifiers to the attack roll (`DmOptions.modifiers`), listed in the result. */
@@ -966,7 +985,32 @@ export function makeAttack(
   else if (cleave && line.cleave_damage_parts) base_parts = line.cleave_damage_parts;
   else if (two_handed && line.two_handed_damage_parts) base_parts = line.two_handed_damage_parts;
   const parts = [...base_parts, ...extra];
-  const damage = rollDamage(parts, { critical: critical_hit, rng });
+  let damage = rollDamage(parts, { critical: critical_hit, rng });
+  // Savage Attacker: "roll the weapon's damage dice twice and use either roll" (its first part:
+  // the weapon's own dice; riders and extra dice are never rolled again).
+  let savage: AttackResult["savage"] = null;
+  const own = damage.parts[0];
+  const ownPart = parts[0];
+  if (options.savage && line.weapon && own && ownPart && ownPart.dice !== null) {
+    const again = rollDamage([ownPart], { critical: critical_hit, rng }).parts[0] as typeof own;
+    const question = message("decision.savage_attacker", {
+      name: attacker.name,
+      attack: line.name,
+      first: own.total,
+      second: again.total,
+    });
+    const used = (options.decide ?? recommend)(
+      decision("savage_attacker", attacker, question, again.total > own.total),
+    );
+    savage = { first: own.rolls, second: again.rolls, used };
+    if (used) {
+      damage = {
+        ...damage,
+        parts: [again, ...damage.parts.slice(1)],
+        total: damage.total - own.total + again.total,
+      };
+    }
+  }
   const instances = damage.parts.map((p) => ({ amount: p.total, type: p.type }));
   const outcome = takeDamage(
     { hp: target.hp, temp: target.temp_hp, max: target.max_hp },
@@ -974,7 +1018,7 @@ export function makeAttack(
     target.defenses,
     { critical: critical_hit },
   );
-  return { ...base, damage, riders: riderNames, instances, outcome };
+  return { ...base, damage, riders: riderNames, instances, outcome, savage };
 }
 
 /** One attack's dice rolled without a target (`rollAttack`). */
@@ -1093,6 +1137,8 @@ export interface SaveResult {
   readonly inspiration: number | null;
   /** It failed and was rerolled with Indomitable (one use spent): `roll` is the new roll. */
   readonly indomitable?: boolean;
+  /** kenli F-002 T08: it failed and Guarded Mind made it a success: the use key to spend. */
+  readonly guarded_mind?: string | null;
 }
 
 /**
@@ -1108,7 +1154,8 @@ export function rollSavingThrow(
     rng = mathRng,
     mode = "normal",
     decide = recommend,
-  }: { rng?: Rng; mode?: RollMode; decide?: Decide } = {},
+    modes = [],
+  }: { rng?: Rng; mode?: RollMode; decide?: Decide; modes?: readonly ModeReason[] } = {},
 ): SaveResult {
   const bonus = combatant.saving_throws[ability];
   const base = { name: combatant.name, ability, dc, bonus };
@@ -1142,10 +1189,30 @@ export function rollSavingThrow(
       inspiration: null,
     };
   }
-  const resolved = resolveMode(mode, saveModes(combatant, ability));
+  const resolved = resolveMode(mode, [...saveModes(combatant, ability), ...modes]);
   let roll = rollD20({ mode: resolved.mode, rng });
   let total = roll.d20 + bonus;
   const what = message("roll.save", { ability: message(`ability.${ability}`) });
+  // kenli F-002 T08, Mage Slayer's Guarded Mind: "If you fail an Intelligence, a Wisdom, or a
+  // Charisma saving throw, you can cause yourself to succeed instead" (one use, Short Rest).
+  const guard = combatant.guarded_mind ?? null;
+  if (total < dc && guard && (ability === "int" || ability === "wis" || ability === "cha")) {
+    const question = message("decision.guarded_mind", { name: combatant.name, what, total, dc });
+    if (decide(decision("guarded_mind", combatant, question, true))) {
+      return {
+        ...base,
+        roll,
+        total,
+        success: true,
+        automatic_failure: null,
+        legendary_resistance: false,
+        reasons: resolved.reasons,
+        reason_messages: resolved.reason_messages,
+        inspiration: null,
+        guarded_mind: guard,
+      };
+    }
+  }
   // Indomitable: "If you fail a saving throw, you can reroll it with a bonus equal to your
   // Fighter level. You must use the new roll."
   let indomitable = false;

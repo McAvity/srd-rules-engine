@@ -152,6 +152,11 @@ export const OptionEntrySchema = z.object({
    * (at level 11 or 17 two can go on one attack: merge their lists).
    */
   strikes: z.array(StrikeOptionSchema).default([]),
+  /**
+   * kenli F-002 T08, Tactical Master: the mastery properties this attack can use instead of its
+   * weapon's own (the attack's `mastery_as`); empty without it.
+   */
+  mastery_as: z.array(z.enum(["push", "sap", "slow"])).default([]),
 });
 export type OptionEntry = z.infer<typeof OptionEntrySchema>;
 

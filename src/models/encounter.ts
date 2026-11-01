@@ -215,12 +215,14 @@ export const SpellMarkSchema = z.object({
    * `speed_halved`: `on`'s Speed is halved (Stunning Strike's successful save); `hamstrung`: −15
    * feet (Hamstring Blow); `staggered`: Disadvantage on its next save, no Opportunity Attacks
    * (Staggering Blow); `sundered`: +5 to the next attack roll against it by someone else than
-   * `by` (Sundering Blow); `speed_zero`: its Speed is 0 (Halt, for the rest of the turn).
+   * `by` (Sundering Blow); `speed_zero`: its Speed is 0 (Halt, for the rest of the turn);
+   * `studied`: `by`'s next attack roll against it has Advantage (Studied Attacks).
    */
   kind: z.enum([
     "advantage_against",
     "speed_halved",
     "speed_zero",
+    "studied",
     "hamstrung",
     "staggered",
     "sundered",
@@ -330,6 +332,8 @@ export const PendingSchema = z.object({
     "relentless_rage",
     "hit_on_miss",
     "tactical_mind",
+    "guarded_mind",
+    "savage_attacker",
   ]),
   question: z.string(),
   /** `question` as a message (for translation); absent in documents saved before it. */
@@ -641,6 +645,11 @@ const AttackActionSchema = z.object({
   reactive_strike: z.boolean().optional(),
   /** kenli F-002 T08: Guardian's Opportunity Attack (within 5 feet; after a Disengage too). */
   guardian: z.boolean().optional(),
+  /**
+   * kenli F-002 T08, Tactical Master: the weapon's mastery property replaced by Push, Sap or Slow
+   * for this attack (a weapon whose mastery it uses).
+   */
+  mastery_as: z.enum(["push", "sap", "slow"]).optional(),
   light_extra: z.boolean().optional(),
   cleave: z.boolean().optional(),
   mastery: z.boolean().optional(),

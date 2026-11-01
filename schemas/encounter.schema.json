@@ -481,6 +481,14 @@
                           "guardian": {
                             "type": "boolean"
                           },
+                          "mastery_as": {
+                            "type": "string",
+                            "enum": [
+                              "push",
+                              "sap",
+                              "slow"
+                            ]
+                          },
                           "light_extra": {
                             "type": "boolean"
                           },
@@ -1209,6 +1217,7 @@
               "advantage_against",
               "speed_halved",
               "speed_zero",
+              "studied",
               "hamstrung",
               "staggered",
               "sundered",
@@ -1776,7 +1785,9 @@
                 "deflect_attacks",
                 "relentless_rage",
                 "hit_on_miss",
-                "tactical_mind"
+                "tactical_mind",
+                "guarded_mind",
+                "savage_attacker"
               ]
             },
             "question": {
@@ -3262,6 +3273,14 @@
                     "guardian": {
                       "type": "boolean"
                     },
+                    "mastery_as": {
+                      "type": "string",
+                      "enum": [
+                        "push",
+                        "sap",
+                        "slow"
+                      ]
+                    },
                     "light_extra": {
                       "type": "boolean"
                     },
@@ -3840,6 +3859,14 @@
             },
             "guardian": {
               "type": "boolean"
+            },
+            "mastery_as": {
+              "type": "string",
+              "enum": [
+                "push",
+                "sap",
+                "slow"
+              ]
             },
             "light_extra": {
               "type": "boolean"
