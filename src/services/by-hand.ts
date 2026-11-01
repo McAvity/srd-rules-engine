@@ -310,6 +310,7 @@ export function rollWith(
       const dice = attackDice(what.attack, {
         mode: what.mode,
         two_handed: what.two_handed,
+        ...(what.damage_type ? { damage_type: what.damage_type } : {}),
         riders: what.riders,
         light_extra: what.light_extra,
         cleave: what.cleave,

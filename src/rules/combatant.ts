@@ -732,6 +732,11 @@ export interface AttackResult {
 export interface AttackOptions {
   rng?: Rng;
   mode?: RollMode;
+  /**
+   * kenli F-002 T12 (D021/D022): the damage dealt as another type the line allows
+   * (`AttackLine.damage_types`: Lunar Radiance's Radiant, Exceptional Training's Force).
+   */
+  damage_type?: string;
   /** Wield a Versatile weapon with two hands. */
   two_handed?: boolean;
   /**
@@ -803,15 +808,35 @@ function prepareAttack(
     forgo = [],
     extra_damage = [],
     forgo_advantage = false,
+    damage_type,
   }: AttackOptions,
 ) {
-  const line =
+  const found =
     typeof attack === "string" ? attacker.attacks.find((a) => a.name === attack) : attack;
-  if (!line) {
+  if (!found) {
     const known = attacker.attacks.map((a) => a.name).join(", ");
     throw new RuleError(
       message("rule.no_attack_named", { name: attacker.name, attack: String(attack), known }),
     );
+  }
+  let line = found;
+  if (damage_type !== undefined && damage_type !== found.damage_type) {
+    if (!found.damage_types?.includes(damage_type))
+      throw new RuleError(
+        message("rule.damage_type_not_allowed", {
+          attack: found.name,
+          type: damage_type,
+          types: (found.damage_types ?? [found.damage_type]).join(", "),
+        }),
+      );
+    const as = (parts: readonly DamagePart[] | null) =>
+      parts ? parts.map((p) => ({ ...p, type: damage_type })) : null;
+    line = {
+      ...found,
+      damage_type,
+      damage_parts: as(found.damage_parts) as DamagePart[],
+      two_handed_damage_parts: as(found.two_handed_damage_parts),
+    };
   }
   const raw = attackReasons(attacker, target, {
     within_5ft: within_5ft ?? line.kind === "melee",

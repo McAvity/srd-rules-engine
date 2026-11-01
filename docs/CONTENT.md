@@ -671,3 +671,10 @@ SRD and invented homebrew), the same steps the SRD importers follow work by hand
 If you have many entities in a regular format, a script that drafts YAML from your transcription
 (like `scripts/import-srd-spells.ts`, with its `--report` of drafts and skips) saves time; the
 review step stays the same.
+
+### kenli F-002 T12 batch B1: forms and companions (optional fields)
+
+- `shape_saves: [{save, ability}]` — while in a Wild Shape form, `ability`'s modifier is added to `save` (Increased Toughness).
+- `attack_damage_types: [{lines: "shape" | "companion", types}]` — a form's attacks or a companion's strike can deal one of `types` instead of their own (`damage_type` on the attack).
+- Damage riders: `applies_to.lines` (only form attacks / a companion's strike), `scaling: [{level, dice}]` (dice by class level), `conditions: {names, max_size?}` (applied on the hit without a save).
+- Feature actions: `restores_when_empty` (restore only with none left), `also_spends` (another resource of the source), `restores_slot` (a spell slot of that level back), `after_feature` (only after that action this turn, in an encounter).

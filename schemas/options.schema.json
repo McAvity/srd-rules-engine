@@ -5676,6 +5676,24 @@
                     "two_handed": {
                       "type": "boolean"
                     },
+                    "damage_type": {
+                      "type": "string",
+                      "enum": [
+                        "acid",
+                        "bludgeoning",
+                        "cold",
+                        "fire",
+                        "force",
+                        "lightning",
+                        "necrotic",
+                        "piercing",
+                        "poison",
+                        "psychic",
+                        "radiant",
+                        "slashing",
+                        "thunder"
+                      ]
+                    },
                     "riders": {
                       "type": "array",
                       "items": {
@@ -6322,6 +6340,24 @@
             "two_handed": {
               "type": "boolean"
             },
+            "damage_type": {
+              "type": "string",
+              "enum": [
+                "acid",
+                "bludgeoning",
+                "cold",
+                "fire",
+                "force",
+                "lightning",
+                "necrotic",
+                "piercing",
+                "poison",
+                "psychic",
+                "radiant",
+                "slashing",
+                "thunder"
+              ]
+            },
             "riders": {
               "type": "array",
               "items": {
@@ -6471,6 +6507,45 @@
                 "slashing",
                 "thunder"
               ]
+            },
+            "payment": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "slot"
+                    },
+                    "level": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "level"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "pact"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "form": {
+              "type": "string"
             }
           },
           "required": [
@@ -8055,6 +8130,24 @@
             },
             "two_handed": {
               "type": "boolean"
+            },
+            "damage_type": {
+              "type": "string",
+              "enum": [
+                "acid",
+                "bludgeoning",
+                "cold",
+                "fire",
+                "force",
+                "lightning",
+                "necrotic",
+                "piercing",
+                "poison",
+                "psychic",
+                "radiant",
+                "slashing",
+                "thunder"
+              ]
             },
             "riders": {
               "type": "array",

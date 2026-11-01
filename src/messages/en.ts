@@ -940,6 +940,15 @@ export const MESSAGES_EN = {
   "refusal.after_roll_needs_dc": "{feature}: give the DC or AC the roll failed against",
   "refusal.after_roll_not_failed": "{feature}: the roll didn't fail",
   "refusal.after_roll_used": "{feature}: already used on this roll",
+  "refusal.restores_when_empty": "{feature}: only when no {use} is left ({left} left)",
+  "play.feature_slot_back": "{feature}: a level {level} spell slot back",
+  "refusal.needs_feature_first": "{feature}: only after {after} this turn",
+  "refusal.companion_strike_once":
+    "{name} has already given up an attack of this Attack action for the companion's strike",
+  "attack.damage_as": "{attack}: its damage dealt as {type}",
+  "rule.damage_type_not_allowed": "{attack} can't deal {type} damage (only {types})",
+  "attack.rider_condition": "{target}: {conditions} ({rider})",
+  "attack.rider_condition_size": "{target} is too large for {rider}'s {conditions}",
   "note.defeated_this_action":
     "{name} is already defeated by this action: the rest of its damage to them has no effect",
   "after_roll.succeeds":

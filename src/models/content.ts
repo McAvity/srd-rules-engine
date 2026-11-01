@@ -274,6 +274,11 @@ export const DamageRiderSchema = z.strictObject({
       weapon: z.boolean().default(false),
       /** Any of these weapon properties or kinds (`finesse`, `ranged`). */
       any_of: z.array(z.string()).default([]),
+      /**
+       * kenli F-002 T12 (D021/D022): only a Wild Shape form's attacks (`shape`) or a companion's
+       * strike (`companion`). Optional.
+       */
+      lines: z.enum(["shape", "companion"]).optional(),
     })
     .prefault({}),
   automatic: z.boolean().default(false),
@@ -313,6 +318,21 @@ export const DamageRiderSchema = z.strictObject({
   alternative: z.strictObject({ dice: Dice, label: z.string() }).optional(),
   /** Only after this feature action (same source) was used this turn (Lunging Attack's Dash). */
   requires_feature: z.string().optional(),
+  /**
+   * kenli F-002 T12 (D022): other dice from a class level (Bestial Fury with Foe Slayer: 1d10 at
+   * Ranger 20); the highest level reached wins. Optional.
+   */
+  scaling: z.array(z.strictObject({ level: z.int().min(1).max(20), dice: Dice })).optional(),
+  /**
+   * kenli F-002 T12 (D024): conditions the target gets on the hit, without a save (Beast of the
+   * Land's Charge: Prone), only up to `max_size` when given. Optional.
+   */
+  conditions: z
+    .strictObject({
+      names: z.array(z.string()).min(1),
+      max_size: z.enum(["tiny", "small", "medium", "large", "huge", "gargantuan"]).optional(),
+    })
+    .optional(),
 });
 export type DamageRider = z.infer<typeof DamageRiderSchema>;
 
@@ -556,6 +576,20 @@ export const FeatureActionSchema = z.strictObject({
    * Inspiration). Optional, so older content parses to the same object.
    */
   restores: z.string().optional(),
+  /**
+   * kenli F-002 T12 (D021): `restores` only when none of it is left (Wild Resurgence: "if you have
+   * no uses of Wild Shape left"). Optional.
+   */
+  restores_when_empty: z.boolean().optional(),
+  /** kenli F-002 T12 (D021): it also spends one use of this other resource (same source). Optional. */
+  also_spends: z.string().optional(),
+  /** kenli F-002 T12 (D021): it gives back one expended spell slot of this level. Optional. */
+  restores_slot: z.int().min(1).max(9).optional(),
+  /**
+   * kenli F-002 T12 (D022): only after this other action (same source) was used this turn
+   * (Exceptional Training: after commanding the companion with a Bonus Action). Optional.
+   */
+  after_feature: z.string().optional(),
   /**
    * Paid with a spell slot of any level: `instead` of its `uses` when the player chooses
    * (a feature whose own use is spent), or always (`required`: Font of Inspiration).
@@ -1000,6 +1034,16 @@ export interface Grants {
   shape_ac?: { base: number; ability: Ability };
   /** This source's spells can be cast while in a form (Circle of the Moon Spells). */
   shape_casting?: boolean;
+  /**
+   * kenli F-002 T12 (D021): while in a form, an ability's modifier added to a save (Increased
+   * Toughness: Wisdom to Constitution saves). Optional.
+   */
+  shape_saves?: { save: Ability; ability: Ability }[];
+  /**
+   * kenli F-002 T12 (D021/D022): another damage type a form's attacks or a companion's strike can
+   * deal, chosen on each attack (Lunar Radiance: Radiant; Exceptional Training: Force). Optional.
+   */
+  attack_damage_types?: { lines: "shape" | "companion"; types: DamageType[] }[];
   /** d20 floors on ability checks (Reliable Talent-like features in packs). Optional. */
   d20_floors?: D20Floor[];
   /** Extra attack lines made with a carried weapon (Polearm Master's Pole Strike). Optional. */
@@ -1149,6 +1193,17 @@ export const GrantsSchema: z.ZodType<Grants, unknown> = z
       shape_cr_divisor: z.int().min(1).optional(),
       shape_ac: z.strictObject({ base: z.int(), ability: z.enum(ABILITIES) }).optional(),
       shape_casting: z.boolean().optional(),
+      shape_saves: z
+        .array(z.strictObject({ save: z.enum(ABILITIES), ability: z.enum(ABILITIES) }))
+        .optional(),
+      attack_damage_types: z
+        .array(
+          z.strictObject({
+            lines: z.enum(["shape", "companion"]),
+            types: z.array(z.enum(DAMAGE_TYPES)).min(1),
+          }),
+        )
+        .optional(),
       d20_floors: z.array(D20FloorSchema).optional(),
       weapon_strikes: z.array(WeaponStrikeSchema).optional(),
       items: z.array(ItemGrantSchema).default([]),

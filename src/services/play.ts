@@ -1309,6 +1309,15 @@ export function applyAction(
           : payment?.type === "pact"
             ? (p.pact_magic?.slot_level ?? 0)
             : 0;
+      // kenli F-002 T12 (D021) Wild Resurgence: a slot for a use only when none is left.
+      if (feature.restores_when_empty && restored && restored.spent < restored.max)
+        fail(
+          message("refusal.restores_when_empty", {
+            feature: feature.name,
+            use: restored.name,
+            left: restored.max - restored.spent,
+          }),
+        );
       if (restored?.tracked) {
         if (!restored.created) fail(notCreated(restored));
         if ((restored.current ?? 0) >= restored.max)
@@ -1316,6 +1325,22 @@ export function applyAction(
       } else if (feature.restores && !restored?.spent) {
         const use = restored?.name ?? feature.restores;
         fail(message("refusal.nothing_to_restore", { feature: feature.name, use }));
+      }
+      // …and a use for a level 1 slot: the other use spent, a slot of that level given back.
+      if (feature.also_spends) {
+        const other =
+          p.uses.find((u) => u.key === feature.also_spends) ??
+          fail(message("refusal.no_uses", { feature: feature.name }));
+        if (other.spent >= other.max)
+          fail(message("refusal.uses_left_count", { name: other.name, left: 0 }));
+        s.uses_spent[other.key] = other.spent + 1;
+      }
+      if (feature.restores_slot) {
+        const level = feature.restores_slot;
+        if (!(s.spell_slots_spent[level - 1] ?? 0))
+          fail(message("refusal.no_spent_level_slot", { level }));
+        s.spell_slots_spent[level - 1] = (s.spell_slots_spent[level - 1] ?? 1) - 1;
+        notes.push(message("play.feature_slot_back", { feature: feature.name, level }));
       }
       if (payment?.type === "slot") {
         s.spell_slots_spent[payment.level - 1] = (s.spell_slots_spent[payment.level - 1] ?? 0) + 1;

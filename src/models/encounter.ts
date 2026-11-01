@@ -539,6 +539,8 @@ export const RollWhatSchema = z
       attack: z.string(),
       mode,
       two_handed: z.boolean().optional(),
+      /** kenli F-002 T12 (D021/D022): its damage as another type the attack line allows. */
+      damage_type: z.enum(DAMAGE_TYPES).optional(),
       riders: z
         .array(
           z.object({
@@ -640,6 +642,8 @@ const AttackActionSchema = z.object({
   attack: z.string(),
   mode: z.enum(["normal", "advantage", "disadvantage"]).optional(),
   two_handed: z.boolean().optional(),
+  /** kenli F-002 T12 (D021/D022): its damage as another type the attack line allows. */
+  damage_type: z.enum(DAMAGE_TYPES).optional(),
   riders: z
     .array(
       z.object({
@@ -1066,6 +1070,13 @@ export const EncounterActionSchema = z
       amount: n.min(1).optional(),
       /** The damage type, for a feature that offers a choice (Divine Spark). */
       damage_type: z.enum(DAMAGE_TYPES).optional(),
+      /**
+       * kenli F-002 T12 (D021): a spell slot paying for it (`slot_payment`: Wild Resurgence, Font of
+       * Inspiration), as the play action `use_feature`'s. Optional.
+       */
+      payment: SlotPaymentSchema.optional(),
+      /** kenli F-002 T12 (D021): a Wild Shape form (one of the known forms), as `use_feature`'s. */
+      form: z.string().optional(),
     }),
     /** A saving throw effect (a monster's breath weapon) against targets; uses the action. */
     z.object({

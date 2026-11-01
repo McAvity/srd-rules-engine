@@ -1026,6 +1026,13 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "lines": {
+                    "type": "string",
+                    "enum": [
+                      "shape",
+                      "companion"
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -1128,6 +1135,55 @@
               },
               "requires_feature": {
                 "type": "string"
+              },
+              "scaling": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 20
+                    },
+                    "dice": {
+                      "type": "string",
+                      "pattern": "^\\d+d\\d+$"
+                    }
+                  },
+                  "required": [
+                    "level",
+                    "dice"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "conditions": {
+                "type": "object",
+                "properties": {
+                  "names": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "max_size": {
+                    "type": "string",
+                    "enum": [
+                      "tiny",
+                      "small",
+                      "medium",
+                      "large",
+                      "huge",
+                      "gargantuan"
+                    ]
+                  }
+                },
+                "required": [
+                  "names"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -1892,6 +1948,20 @@
               "restores": {
                 "type": "string"
               },
+              "restores_when_empty": {
+                "type": "boolean"
+              },
+              "also_spends": {
+                "type": "string"
+              },
+              "restores_slot": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9
+              },
+              "after_feature": {
+                "type": "string"
+              },
               "slot_payment": {
                 "type": "string",
                 "enum": [
@@ -2419,6 +2489,83 @@
         },
         "shape_casting": {
           "type": "boolean"
+        },
+        "shape_saves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "save": {
+                "type": "string",
+                "enum": [
+                  "str",
+                  "dex",
+                  "con",
+                  "int",
+                  "wis",
+                  "cha"
+                ]
+              },
+              "ability": {
+                "type": "string",
+                "enum": [
+                  "str",
+                  "dex",
+                  "con",
+                  "int",
+                  "wis",
+                  "cha"
+                ]
+              }
+            },
+            "required": [
+              "save",
+              "ability"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "attack_damage_types": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lines": {
+                "type": "string",
+                "enum": [
+                  "shape",
+                  "companion"
+                ]
+              },
+              "types": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "acid",
+                    "bludgeoning",
+                    "cold",
+                    "fire",
+                    "force",
+                    "lightning",
+                    "necrotic",
+                    "piercing",
+                    "poison",
+                    "psychic",
+                    "radiant",
+                    "slashing",
+                    "thunder"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "lines",
+              "types"
+            ],
+            "additionalProperties": false
+          }
         },
         "d20_floors": {
           "type": "array",

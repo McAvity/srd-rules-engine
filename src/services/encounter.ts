@@ -1525,6 +1525,7 @@ function run(
       cunning?: readonly ("poison" | "trip" | "withdraw")[];
       brutal?: readonly ("forceful" | "hamstring" | "staggering" | "sundering")[];
       mastery_as?: "push" | "sap" | "slow";
+      damage_type?: string;
     },
   ): AttackResult => {
     const attacker = encounterCombatant(e, c.id, ctx);
@@ -1549,6 +1550,8 @@ function run(
     const paidUses: string[] = [];
     const alternatives: string[] = [];
     const riderSaves: NonNullable<AttackRider["save"] & { rider: string }>[] = [];
+    // kenli F-002 T12 (D024): conditions on the hit without a save (Charge's Prone), up to a size.
+    const riderConditions: NonNullable<AttackRider["conditions"] & { rider: string }>[] = [];
     for (const r of riders) {
       const rider = line?.riders.find((x) => x.id === r.rider || x.name === r.rider);
       if (rider?.own_turn && current()?.id !== c.id) {
@@ -1584,6 +1587,7 @@ function run(
         if (!carried) alternatives.push(again);
       } else if (rider?.uses && c.character !== null) paidUses.push(rider.uses);
       if (rider?.save) riderSaves.push({ ...rider.save, rider: rider.name });
+      if (rider?.conditions) riderConditions.push({ ...rider.conditions, rider: rider.name });
     }
     // Paid riders are checked before any die is rolled: all of this attack's uses together.
     if (paidUses.length) {
@@ -1655,6 +1659,7 @@ function run(
         decide,
         mode: options.mode,
         two_handed: options.two_handed,
+        ...(options.damage_type ? { damage_type: options.damage_type } : {}),
         riders,
         ally_adjacent: spatial.ally_adjacent,
         within_5ft: spatial.within_5ft,
@@ -1757,6 +1762,30 @@ function run(
             t,
             rs.conditions.map((condition) => ({ type: "add_condition" as const, condition })),
           );
+      }
+      for (const rc of riderConditions) {
+        const size = encounterCombatant(e, t.id, ctx).size;
+        const order = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
+        const names = rc.names
+          .map((x) => lookup(catalogOf(ctx, t).conditions, x)?.name ?? x)
+          .join(", ");
+        if (rc.max_size && size && order.indexOf(size) > order.indexOf(rc.max_size)) {
+          notes.push(
+            message("attack.rider_condition_size", {
+              target: t.name,
+              rider: rc.rider,
+              conditions: names,
+            }),
+          );
+          continue;
+        }
+        applyTo(
+          t,
+          rc.names.map((condition) => ({ type: "add_condition" as const, condition })),
+        );
+        notes.push(
+          message("attack.rider_condition", { target: t.name, rider: rc.rider, conditions: names }),
+        );
       }
       c.hits.push(t.id);
       c.last_hit = {
@@ -3664,6 +3693,17 @@ function run(
           if (t.disengaged && !action.guardian)
             fail(message("refusal.disengaged_movement_doesnt_provoke", { target: t.name }));
         }
+        // kenli F-002 T12 (D022): "sacrifice one of your attacks when you take the Attack action to
+        // command the beast to take the Beast's Strike action": one of the Attack action's attacks.
+        if (!reaction && c.character !== null) {
+          const ref = characterRef(ctx, c);
+          const own = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
+          if (own.companions.some((x) => x.attack === action.attack)) {
+            if (c.features_used.includes(COMPANION_STRIKE))
+              refuse(message("refusal.companion_strike_once", { name: c.name }));
+            c.features_used.push(COMPANION_STRIKE);
+          }
+        }
         spendAttack(c, reaction);
         if (light && !reaction) c.light_attacks.push(action.attack);
         // Which attacks the Attack action was made with (Pole Strike needs a qualifying one).
@@ -3940,6 +3980,17 @@ function run(
       const alternative = f.alternative ? `alternative:${f.alternative.label}` : null;
       if (f.alternative && alternative && c.riders_used.includes(alternative))
         refuse(message("refusal.already_used_turn", { name: c.name, again: f.alternative.label }));
+      // kenli F-002 T12 (D022) Exceptional Training: only after the command this turn.
+      if (f.after_feature && !c.features_used.includes(f.after_feature)) {
+        const ref = c.character !== null ? characterRef(ctx, c) : null;
+        const after =
+          (ref &&
+            computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).actions.find(
+              (a) => a.key === f.after_feature,
+            )?.name) ??
+          f.after_feature;
+        fail(message("refusal.needs_feature_first", { feature: f.name, after }));
+      }
       if (f.after_attack_action && !c.features_used.includes(ATTACK_ACTION))
         fail(message("refusal.needs_attack_action", { feature: f.name }));
       // Pole Strike: an attack with a qualifying weapon as part of this turn's Attack action.
@@ -3955,7 +4006,13 @@ function run(
       notes.push(
         message("feature.used", { name: c.name, feature: f.name, count: on.length, targets: on }),
       );
-      play(c, { type: "use_feature", key: f.key, amount: action.amount });
+      play(c, {
+        type: "use_feature",
+        key: f.key,
+        amount: action.amount,
+        ...(action.payment ? { payment: action.payment } : {}),
+        ...(action.form ? { form: action.form } : {}),
+      });
       c.features_used.push(f.key);
       // A die-free variant counts as the maneuver's use, marked as taken under its alternative.
       if (f.counts_as)
@@ -4771,6 +4828,8 @@ function sizeOf(ctx: EncounterContext, c: EncounterCombatant): string | null | u
 const SIZES = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 /** `features_used` marker: the Attack action was taken this turn (Pole Strike needs it). */
 const ATTACK_ACTION = "action:attack";
+/** kenli F-002 T12 (D022): an Attack action attack given up for the companion's strike this turn. */
+const COMPANION_STRIKE = "action:companion-strike";
 /** kenli F-002 T08: Savage Attacker used this turn (in `riders_used`, reset at every turn). */
 const SAVAGE_ATTACKER = "savage_attacker";
 /** `features_used` marker: an attack with this line was made as part of the Attack action. */

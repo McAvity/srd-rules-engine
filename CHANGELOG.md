@@ -790,3 +790,5 @@ migrated when it's loaded.
 [0.1.0]: https://github.com/luigibrb/srd-rules-engine/releases/tag/v0.1.0
 
 - kenli F-002 T12 (review15): `useAfterFailedRoll` once per roll (`RolledBonusDie.source`, `refusal.after_roll_used`); an encounter action whose earlier hit defeats a monster finishes, its later hits on it noted (`note.defeated_this_action`) instead of refusing the cast.
+
+- kenli F-002 T12 batch B1 (D021/D022/D024), all optional and absent from older content: `Grants.shape_saves` (an ability added to a save while in a form), `Grants.attack_damage_types` (another damage type for form attacks or a companion's strike; the attack's `damage_type`, by hand too), `DamageRider.applies_to.lines` (`shape`/`companion`), `DamageRider.scaling` (dice by class level), `DamageRider.conditions` (on the hit without a save, up to `max_size`), `FeatureAction.restores_when_empty`, `also_spends`, `restores_slot`, `after_feature`; the encounter `feature` action takes a slot `payment` and a Wild Shape `form`; one Attack action attack given up for a companion's strike per turn (`refusal.companion_strike_once`).
