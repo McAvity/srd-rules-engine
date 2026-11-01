@@ -53,7 +53,7 @@ import {
   spellRangeFeet,
   spellTargetRange,
 } from "./encounter";
-import { computePlaySheet, spellSlots } from "./play";
+import { computePlaySheet, type PlaySheet, spellSlots } from "./play";
 import { optionReason, refusalCode } from "./refusals";
 
 /** Dice that always land in the middle: a dry run checks legality, not outcomes. */
@@ -654,6 +654,10 @@ export function combatantOptions(
         feature: f.key,
         ...(target !== undefined ? { target } : {}),
         ...(f.pool ? { amount: 1 } : {}),
+        // kenli F-002 T12 B1: a feature a slot pays for (Wild Resurgence, Font of Inspiration):
+        // the lowest slot with one left by default (the caller may pick another), so it's judged
+        // with its payment, not refused for the lack of one.
+        ...(f.slot_payment === "required" ? defaultSlotPayment(sheet) : {}),
       };
       const made = entry(action, named(f.name), cost, targets, { uses });
       // "hasn't hit X this turn" said of its placeholder target: no hit at all.
@@ -1094,4 +1098,15 @@ function joined(reasons: readonly Message[]): Message {
 function firstCode(reason: Message): RefusalCode {
   const first = reason.code === "refusal.all" ? (reason.params.reasons as Message[])[0] : reason;
   return refusalCode((first ?? reason).text);
+}
+
+/** The lowest spell slot with one left (else the Pact Magic slot), as a feature's `payment`. */
+function defaultSlotPayment(sheet: PlaySheet): {
+  payment?: { type: "slot"; level: number } | { type: "pact" };
+} {
+  const slot = sheet.play.spell_slots.find((x) => x.spent < x.total);
+  if (slot) return { payment: { type: "slot", level: slot.level } };
+  const pact = sheet.play.pact_magic;
+  if (pact && pact.spent < pact.slots) return { payment: { type: "pact" } };
+  return {};
 }

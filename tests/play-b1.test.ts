@@ -7,6 +7,7 @@ import {
   type CharacterBuild,
   type CharacterState,
   combatantFromCharacter,
+  combatantOptions,
   computePlaySheet,
   createCatalog,
   createEncounter,
@@ -395,6 +396,24 @@ describe("D021: Wild Resurgence (Druid 5-like)", () => {
     expect(() =>
       f.act({ type: "feature", id: "me", feature: KEY, payment: { type: "slot", level: 1 } }),
     ).not.toThrow();
+  });
+  it("its encounter option carries a slot payment: available with none left, unavailable with a use left", () => {
+    const b = druid(5);
+    const opt = (st: CharacterState) => {
+      const f = fight(b, st);
+      const nb = builder.setName(b, cat, "Me").build;
+      const o = combatantOptions(f.enc(), "me", {
+        catalog: cat,
+        characters: { me: { build: nb, state: f.me() } },
+      });
+      return o.features.find((x) => x.action.type === "feature" && x.action.feature === KEY);
+    };
+    const empty1 = opt(empty(b));
+    expect(empty1?.action).toMatchObject({ payment: { type: "slot", level: 1 } });
+    expect(empty1?.available).toBe(true);
+    const left = opt(createState(b, cat));
+    expect(left?.available).toBe(false);
+    expect(left?.reason).toMatch(/only when no Wild Shape is left/);
   });
   it("a Wild Shape use for a level 1 slot: once per Long Rest, only with a level 1 slot spent", () => {
     const b = druid(5);
