@@ -1579,6 +1579,21 @@
                         "type",
                         "use"
                       ]
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "heightened": {
+                      "type": "string"
+                    },
+                    "careful": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -2352,6 +2367,21 @@
                 "type",
                 "use"
               ]
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "heightened": {
+              "type": "string"
+            },
+            "careful": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [

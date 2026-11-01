@@ -678,3 +678,9 @@ review step stays the same.
 - `attack_damage_types: [{lines: "shape" | "companion", types}]` — a form's attacks or a companion's strike can deal one of `types` instead of their own (`damage_type` on the attack).
 - Damage riders: `applies_to.lines` (only form attacks / a companion's strike), `scaling: [{level, dice}]` (dice by class level), `conditions: {names, max_size?}` (applied on the hit without a save).
 - Feature actions: `restores_when_empty` (restore only with none left), `also_spends` (another resource of the source), `restores_slot` (a spell slot of that level back), `after_feature` (only after that action this turn, in an encounter).
+
+### kenli F-002 T12 batch B2a: cast-time Metamagic (optional fields)
+
+- `cast_options[].effect`: `distant` (range ≥ 5 ft doubled, Touch → 30 ft), `quickened` (an Action spell as a Bonus Action; no level 1+ spell on that turn, and none before it), `subtle` (no components but a consumed or costly Material one), `heightened` (one target saves with Disadvantage, its zone's later saves too), `careful` (up to CHA modifier, min 1, creatures succeed and take no damage instead of half). Without an effect the option is paid and named only.
+- `cast_option_limit: {count, while_active}` — more non-combinable options per spell while that toggle (same source) is active.
+- `toggle_alternatives: [{toggle, resource_class, resource, amount}]` — the toggle switched on with that resource when it has no use left.

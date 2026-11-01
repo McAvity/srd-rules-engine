@@ -2367,7 +2367,10 @@
                     "type": "string",
                     "enum": [
                       "distant",
-                      "quickened"
+                      "quickened",
+                      "subtle",
+                      "heightened",
+                      "careful"
                     ]
                   },
                   {
@@ -2419,6 +2422,53 @@
         },
         "shape_casting": {
           "type": "boolean"
+        },
+        "cast_option_limit": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "while_active": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "count",
+            "while_active"
+          ],
+          "additionalProperties": false
+        },
+        "toggle_alternatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "toggle": {
+                "type": "string"
+              },
+              "resource_class": {
+                "type": "string"
+              },
+              "resource": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "toggle",
+              "resource_class",
+              "resource",
+              "amount"
+            ],
+            "additionalProperties": false
+          }
         },
         "shape_saves": {
           "type": "array",

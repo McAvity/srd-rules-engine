@@ -1200,6 +1200,8 @@ export interface SaveResult {
   readonly indomitable?: boolean;
   /** kenli F-002 T08: it failed and Guarded Mind made it a success: the use key to spend. */
   readonly guarded_mind?: string | null;
+  /** kenli F-002 T12 B2a: succeeded without a roll (Careful Spell), why. */
+  readonly automatic_success?: string;
 }
 
 /**

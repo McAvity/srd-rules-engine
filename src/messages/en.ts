@@ -941,6 +941,24 @@ export const MESSAGES_EN = {
   "refusal.after_roll_not_failed": "{feature}: the roll didn't fail",
   "refusal.after_roll_used": "{feature}: already used on this roll",
   "refusal.restores_when_empty": "{feature}: only when no {use} is left ({left} left)",
+  "refusal.toggle_alternative": "{toggle}: no use left, and {amount} {use} needed ({left} left)",
+  "play.toggle_alternative": "{toggle}: switched on with {amount} {use} (no use left)",
+  "refusal.cast_options_limit": "{options}: only {count} cast option(s) on one spell now",
+  "refusal.quickened_after_leveled":
+    "{spell}: Quickened Spell can't be used after a level 1+ spell this turn",
+  "refusal.leveled_after_quickened":
+    "{spell}: no level 1+ spell on a turn Quickened Spell was used",
+  "refusal.metamagic_needs_save": "{option}: {spell} forces no saving throw",
+  "refusal.heightened_one_target": "{option}: choose one of the spell's targets",
+  "refusal.careful_targets": "{option}: up to {max} of the spell's targets (not you)",
+  "cast.subtle": "{spell} cast without Verbal, Somatic or Material components{still}",
+  "cast.subtle_still": " (still needed: {material})",
+  "cast.heightened": "{target} has Disadvantage on saves against {spell} (Heightened Spell)",
+  "cast.careful": "{targets} succeed on the save against {spell} (Careful Spell)",
+  "reason.heightened": "Heightened Spell",
+  "save.careful": "Careful Spell: an automatic success",
+  "cast.option_targets_by_hand":
+    "{option}: its creatures are the table's (a roll by hand has no targets)",
   "play.feature_slot_back": "{feature}: a level {level} spell slot back",
   "refusal.needs_feature_first": "{feature}: only after {after} this turn",
   "refusal.companion_strike_once":

@@ -27,6 +27,7 @@ import {
 import { type RolledDamage, rollDamage } from "../rules/damage";
 import { roll as rollDiceExpression } from "../rules/dice";
 import { message, plainMessage, RuleError } from "../rules/messages";
+import { planCastOptions } from "../rules/metamagic";
 import { mathRng, type Rng } from "../rules/rng";
 import type { SpellLine } from "../rules/sheet";
 import { applyAction, computePlaySheet, PlayError, type PlaySheet } from "./play";
@@ -214,33 +215,26 @@ export function rollWith(
     // one per spell unless combinable; what it changes stated (Distant's range, Quickened's Bonus
     // Action), refused when the spell can't take it.
     const optionSheet = options.length ? sheetOf() : null;
-    const picked = options.map(
-      (k) =>
-        optionSheet?.cast_options.find((o) => o.key === k) ??
-        fail(message("refusal.no_cast_option", { key: k })),
-    );
-    const single = picked.filter((o) => !o.combinable);
-    if (single.length > 1)
-      fail(message("refusal.cast_options_one", { options: single.map((o) => o.name).join(", ") }));
-    const optionNotes: Message[] = [];
-    for (const o of picked) {
-      if (o.effect === "distant") {
-        // kenli F-002 T12 (D012): Distant doubles the range as the character casts it (Eldritch
-        // Spear, Spell Sniper included: the sheet line's `range`), else the catalog's.
-        const ranged = sheetOf()?.spells.find((x) => x.id === spell.id)?.range ?? spell.range;
-        const feet = /^(\d+) feet/.exec(ranged)?.[1];
-        const range = ranged === "Touch" ? "30 feet" : feet ? `${Number(feet) * 2} feet` : null;
-        if (!range) fail(message("refusal.distant_needs_range", { spell: spell.name }));
-        optionNotes.push(message("cast.distant", { range: range as string }));
-      } else if (o.effect === "quickened") {
-        if (spell.casting_time !== "Action")
-          fail(message("refusal.quickened_needs_action", { spell: spell.name }));
-        optionNotes.push(message("cast.quickened"));
-      }
-    }
-    const optionCosts: RollCost[] = picked.map((o) => ({
+    // kenli F-002 T12 B2a: the shared check (rules/metamagic): the range it's cast with (Eldritch
+    // Spear, Spell Sniper: the sheet line's), one option unless the sheet allows more. By hand
+    // there are no targets: Heightened's and Careful's creatures are the table's (stated).
+    const plan = optionSheet
+      ? planCastOptions(
+          optionSheet,
+          {
+            ...spell,
+            range: optionSheet.spells.find((x) => x.id === spell.id)?.range ?? spell.range,
+          },
+          options,
+        )
+      : null;
+    const optionNotes: Message[] = [...(plan?.messages ?? [])];
+    for (const o of plan?.picked ?? [])
+      if (o.effect === "heightened" || o.effect === "careful")
+        optionNotes.push(message("cast.option_targets_by_hand", { option: o.name }));
+    const optionCosts: RollCost[] = (plan?.costs ?? []).map((action) => ({
       type: "play",
-      action: { type: "use", key: o.uses, amount: o.cost },
+      action,
     }));
     const { dm, ...rest } = cast;
     const r = castSpell(combatant, spell, [], {

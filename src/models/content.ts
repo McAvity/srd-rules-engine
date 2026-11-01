@@ -836,7 +836,10 @@ export const CastOptionSchema = z.strictObject({
   resource_class: z.string(),
   resource: z.string(),
   combinable: z.boolean().default(false),
-  effect: z.enum(["distant", "quickened"]).nullable().default(null),
+  effect: z
+    .enum(["distant", "quickened", "subtle", "heightened", "careful"])
+    .nullable()
+    .default(null),
 });
 export type CastOption = z.infer<typeof CastOptionSchema>;
 
@@ -1040,6 +1043,21 @@ export interface Grants {
    */
   shape_saves?: { save: Ability; ability: Ability }[];
   /**
+   * kenli F-002 T12 B2a: more cast options on one spell while a toggle (same source scope) is
+   * active (Sorcery Incarnate: two Metamagic options while Innate Sorcery is). Optional.
+   */
+  cast_option_limit?: { count: number; while_active: string };
+  /**
+   * kenli F-002 T12 B2a: another way to switch a toggle on when its uses are gone (Sorcery
+   * Incarnate: Innate Sorcery for 2 Sorcery Points). Optional.
+   */
+  toggle_alternatives?: {
+    toggle: string;
+    resource_class: string;
+    resource: string;
+    amount: number;
+  }[];
+  /**
    * kenli F-002 T12 (D021/D022): another damage type a form's attacks or a companion's strike can
    * deal, chosen on each attack (Lunar Radiance: Radiant; Exceptional Training: Force). Optional.
    */
@@ -1193,6 +1211,19 @@ export const GrantsSchema: z.ZodType<Grants, unknown> = z
       shape_cr_divisor: z.int().min(1).optional(),
       shape_ac: z.strictObject({ base: z.int(), ability: z.enum(ABILITIES) }).optional(),
       shape_casting: z.boolean().optional(),
+      cast_option_limit: z
+        .strictObject({ count: z.int().min(1), while_active: z.string() })
+        .optional(),
+      toggle_alternatives: z
+        .array(
+          z.strictObject({
+            toggle: z.string(),
+            resource_class: z.string(),
+            resource: z.string(),
+            amount: z.int().min(1),
+          }),
+        )
+        .optional(),
       shape_saves: z
         .array(z.strictObject({ save: z.enum(ABILITIES), ability: z.enum(ABILITIES) }))
         .optional(),

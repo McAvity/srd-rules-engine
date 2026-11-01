@@ -278,6 +278,8 @@ export const ZoneSchema = z.object({
   optional: z.boolean().default(false),
   /** An Emanation from `point` (not its caster): its space, in squares. */
   space: z.int().min(1).default(1),
+  /** kenli F-002 T12 B2a: the creature with Disadvantage on its saves (Heightened Spell). */
+  heightened: z.string().optional(),
   /** Its squares are Difficult Terrain (Web, Spike Growth). */
   difficult: z.boolean().default(false),
   /** A wall spell's squares (instead of its area), or the grid-line segments it stands on. */
@@ -748,6 +750,13 @@ const CastActionSchema = z.object({
    * Mastery), at the spell's own level, with that free cast's spellcasting feature. Absent: a slot.
    */
   payment: z.object({ type: z.literal("free"), use: z.string() }).optional(),
+  /**
+   * kenli F-002 T12 B2a: a character's cast options paid with this cast (`sheet.cast_options`
+   * keys: Metamagic), and the targets Heightened Spell (one) and Careful Spell (some) choose.
+   */
+  options: z.array(z.string()).optional(),
+  heightened: z.string().optional(),
+  careful: z.array(z.string()).optional(),
 });
 
 const MoveActionSchema = z.object({

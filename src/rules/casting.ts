@@ -20,6 +20,7 @@ import {
   type Decide,
   inspire,
   type ModeReason,
+  modeReason,
   type RollMode,
   rollD20,
   rollSavingThrow,
@@ -38,6 +39,13 @@ import {
 import { parseDiceExpression, roll } from "./dice";
 import { message, plainMessage, RuleError } from "./messages";
 import { mathRng, type Rng } from "./rng";
+
+/** kenli F-002 T12 B2a: one target's save changed by a cast option (`CastOptions.save_overrides`). */
+export interface SaveOverride {
+  readonly target: number;
+  readonly disadvantage?: Message;
+  readonly succeed?: Message;
+}
 
 export interface CastOptions {
   /** Damage that rides an attack's Critical Hit: its dice are doubled (Divine Smite). */
@@ -80,6 +88,12 @@ export interface CastOptions {
   extra_damage?: readonly { dice: string; type: DamageType; label: string }[];
   /** By hand: flat damage, added once to the first part. */
   damage_modifiers?: readonly { value: number; label: string }[];
+  /**
+   * kenli F-002 T12 B2a (Metamagic): a target's save against this spell (its index in `targets`):
+   * with Disadvantage (`disadvantage`, Heightened Spell), or an automatic success taking no damage
+   * where a success would halve it (`succeed`, Careful Spell). The reasons are messages.
+   */
+  save_overrides?: readonly SaveOverride[];
 }
 
 export interface SpellAttackRoll {
@@ -241,6 +255,7 @@ function castSpellOnce(
     dm,
     extra_damage = [],
     damage_modifiers,
+    save_overrides = [],
   }: CastOptions = {},
 ): SpellCastResult {
   // Armor without training: "you can't cast spells" (SRD "Armor Training").
@@ -537,7 +552,15 @@ function castSpellOnce(
       dc: line?.save_dc ?? 0,
       conditions: conditionsOn(m, "failed_save"),
     };
-    const resolved = resolveSave(effect, partsFor(true), targets, rng, decide, potent);
+    const resolved = resolveSave(
+      effect,
+      partsFor(true),
+      targets,
+      rng,
+      decide,
+      potent,
+      save_overrides,
+    );
     shared = resolved.damage;
     results.push(...resolved.targets);
   } else if (projectiles) {
@@ -570,7 +593,15 @@ function castSpellOnce(
     const followParts = followUpParts(f, above);
     const dc = line?.save_dc ?? 0;
     const effect = { ...f.save, dc, conditions: [] };
-    const resolved = resolveSave(effect, followParts, [...targets, ...nearby], rng, decide);
+    const resolved = resolveSave(
+      effect,
+      followParts,
+      [...targets, ...nearby],
+      rng,
+      decide,
+      false,
+      save_overrides,
+    );
     follow_up = { ability: f.save.ability, dc, damage: resolved.damage, targets: resolved.targets };
   }
 
@@ -724,8 +755,32 @@ function resolveSave(
   rng: Rng,
   decide: Decide,
   potent = false,
+  overrides: readonly SaveOverride[] = [],
 ): { damage: RolledDamage | null; targets: SpellTargetResult[] } {
-  const saves = targets.map((t) => rollSavingThrow(t, effect.ability, effect.dc, { rng, decide }));
+  const saves = targets.map((t, i): SaveResult => {
+    const o = overrides.find((x) => x.target === i);
+    if (o?.succeed) {
+      // Careful Spell: "automatically succeeds on its saving throw against the spell".
+      const roll = { rolls: [], d20: 0, mode: "normal" as const, kept: -1, natural: 0 };
+      return {
+        name: t.name,
+        ability: effect.ability,
+        dc: effect.dc,
+        bonus: t.saving_throws[effect.ability],
+        roll,
+        total: 0,
+        success: true,
+        automatic_failure: null,
+        legendary_resistance: false,
+        reasons: [o.succeed.text],
+        reason_messages: [o.succeed],
+        inspiration: null,
+        automatic_success: o.succeed.text,
+      };
+    }
+    const modes = o?.disadvantage ? [modeReason("disadvantage", o.disadvantage)] : [];
+    return rollSavingThrow(t, effect.ability, effect.dc, { rng, decide, modes });
+  });
   const damage = parts.length && targets.length ? rollDamage(parts, { rng }) : null;
   const results = targets.map((target, i) => {
     const save = saves[i] as SaveResult;
@@ -738,6 +793,8 @@ function resolveSave(
       target.rules.includes("evasion") &&
       !target.conditions.includes("incapacitated");
     if (save.success) instances = effect.on_success === "half" || potent ? half() : [];
+    // Careful Spell: "it takes no damage if it would normally take half damage on a success".
+    if (save.automatic_success) instances = [];
     if (evasion) instances = save.success ? [] : half();
     const conditions = save.success ? [] : [...effect.conditions];
     return targetResult(i, target, { save, instances, conditions });
@@ -753,9 +810,13 @@ export function saveAgainst(
   effect: SaveEffect,
   parts: readonly DamagePart[],
   targets: readonly Combatant[],
-  { rng = mathRng, decide = (d) => d.recommended }: { rng?: Rng; decide?: Decide } = {},
+  {
+    rng = mathRng,
+    decide = (d) => d.recommended,
+    overrides = [],
+  }: { rng?: Rng; decide?: Decide; overrides?: readonly SaveOverride[] } = {},
 ): { damage: RolledDamage | null; targets: SpellTargetResult[] } {
-  return resolveSave(effect, parts, targets, rng, decide);
+  return resolveSave(effect, parts, targets, rng, decide, false, overrides);
 }
 
 export interface SaveActionResult {

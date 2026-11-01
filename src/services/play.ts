@@ -1499,9 +1499,33 @@ export function applyAction(
         );
       if (toggle.uses) {
         const use = p.uses.find((u) => u.key === toggle.uses);
-        if (!use || use.spent >= use.max)
-          fail(message("refusal.no_uses_left", { toggle: toggle.name }));
-        s.uses_spent[toggle.uses] = (use?.spent ?? 0) + 1;
+        // kenli F-002 T12 B2a (Sorcery Incarnate): with no use left, another resource can pay.
+        const alt = sheet.toggle_alternatives.find((x) => x.toggle === toggle.key);
+        if ((!use || use.spent >= use.max) && alt) {
+          const found = p.uses.find((u) => u.key === alt.uses);
+          const other =
+            (found && found.max - found.spent >= alt.amount ? found : undefined) ??
+            fail(
+              message("refusal.toggle_alternative", {
+                toggle: toggle.name,
+                use: found?.name ?? alt.uses,
+                amount: alt.amount,
+                left: found ? found.max - found.spent : 0,
+              }),
+            );
+          s.uses_spent[other.key] = other.spent + alt.amount;
+          notes.push(
+            message("play.toggle_alternative", {
+              toggle: toggle.name,
+              use: other.name,
+              amount: alt.amount,
+            }),
+          );
+        } else {
+          if (!use || use.spent >= use.max)
+            fail(message("refusal.no_uses_left", { toggle: toggle.name }));
+          s.uses_spent[toggle.uses] = (use?.spent ?? 0) + 1;
+        }
       }
       s.active.push(toggle.key);
       if (toggle.no_spells) dropConcentration(message("why.toggle", { toggle: toggle.name }));

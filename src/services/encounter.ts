@@ -94,6 +94,12 @@ import {
   type Terrain,
 } from "../rules/grid";
 import { message, plainMessage, ruleReason, texts, toMessage } from "../rules/messages";
+import {
+  type CastOptionPlan,
+  type CastOptionSheet,
+  castOptionSaves,
+  planCastOptions,
+} from "../rules/metamagic";
 import { mathRng, type Rng } from "../rules/rng";
 import type { AttackLine, AttackRider } from "../rules/sheet";
 import {
@@ -835,7 +841,14 @@ function run(
     });
     if (!who.length) return;
     const views = who.map((t) => encounterCombatant(e, t.id, ctx));
-    const r = saveAgainst({ ...save, conditions: z.conditions }, z.damage, views, { rng, decide });
+    // kenli F-002 T12 B2a: Heightened Spell's creature saves against the spell with Disadvantage.
+    const heightened = who.findIndex((t) => t.id === z.heightened);
+    const r = saveAgainst({ ...save, conditions: z.conditions }, z.damage, views, {
+      rng,
+      decide,
+      overrides:
+        heightened >= 0 ? [{ target: heightened, disadvantage: message("reason.heightened") }] : [],
+    });
     notes.push(
       message("zone.save", {
         label: z.label,
@@ -2199,6 +2212,12 @@ function run(
       wall?: PlacedWall;
       /** A smite riding a Critical Hit: its dice are doubled. */
       critical?: boolean;
+      /** kenli F-002 T12 B2a (Metamagic): Subtle Spell, Heightened/Careful targets (ids). */
+      subtle?: boolean;
+      heightened?: string;
+      careful?: readonly string[];
+      castPlan?: CastOptionPlan;
+      castSheet?: CastOptionSheet;
     },
   ): SpellCastResult => {
     const zone = spell.mechanics?.zone ?? null;
@@ -2228,8 +2247,38 @@ function run(
       unaffected: _unaffected,
       held,
       wall: placedWall,
+      subtle,
+      heightened: heightenedId,
+      careful: carefulIds,
+      castPlan,
+      castSheet,
       ...cast
     } = options;
+    // kenli F-002 T12 B2a: Heightened and Careful on the spell's actual targets (after its area).
+    const optionSaves =
+      castPlan && castSheet
+        ? (() => {
+            const idx = (id: string) => targets.findIndex((t) => t.id === id);
+            try {
+              return castOptionSaves(
+                castPlan,
+                castSheet,
+                spell,
+                targets,
+                {
+                  heightened: heightenedId === undefined ? undefined : idx(heightenedId),
+                  careful: carefulIds?.map(idx),
+                },
+                targets.findIndex((t) => t.id === c.id),
+              );
+            } catch (error) {
+              if (error instanceof RangeError) fail(ruleReason(error));
+              throw error;
+            }
+          })()
+        : null;
+    if (!castPlan && (heightenedId !== undefined || carefulIds?.length))
+      fail(message("refusal.heightened_one_target", { option: "Heightened Spell" }));
     const relevant = !!spell.mechanics?.attack || spell.mechanics?.save?.ability === "dex";
     const views = targets.map((t) =>
       withCover(
@@ -2289,6 +2338,7 @@ function run(
         modesFor,
         within_5ft,
         nearby: nearbyViews,
+        ...(optionSaves ? { save_overrides: optionSaves.overrides } : {}),
       });
     } catch (error) {
       if (error instanceof RangeError) fail(ruleReason(error));
@@ -2301,6 +2351,8 @@ function run(
     const upcast = r.slot_level !== null && r.slot_level > spell.level ? r.slot_level : 0;
     notes.push(
       message("spell.cast", { name: c.name, spell: spell.name, level: upcast }),
+      ...(castPlan?.messages ?? []),
+      ...(optionSaves?.messages ?? []),
       ...r.messages,
     );
     // A held spell's slot was spent when it was readied.
@@ -2312,7 +2364,9 @@ function run(
       ...(free && !free.at_will ? [{ type: "use" as const, key: free.use }] : []),
     ]);
     // "you make … or you cast a spell with a Verbal component": no longer hidden.
-    if (/\bV\b/.test(spell.components)) unhide(c, message("why.cast_spell", { spell: spell.name }));
+    // Subtle Spell: no Verbal component, so it doesn't give the caster away.
+    if (!subtle && /\bV\b/.test(spell.components))
+      unhide(c, message("why.cast_spell", { spell: spell.name }));
     for (const hit of r.targets) {
       const t = targets[hit.target] as EncounterCombatant;
       useInspiration(c, hit.attack?.inspiration);
@@ -2478,6 +2532,7 @@ function run(
         once_per_turn: zone?.once_per_turn ?? true,
         optional: zone?.optional ?? false,
         space: zone?.space ?? 1,
+        ...(heightenedId ? { heightened: heightenedId } : {}),
         ram: zone?.ram ?? false,
         difficult: (zone?.difficult ?? false) || (wallSpec?.difficult ?? false),
         squares: placedWall ? placedWall.zone : null,
@@ -4153,6 +4208,8 @@ function run(
         lookup(catalogOf(ctx, c).spells, action.spell) ??
         fail(message("refusal.unknown_spell", { spell: action.spell }));
       let freeCast: { use: string; at_will: boolean } | undefined;
+      let castPlan: CastOptionPlan | undefined;
+      let castSheet: CastOptionSheet | undefined;
       let what: "action" | "bonus_action" | "reaction" = "action";
       let slot_level = action.slot_level;
       let spellcasting: string | undefined;
@@ -4214,7 +4271,22 @@ function run(
           fail(message("refusal.free_cast_only", { spell: spell.name, use: known.source }));
         spellcasting ??= action.spellcasting ?? spellcastingOf(known);
         what = castingEconomy(spell);
+        // kenli F-002 T12 B2a: cast options (Metamagic) on this cast, checked as by hand.
+        if (action.options?.length) {
+          const sheetNow = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
+          try {
+            castPlan = planCastOptions(sheetNow, spell, action.options);
+          } catch (error) {
+            if (error instanceof RangeError) fail(ruleReason(error));
+            throw error;
+          }
+          castSheet = sheetNow;
+          if (castPlan.range) spell = { ...spell, range: castPlan.range };
+          if (castPlan.quickened) what = "bonus_action";
+        }
       } else {
+        if (action.options?.length)
+          fail(message("refusal.no_cast_option", { key: action.options[0] ?? "" }));
         // A monster casts it through an action that lists it (legendary ones: `legendary`).
         try {
           line = monsterCastLine(monsterDef(ctx, c), c.name, spell, action.via);
@@ -4245,6 +4317,15 @@ function run(
         }
       }
       const released = releasing?.id === c.id;
+      // kenli F-002 T12 B2a, Quickened Spell: "You can't modify a spell in this way if you've
+      // already cast a level 1+ spell on the current turn, nor can you cast a level 1+ spell on
+      // this turn after modifying a spell in this way" (the current turn, whoever's it is).
+      const turnKey = `${e.round}:${e.turn}`;
+      const leveled = spell.level >= 1;
+      if (castPlan?.quickened && c.features_used.includes(`${LEVELED_CAST}@${turnKey}`))
+        refuse(message("refusal.quickened_after_leveled", { spell: spell.name }));
+      if (leveled && c.features_used.includes(`${QUICKENED_CAST}@${turnKey}`))
+        refuse(message("refusal.leveled_after_quickened", { spell: spell.name }));
       if (what === "reaction") {
         if (e.round === 0) fail(message("refusal.fight_hasnt_started"));
       } else onTurn(c, "cast");
@@ -4305,8 +4386,15 @@ function run(
         unaffected: action.unaffected,
         held: released && releasing?.held,
         ...(freeCast ? { free: freeCast } : {}),
+        ...(castPlan ? { castPlan, castSheet, subtle: !!castPlan.subtle } : {}),
+        ...(action.heightened !== undefined ? { heightened: action.heightened } : {}),
+        ...(action.careful?.length ? { careful: action.careful } : {}),
       });
       if (!released) c.used[what] = true;
+      // Metamagic paid once with the cast (Sorcery Points), through the character's play actions.
+      if (castPlan) applyTo(c, [...castPlan.costs]);
+      if (leveled) c.features_used.push(`${LEVELED_CAST}@${turnKey}`);
+      if (castPlan?.quickened) c.features_used.push(`${QUICKENED_CAST}@${turnKey}`);
       // kenli F-002 T12 (D016): cast triggers (Arcane Ward) paid with this cast, after its slot,
       // through the character's own play action (it checks the school, the slot and the pool).
       if (action.triggers?.length) {
@@ -4830,6 +4918,9 @@ const SIZES = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 const ATTACK_ACTION = "action:attack";
 /** kenli F-002 T12 (D022): an Attack action attack given up for the companion's strike this turn. */
 const COMPANION_STRIKE = "action:companion-strike";
+/** kenli F-002 T12 B2a: a level 1+ spell cast on a turn, and a Quickened Spell (by turn key). */
+const LEVELED_CAST = "cast:leveled";
+const QUICKENED_CAST = "cast:quickened";
 /** kenli F-002 T08: Savage Attacker used this turn (in `riders_used`, reset at every turn). */
 const SAVAGE_ATTACKER = "savage_attacker";
 /** `features_used` marker: an attack with this line was made as part of the Attack action. */

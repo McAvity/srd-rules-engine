@@ -6075,6 +6075,21 @@
                         "use"
                       ],
                       "additionalProperties": false
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "heightened": {
+                      "type": "string"
+                    },
+                    "careful": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -6875,6 +6890,21 @@
                 "use"
               ],
               "additionalProperties": false
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "heightened": {
+              "type": "string"
+            },
+            "careful": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [

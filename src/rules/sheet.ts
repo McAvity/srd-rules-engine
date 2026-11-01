@@ -413,7 +413,14 @@ export interface CastOptionLine {
   /** The limited use it spends (`sorcerer:sorcery-points`). */
   readonly uses: string;
   readonly combinable: boolean;
-  readonly effect: "distant" | "quickened" | null;
+  readonly effect: "distant" | "quickened" | "subtle" | "heightened" | "careful" | null;
+}
+
+/** kenli F-002 T12 B2a: a toggle switched on by spending another resource (Sorcery Incarnate). */
+export interface ToggleAlternativeLine {
+  readonly toggle: string;
+  readonly uses: string;
+  readonly amount: number;
 }
 
 export interface DerivedSheet {
@@ -502,6 +509,12 @@ export interface DerivedSheet {
   readonly shape: ShapeLine | null;
   readonly companions: readonly CompanionLine[];
   readonly cast_options: readonly CastOptionLine[];
+  /**
+   * kenli F-002 T12 B2a: how many cast options (not `combinable`) one spell can take now: 1, or
+   * more while a `cast_option_limit` toggle is active (Sorcery Incarnate).
+   */
+  readonly cast_option_limit: number;
+  readonly toggle_alternatives: readonly ToggleAlternativeLine[];
   /** d20 floors on ability checks from features (besides the named rule Reliable Talent). */
   readonly d20_floors: readonly D20FloorLine[];
   /**
@@ -1085,6 +1098,20 @@ export function computeSheet(
       effect: o.effect,
     })),
   );
+  const cast_option_limit = Math.max(
+    1,
+    ...res.sources.flatMap((src) => {
+      const l = src.grants.cast_option_limit;
+      return l && play?.active?.has(`${usesScope(src)}:${l.while_active}`) ? [l.count] : [];
+    }),
+  );
+  const toggle_alternatives: ToggleAlternativeLine[] = res.sources.flatMap((src) =>
+    (src.grants.toggle_alternatives ?? []).map((t) => ({
+      toggle: `${usesScope(src)}:${t.toggle}`,
+      uses: `${t.resource_class}:${t.resource}`,
+      amount: t.amount,
+    })),
+  );
   // kenli F-002 T10 (H3): in a form, its attacks are lines of the sheet and its AC is yours.
   let shape: ShapeLine | null = null;
   let acParts = ac.parts;
@@ -1387,6 +1414,8 @@ export function computeSheet(
     shape,
     companions,
     cast_options,
+    cast_option_limit,
+    toggle_alternatives,
     cast_triggers: res.sources.flatMap((src) =>
       (src.grants.cast_triggers ?? []).map((t) => ({
         key: `${usesScope(src)}:${t.id}`,

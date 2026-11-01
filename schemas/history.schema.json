@@ -845,6 +845,21 @@
                                           "type",
                                           "use"
                                         ]
+                                      },
+                                      "options": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "heightened": {
+                                        "type": "string"
+                                      },
+                                      "careful": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
                                       }
                                     },
                                     "required": [
@@ -1591,6 +1606,9 @@
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 9007199254740991
+                      },
+                      "heightened": {
+                        "type": "string"
                       },
                       "difficult": {
                         "default": false,
@@ -4023,6 +4041,21 @@
                         "type",
                         "use"
                       ]
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "heightened": {
+                      "type": "string"
+                    },
+                    "careful": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -4796,6 +4829,21 @@
                 "type",
                 "use"
               ]
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "heightened": {
+              "type": "string"
+            },
+            "careful": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [
