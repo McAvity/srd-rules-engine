@@ -7,6 +7,14 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — kenli F-002 T13 (no document change; SRD bytes unchanged)
+- `itemQuote(catalog, id)`: an item's listed price as data (copper per bundle, bundle size; `cp:
+  null` for an unpriced magic item) — the price `buy` charges.
+- `stockItems(build, state, catalog, [{item, units, equip}])`: a kit bought on a state in memory —
+  units already carried are not bought again, a missing amount is bought in whole catalog bundles
+  (`received` units), the catalog price only, then the marked items worn/held; all or nothing
+  (`refusal.stock_units`, `refusal.stock_twice`, `refusal.stock_unpriced`, or `buy`'s refusals).
+
 ### Added — kenli F-002 T12 batch B2b (optional values; SRD bytes and older documents unchanged)
 - Cast option effect `empowered` (Empowered Spell after the damage roll): `planCastOptions` asks for
   it (`CastOptionPlan.empowered`) without paying it; `castSpell`'s `empower` hook on each damage roll;

@@ -1911,6 +1911,117 @@ function pounds(weight: string): number | null {
   return Number(m[1] ?? 0) + (m[2] ? 0.5 : 0);
 }
 
+/** kenli F-002 T13: an item's listed price as data (`itemQuote`): copper per bundle, bundle size. */
+export interface ItemQuote {
+  readonly item: string;
+  readonly name: string;
+  /** Copper per bundle (`null`: no listed price, a magic item: it can't be bought). */
+  readonly cp: number | null;
+  /** Units one purchase gives (20 Arrows for 1 GP); 1 for most items. */
+  readonly bundle: number;
+}
+
+/** kenli F-002 T13: the catalog's price of an item (the one `buy` charges); unknown → `PlayError`. */
+export function itemQuote(catalog: Catalog, id: string): ItemQuote {
+  const d = itemPrice(catalog, id);
+  return { item: id, name: d.name, cp: d.cp, bundle: d.bundle };
+}
+
+/** One line of `stockItems`: what was wanted, owned, bought (whole bundles) and what it cost. */
+export interface StockLine {
+  readonly item: string;
+  readonly name: string;
+  /** Units wanted on the character (20 Arrows: 20). */
+  readonly units: number;
+  /** Units already carried before (a class or background grant): never bought again. */
+  readonly owned: number;
+  /** Purchases made (bundles), the units they gave and their catalog cost. */
+  readonly bundles: number;
+  readonly bundle: number;
+  readonly received: number;
+  readonly cost_cp: number;
+  /** Copper per bundle from the catalog. */
+  readonly price_cp: number | null;
+  /** Worn or held after the purchase. */
+  readonly equip: boolean;
+}
+
+/**
+ * kenli F-002 T13: buy what a list asks for, to have at least `units` of each catalog item
+ * carried, then wear/hold the ones marked `equip` — the starting kit of a new character, staged
+ * on a state in memory. Units already carried (granted by the class or background) are not bought
+ * again; a missing amount is bought in whole catalog bundles (a partial Arrow bundle becomes one
+ * whole bundle: `received` says how many); the price is always the catalog's (`buy` without a
+ * price). All or nothing: an unknown item, one without a listed price, a bad count or not enough
+ * coins refuses the whole list (`PlayError`), nothing changes. Nothing is stored here.
+ */
+export function stockItems(
+  build: CharacterBuild,
+  state: CharacterState,
+  catalog: Catalog,
+  items: readonly { readonly item: string; readonly units: number; readonly equip: boolean }[],
+): {
+  state: CharacterState;
+  lines: StockLine[];
+  before_cp: number;
+  after_cp: number;
+  spent_cp: number;
+  messages: Message[];
+} {
+  let s = state;
+  const lines: StockLine[] = [];
+  const messages: Message[] = [];
+  const seen = new Set<string>();
+  const carriedQty = (st: CharacterState, id: string) =>
+    st.inventory
+      .filter((i) => i.item === id && !i.location && !i.custom && i.base === null)
+      .reduce((n, i) => n + i.qty, 0);
+  for (const want of items) {
+    if (!Number.isInteger(want.units) || want.units < 1)
+      throw new PlayError([message("refusal.stock_units", { item: want.item })]);
+    if (seen.has(want.item))
+      throw new PlayError([message("refusal.stock_twice", { item: want.item })]);
+    seen.add(want.item);
+    const q = itemQuote(catalog, want.item);
+    const owned = carriedQty(s, want.item);
+    const missing = Math.max(0, want.units - owned);
+    const bundles = Math.ceil(missing / q.bundle);
+    if (bundles > 0 && q.cp === null)
+      throw new PlayError([message("refusal.stock_unpriced", { item: q.name })]);
+    if (bundles > 0) {
+      const r = applyAction(build, s, catalog, { type: "buy", item: want.item, qty: bundles });
+      s = r.state;
+      messages.push(...r.messages);
+    }
+    lines.push({
+      item: want.item,
+      name: q.name,
+      units: want.units,
+      owned,
+      bundles,
+      bundle: q.bundle,
+      received: bundles * q.bundle,
+      cost_cp: bundles * (q.cp ?? 0),
+      price_cp: q.cp,
+      equip: want.equip,
+    });
+  }
+  for (const want of items) {
+    if (!want.equip) continue;
+    const line = s.inventory.find(
+      (i) => i.item === want.item && !i.location && !i.custom && i.base === null,
+    );
+    if (!line) throw new PlayError([message("refusal.unknown_item", { item: want.item })]);
+    if (line.equipped) continue;
+    const r = applyAction(build, s, catalog, { type: "equip", id: line.id, equipped: true });
+    s = r.state;
+    messages.push(...r.messages);
+  }
+  const before_cp = purseValue(state.currency);
+  const after_cp = purseValue(s.currency);
+  return { state: s, lines, before_cp, after_cp, spent_cp: before_cp - after_cp, messages };
+}
+
 /**
  * kenli F-002 T12 B2b, Empowered Spell on a spell rolled by hand, after its damage: `rolls` are
  * the damage rolls of that one cast (a beam's each, or the one roll), `roll` the one whose `dice`

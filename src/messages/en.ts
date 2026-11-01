@@ -995,6 +995,9 @@ export const MESSAGES_EN = {
   "cunning.dazed":
     "{name} is Dazed: on its next turn, only one of moving, an action or a Bonus Action",
   "label.cost_sneak_dice": "{count}d6 of Sneak Attack",
+  "refusal.stock_units": "{item}: a whole number of units, at least 1",
+  "refusal.stock_twice": "{item} is listed twice",
+  "refusal.stock_unpriced": "{item} has no listed price: it can't be bought",
 } as const;
 
 export type MessageCode = keyof typeof MESSAGES_EN;
