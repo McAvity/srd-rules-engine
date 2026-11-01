@@ -680,3 +680,124 @@ describe("R14-05: a redundant pick on a skill grant with nothing left to give", 
     b = builder.setChoice(b, cat, "class:fighter#skills", ch?.selected ?? []).build;
   });
 });
+
+describe("R15-01: a feature for a failed roll is used once per roll, whatever its outcome", () => {
+  const b = mage();
+  const s0 = createState(b, cat);
+  const KEY = "wizard:peer";
+  it("a check that still fails can't take it again; the die is recorded with its source; a new roll can", () => {
+    const failed = rollCheck(b, s0, cat, { skill: "arcana" }, {
+      rng: scriptedRng([2]),
+      dc: 36,
+    } as never);
+    const once = useAfterFailedRoll(b, s0, cat, failed, KEY, { rng: scriptedRng([5]) });
+    expect(once.success).toBe(false);
+    expect(once.roll.bonus_dice.at(-1)?.source).toBe(KEY);
+    expect(() =>
+      useAfterFailedRoll(b, once.state, cat, once.roll, KEY, { rng: scriptedRng([5]) }),
+    ).toThrow(/already used on this roll/);
+    const fresh = rollCheck(b, s0, cat, { skill: "arcana" }, { rng: scriptedRng([2]) } as never);
+    expect(
+      useAfterFailedRoll(b, once.state, cat, fresh, KEY, {
+        dc: fresh.total + 1,
+        rng: scriptedRng([9]),
+      }).success,
+    ).toBe(true);
+  });
+  it("an attack by hand: once, success or not; a Heroic reroll of its die keeps the guard", () => {
+    const r = rollByHand(
+      combatantFromCharacter(b, s0, cat),
+      { type: "attack", attack: "Unarmed Strike" } as never,
+      { catalog: cat, character: { build: b, state: s0 }, rng: scriptedRng([3, 1, 1, 1]) },
+    );
+    const a = r.rolls.attacks[0]!;
+    const miss = useAfterFailedRoll(b, s0, cat, a, KEY, {
+      dc: a.total + 30,
+      rng: scriptedRng([1]),
+    });
+    expect(miss.spent).toBe(false);
+    expect(() =>
+      useAfterFailedRoll(b, miss.state, cat, miss.roll, KEY, {
+        dc: a.total + 2,
+        rng: scriptedRng([8]),
+      }),
+    ).toThrow(/already used/);
+    expect(miss.roll.bonus_dice.filter((d) => d.source === KEY)).toHaveLength(1);
+  });
+});
+
+describe("R15-02: a cast whose earlier hit defeats its target finishes (later hits on it do nothing)", () => {
+  const W = mage();
+  function fight(monsters: string[]) {
+    const nb = builder.setName(W, cat, "Me").build;
+    const characters: Record<string, { build: CharacterBuild; state: CharacterState }> = {
+      me: { build: nb, state: createState(nb, cat) },
+    };
+    let e: Encounter = createEncounter();
+    const act = (a: Parameters<typeof applyEncounterAction>[1]) => {
+      const r = applyEncounterAction(e, a, { catalog: cat, characters, rng: fixedRng(4) });
+      e = r.encounter;
+      for (const [id, x] of Object.entries(r.states))
+        characters[id] = { ...characters[id]!, state: x };
+      return r;
+    };
+    act({ type: "add_character", character: "me" });
+    for (const m of monsters) act({ type: "add_monster", monster: m });
+    act({ type: "set_initiative", id: "me", value: 20 });
+    for (const m of monsters) act({ type: "set_initiative", id: m, value: 1 });
+    act({ type: "start" });
+    return { act, me: () => characters.me!.state, enc: () => e };
+  }
+  const hp = (e: Encounter, id: string) => e.combatants.find((c) => c.id === id);
+  it("Magic Missile, three darts at one Goblin: the first defeats it, the cast goes on, one slot spent", () => {
+    const f = fight(["goblin-warrior"]);
+    const r = f.act({
+      type: "cast",
+      id: "me",
+      spell: "magic-missile",
+      slot_level: 1,
+      targets: ["goblin-warrior", "goblin-warrior", "goblin-warrior"],
+    });
+    expect(hp(f.enc(), "goblin-warrior")?.defeated).toBe(true);
+    expect(slots(f.me())).toBe(1);
+    expect(r.messages.some((m) => m.code === "note.defeated_this_action")).toBe(true);
+  });
+  it("mixed targets: the darts after the Goblin's defeat still hit the Ogre (no rollback)", () => {
+    const f = fight(["goblin-warrior", "ogre"]);
+    const ogre0 = hp(f.enc(), "ogre")?.hp ?? null;
+    f.act({
+      type: "cast",
+      id: "me",
+      spell: "magic-missile",
+      slot_level: 1,
+      targets: ["goblin-warrior", "goblin-warrior", "ogre"],
+    });
+    expect(hp(f.enc(), "goblin-warrior")?.defeated).toBe(true);
+    const ogre1 = hp(f.enc(), "ogre")?.hp ?? null;
+    expect(ogre0 === null || ogre1 === null ? true : ogre1 < ogre0).toBe(true);
+    expect(slots(f.me())).toBe(1);
+  });
+  it("a target already defeated before the cast is still refused, nothing spent", () => {
+    const f = fight(["goblin-warrior"]);
+    f.act({
+      type: "cast",
+      id: "me",
+      spell: "magic-missile",
+      slot_level: 1,
+      targets: ["goblin-warrior", "goblin-warrior", "goblin-warrior"],
+    });
+    f.act({ type: "next_turn" });
+    f.act({ type: "next_turn" });
+    const before = JSON.stringify(f.me());
+    expect(() =>
+      f.act({
+        type: "cast",
+        id: "me",
+        spell: "magic-missile",
+        slot_level: 1,
+        targets: ["goblin-warrior"],
+      }),
+    ).toThrow();
+    expect(JSON.stringify(f.me())).toBe(before);
+  });
+});

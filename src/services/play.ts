@@ -1878,6 +1878,9 @@ export function useAfterFailedRoll<T extends D20TestResult | AttackDice>(
     throw new PlayError([message("refusal.after_roll_kind", { feature: line.name })]);
   if (!after.kinds.includes(kind))
     throw new PlayError([message("refusal.after_roll_kind", { feature: line.name })]);
+  // review15 R15-01: once per roll, whatever its outcome (a still-failing roll can't take it again).
+  if (rolled.bonus_dice.some((d) => d.source === line.key))
+    throw new PlayError([message("refusal.after_roll_used", { feature: line.name })]);
   const known = "dc" in rolled ? rolled.dc : null;
   const dc = known ?? options.dc ?? null;
   if (dc === null)
@@ -1897,7 +1900,14 @@ export function useAfterFailedRoll<T extends D20TestResult | AttackDice>(
   if (!dice)
     throw new PlayError([message("refusal.no_feature", { name: build.name || "?", feature: key })]);
   const r = roll(dice, rng);
-  const die: RolledBonusDie = { label: line.name, dice, sign: 1, rolls: r.rolls, total: r.total };
+  const die: RolledBonusDie = {
+    label: line.name,
+    dice,
+    sign: 1,
+    rolls: r.rolls,
+    total: r.total,
+    source: line.key,
+  };
   const after2 = addBonusDie(rolled, die);
   const success = succeeds(after2);
   const spent = success || after.spend !== "on_success";

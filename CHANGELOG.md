@@ -788,3 +788,5 @@ migrated when it's loaded.
 
 [Unreleased]: https://github.com/luigibrb/srd-rules-engine/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/luigibrb/srd-rules-engine/releases/tag/v0.1.0
+
+- kenli F-002 T12 (review15): `useAfterFailedRoll` once per roll (`RolledBonusDie.source`, `refusal.after_roll_used`); an encounter action whose earlier hit defeats a monster finishes, its later hits on it noted (`note.defeated_this_action`) instead of refusing the cast.

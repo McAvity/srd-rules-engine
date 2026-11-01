@@ -939,6 +939,9 @@ export const MESSAGES_EN = {
   "refusal.after_roll_kind": "{feature} is used on a failed ability check or attack roll only",
   "refusal.after_roll_needs_dc": "{feature}: give the DC or AC the roll failed against",
   "refusal.after_roll_not_failed": "{feature}: the roll didn't fail",
+  "refusal.after_roll_used": "{feature}: already used on this roll",
+  "note.defeated_this_action":
+    "{name} is already defeated by this action: the rest of its damage to them has no effect",
   "after_roll.succeeds":
     "{feature}: {die} rolled {rolled}, total {total} against {dc}: it succeeds, one use spent",
   "after_roll.still_fails":

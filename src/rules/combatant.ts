@@ -524,6 +524,11 @@ export interface RolledBonusDie {
   readonly sign: 1 | -1;
   readonly rolls: readonly number[];
   readonly total: number;
+  /**
+   * kenli F-002 T12 (review15 R15-01): the sheet action key that added it (`useAfterFailedRoll`),
+   * so that feature is used once per roll; absent for the GM's dice and Bardic Inspiration.
+   */
+  readonly source?: string;
 }
 
 /** A floor raised on a roll's dice (`{label, from, to}`). */

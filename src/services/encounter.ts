@@ -442,6 +442,9 @@ function run(
   // What happened, as messages; sentences from play and damage have code `text` for now.
   const notes: Message[] = [];
   const states: Record<string, CharacterState> = {};
+  // review15 R15-02: monsters defeated by an earlier hit of THIS action (Magic Missile's darts,
+  // Eldritch Blast's beams at one target): its later hits on them do nothing, the action goes on.
+  const defeatedNow = new Set<string>();
   // `force`: the GM overrides a refusal of legality (`FORCEABLE_REFUSALS`), noted in the log.
   const forcing = "force" in action && action.force === true;
   const forceable = (reason: Message) =>
@@ -553,6 +556,10 @@ function run(
     from?: EncounterCombatant,
   ): void => {
     for (const a of actions) {
+      if (a.type === "damage" && c.monster !== null && defeatedNow.has(c.id)) {
+        notes.push(message("note.defeated_this_action", { name: c.name }));
+        continue;
+      }
       let dc: number | null = null;
       let dealt = 0;
       if (a.type === "damage") {
@@ -566,7 +573,10 @@ function run(
       if (c.monster !== null) {
         const alive = !c.defeated;
         notes.push(...monsterEffect(ctx, c, a));
-        if (alive && c.defeated) deathBurst(c);
+        if (alive && c.defeated) {
+          defeatedNow.add(c.id);
+          deathBurst(c);
+        }
       } else {
         const relentless = a.type === "damage" ? relentlessRage(c, a) : null;
         if (relentless === null) play(c, a);
