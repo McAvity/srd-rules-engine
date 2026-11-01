@@ -7,6 +7,22 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added / fixed — item assessment and Shield training (kenli F-013)
+- `assessInventoryItems(build, state, catalog, requests)`: a read-only batch assessment of catalog
+  items for a character as they are now (play sheet: today's choices, level, active items):
+  proficiency or training (`yes`/`no`/`not_applicable`/`unknown`/`choose_base`), Weapon Mastery
+  apart, coded restrictions of use (checked by the engine or `manual`), request issues (the same
+  messages `add_item` refuses with), a magic item's allowed bases with which ones fit, and the
+  listed price. New exports: `assessInventoryItems`, `ITEM_TABLES`, `listedPrice` (+ `ListedPrice`)
+  and the `Item*` types; new `item.*` message codes. Nothing is bought, added or changed.
+- `listedPrice(catalog, id)`: what `buy` and `sell` charge (now shared with them); a magic item has
+  no listed price (`cp: null`), an unknown id `null`.
+- A magic weapon or armor whose data has no `base` is assessed `unknown` (kind kept, restriction
+  `base_unknown`, judged by hand), not neutral gear.
+- Fixed: an equipped Shield adds its AC (and a magic Shield's AC bonus) only with Shield training
+  (SRD "Armor Training"); held without it, it still counts as wielding a Shield (Unarmored Defense,
+  Bracers of Defense) and the play sheet warns. No armor penalties for it.
+
 ### Added / fixed — play hooks of kenli F-002 T12 batch A (all optional, no defaults: the SRD bundle and older documents keep their bytes)
 - `free_casts[].at_will` (Spell Mastery: no slot, nothing spent; `uses` then absent) and
   `free_casts[].line` (the named spells on the sheet only through that free cast: `SpellGrant.free_only`,

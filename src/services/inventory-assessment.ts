@@ -47,7 +47,7 @@ export interface ItemAssessmentRequest {
 /**
  * `yes` / `no`: the character has (or lacks) the proficiency or training using it needs;
  * `not_applicable`: none applies (ordinary gear, ammunition, a ring); `unknown`: nothing to judge
- * (an unknown id, an invalid base); `choose_base`: a magic item made from one of several items
+ * (an unknown id, an invalid base, a magic weapon or armor whose data has no base); `choose_base`: a magic item made from one of several items
  * (see `bases`).
  */
 export type ItemProficiencyStatus = "yes" | "no" | "not_applicable" | "unknown" | "choose_base";
@@ -77,6 +77,7 @@ export interface ItemMastery {
 }
 
 export type ItemRestrictionCode =
+  | "base_unknown"
   | "weapon_not_proficient"
   | "heavy_weapon"
   | "two_handed_with_shield"
@@ -354,18 +355,38 @@ function assessOne(ctx: Context, request: ItemAssessmentRequest): ItemAssessment
         message: message("item.base_not_used", { item: magic.name, base: requestedBase }),
       });
     const name = magicItemName(catalog, magic, null, variant);
-    const none = message("item.no_proficiency_needed", { item: name });
-    assessed = {
-      kind: "gear",
-      proficiency: { status: "not_applicable", reason: none, via: null, bonus: null },
-      mastery: {
-        status: "not_applicable",
-        property: null,
-        name: null,
-        reason: message("item.mastery_not_applicable", { item: name }),
-      },
-      restrictions: [],
-    };
+    if (magic.category === "weapon" || magic.category === "armor") {
+      // kenli F-013 T04 (R03-01): a magic weapon or armor whose data doesn't say what it's made
+      // from. Its kind is known; whether the character is proficient isn't: said, judged by hand,
+      // never neutral gear and never an invented base. Owning it stays allowed.
+      const why = message("item.base_unknown", { item: name, kind: magic.category });
+      assessed = {
+        kind: magic.category,
+        proficiency: { status: "unknown", reason: why, via: null, bonus: null },
+        mastery: { status: "unknown", property: null, name: null, reason: why },
+        restrictions: [
+          {
+            code: "base_unknown",
+            effect: "note",
+            evaluation: "manual",
+            message: message("item.restriction.base_unknown", { item: name }),
+          },
+        ],
+      };
+    } else {
+      const none = message("item.no_proficiency_needed", { item: name });
+      assessed = {
+        kind: "gear",
+        proficiency: { status: "not_applicable", reason: none, via: null, bonus: null },
+        mastery: {
+          status: "not_applicable",
+          property: null,
+          name: null,
+          reason: message("item.mastery_not_applicable", { item: name }),
+        },
+        restrictions: [],
+      };
+    }
   }
   return {
     ...common,

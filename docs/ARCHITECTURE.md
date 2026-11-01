@@ -297,7 +297,16 @@ marked `rest_change` (prepared spells, Weapon Mastery…). The state stores only
   when worn/held (or carried, per `active_when`) and attuned if required; active items become
   sources, so their grants use the same machinery as feats. A magic weapon's bonus applies to
   its attack line whenever attunement allows (you wield it to attack). With a play context, AC
-  comes from the equipped armor and Shield instead of the best armor owned.
+  comes from the equipped armor and Shield instead of the best armor owned; a Shield adds AC
+  (its magic bonus too) only with Shield training, but is still wielded for other rules.
+- **Item assessment** (kenli F-013, `services/inventory-assessment.ts`). `assessInventoryItems`
+  reads the play sheet once and reuses the sheet's and actions' own helpers
+  (`isWeaponProficient`, `allowedBases`, `attunementBlocker`, `listedPrice`, the worn Shield from
+  `carriedItems`), so its answer can't disagree with the sheet or with `add_item`/`attune`/`buy`.
+  Restrictions describe using the item, never owning it. What only text says (a tool's activity,
+  attunement "by a Dwarf") is `manual`; a magic weapon or armor without a `base` is `unknown`.
+  Proficiency, training or tools granted by an active magic item are not counted, by the sheet
+  or by the assessment (no SRD item grants them; see "Known gaps").
 - **Conditions** are data: `implies` (Unconscious → Incapacitated, Prone) and `speed_zero`.
   Exhaustion is a level on the state; the sheet applies −2 per level to d20 tests and −5 ft per
   level to speed. Incapacitated ends Concentration.
@@ -1173,6 +1182,9 @@ What the engine doesn't do yet is listed with sizes in [ROADMAP.md](ROADMAP.md).
 51 spells keep their effects in text.
 Starting-equipment items "of your choice" (a Bard's instrument, a Monk's tool) are placeholders,
 like the Soldier's gaming set.
+Weapon proficiencies, armor training and tool proficiencies in a magic item's grants aren't read
+(the sheet's lists come from the build's sources); the SRD has no such item, so a pack that adds
+one needs this first. Until then the sheet and `assessInventoryItems` don't count them.
 
 ## Named rules in code (documented exceptions)
 

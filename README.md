@@ -170,6 +170,23 @@ Protection, Gauntlets of Ogre Power, Bracers of Defense, resistances…
 
 After the build changes (a level-up, an edit), `reconcileState` fits the state to it again.
 
+To choose equipment, `assessInventoryItems` tells what catalog items would mean for a character
+now, without changing anything: proficiency or training, Weapon Mastery apart, what happens if
+it's used (no Proficiency Bonus, untrained armor or Shield, Heavy, Strength and Stealth, Two-Handed
+with a Shield held, attunement), the bases a magic item can be made from and the listed price
+(`listedPrice`, the one `buy` charges):
+
+```ts
+import { assessInventoryItems } from "srd-rules-engine";
+
+const [shield, template] = assessInventoryItems(build, state, catalog, [
+  { table: "armor", item: "shield" },
+  { table: "magic_items", item: "weapon-1" }, // add `base: "longsword"` for that one
+]);
+shield.proficiency.status;   // "no" for a Wizard: restriction "shield_untrained" (no AC from it)
+template.bases?.proficient;  // the bases the character is proficient with
+```
+
 ### Combat: attacks and damage
 
 ```ts

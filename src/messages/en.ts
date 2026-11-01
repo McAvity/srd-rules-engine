@@ -958,6 +958,10 @@ export const MESSAGES_EN = {
   "item.mastery_yes": "Weapon Mastery: you can use the {mastery} property of {item}",
   "item.mastery_no": "No Weapon Mastery with {item} (its property: {mastery})",
   "item.mastery_not_applicable": "{item} has no mastery property",
+  "item.base_unknown":
+    "{item}: its data doesn't say which {kind} it is made from, so proficiency can't be assessed",
+  "item.restriction.base_unknown":
+    "{item}: which item it is made from isn't known; judge proficiency and its properties by hand",
   "item.base_not_used": "{item} isn't made from another item: {base} is ignored",
   "item.variant_not_used": "{item} has no kinds to choose: {variant} is ignored",
   "item.restriction.weapon_not_proficient":
