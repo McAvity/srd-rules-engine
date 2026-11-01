@@ -167,6 +167,8 @@ export const CharacterStateSchema = z.object({
    * its bytes.
    */
   pools: z.record(z.string(), z.int().min(0)).optional(),
+  /** The form the character is in (Wild Shape: a `monsters` id), until `end_shape` or a Long Rest. Optional. */
+  shape: z.string().optional(),
   /**
    * Today's picks for choices you can change after a rest (Cleric prepared spells, Weapon
    * Mastery…), by choice key. They replace the build's starting picks while playing.
@@ -303,7 +305,11 @@ export const PlayActionSchema = z
         .optional(),
       /** The GM overrides a refusal of legality (Incapacitated): the feature is used anyway. */
       force: z.boolean().optional(),
+      /** A feature that takes a form (Wild Shape): which of the known forms. */
+      form: z.string().optional(),
     }),
+    /** Leave the form (Wild Shape): back to your own statistics. */
+    z.object({ type: z.literal("end_shape") }),
     z.object({ type: z.literal("add_condition"), condition: id }),
     z.object({ type: z.literal("remove_condition"), condition: id }),
     z.object({ type: z.literal("set_exhaustion"), level: n.min(0).max(6) }),

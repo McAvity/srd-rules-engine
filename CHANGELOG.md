@@ -20,6 +20,23 @@ migrated when it's loaded.
 - Feature actions: `restores_per_slot_level` (a slot-paid restore of a tracked pool: 2 × the slot's
   level) and `temp_hp.per_class_level` (Wild Shape's Temporary Hit Points; the higher ones stay).
 
+### Added — forms, companions, Metamagic costs (kenli F-002 T10, review12 R12-01/02/03)
+- Wild Shape forms: option choices whose options carry a stat block (`monster`), its `cr` and `fly`;
+  `scaling.max_cr` and `fly_from` make an option above the limit (by the class level) unavailable;
+  `Grants.shape_cr_divisor` raises it (Circle Forms: level ÷ 3). A feature action's `shape` takes a
+  known form (`use_feature`'s `form`): the state keeps it (`shape`, optional) until `end_shape` or a
+  Long Rest; the sheet's `shape` line, the form's attacks as attack lines, its AC as yours
+  (`Grants.shape_ac`: at least 13 + WIS), spells blocked in a form except a `shape_casting`
+  source's. Taking a form doesn't end Concentration.
+- `Grants.attack_lines`: attack lines with their own numbers (`to_hit: "spell"`: the source class's
+  spell attack; dice + bonus + an ability), rolled like any; `Grants.companions`: a companion's HP
+  (base + per class level), AC (base + an ability), speed and strike on the sheet (`companions`).
+- `Grants.cast_options` (Metamagic): a by-hand cast's `options` pay their cost from a class resource
+  (`resource_class:resource`) with the cast, one per spell unless `combinable`; Distant states the
+  doubled range (Touch → 30 feet), Quickened needs a spell with a casting time of an Action. Sheet
+  `cast_options`.
+- Sheet actions: a later action with the same key replaces an earlier one (two strikes at Ranger 11).
+
 ### Fixed (kenli F-002 D001, D002, D006)
 - `mergeGrants`: an optional grant list (`free_casts`, `cast_triggers`…) absent on one side no
   longer throws when a class's core grants and first-level features are merged.

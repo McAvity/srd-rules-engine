@@ -140,6 +140,9 @@
         "maximum": 9007199254740991
       }
     },
+    "shape": {
+      "type": "string"
+    },
     "choices": {
       "default": {},
       "type": "object",

@@ -15,6 +15,7 @@ import {
   type EncounterAction,
   fixedRng,
   type RollWhat,
+  resolve,
   rollByHand,
 } from "../src/index";
 import { speedOf } from "../src/services/encounter";
@@ -394,5 +395,310 @@ describe("optional grant lists merged at a class's first level (mergeGrants)", (
     expect(computePlaySheet(b, createState(b, c), c).cast_triggers.map((t) => t.key)).toEqual([
       "wizard:x",
     ]);
+  });
+});
+
+// kenli F-002 T10 (review12 R12-01/02/03): forms, a companion, Metamagic — invented test content.
+const cr = (l: number) => (l >= 8 ? 1 : l >= 4 ? 0.5 : 0.25);
+const t10b = {
+  manifest: { id: "test-t10b", version: "1.0.0", source: "test", requires: ["srd-5.2.1"] },
+  subclasses: [
+    {
+      id: "test-moon",
+      name: "Test Moon",
+      class: "druid",
+      features: {
+        "3": {
+          shape_cr_divisor: 3,
+          shape_ac: { base: 13, ability: "wis" },
+          shape_casting: true,
+          spells: ["cure-wounds"],
+        },
+      },
+    },
+    {
+      id: "test-beasts",
+      name: "Test Beasts",
+      class: "ranger",
+      features: {
+        "3": {
+          attack_lines: [
+            {
+              name: "Test Strike",
+              to_hit: "spell",
+              damage: { dice: "1d8", bonus: 2, ability: "wis", type: "piercing" },
+            },
+          ],
+          companions: [
+            {
+              name: "Test Beast",
+              size: "Medium",
+              hp: { base: 5, per_class_level: 5 },
+              ac: { base: 13, ability: "wis" },
+              speed: "40 ft.",
+              attack: "Test Strike",
+            },
+          ],
+          actions: [
+            {
+              id: "command",
+              name: "Test Command",
+              economy: "bonus_action",
+              attacks: { attack: "Test Strike", count: 1 },
+            },
+          ],
+          at_class_level: [
+            {
+              level: 11,
+              grants: {
+                actions: [
+                  {
+                    id: "command",
+                    name: "Test Command (two)",
+                    economy: "bonus_action",
+                    attacks: { attack: "Test Strike", count: 2 },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    },
+  ],
+  patches: [
+    {
+      target: "classes/druid",
+      op: "append",
+      path: "features.2.choices",
+      value: {
+        id: "forms",
+        label: "Test forms",
+        kind: "option",
+        count: 2,
+        rest_change: "long",
+        scaling: {
+          count: Array.from({ length: 20 }, (_, i) => (i < 1 ? 0 : 2)),
+          max_cr: Array.from({ length: 20 }, (_, i) => cr(i + 1)),
+        },
+        fly_from: 8,
+        options: [
+          { id: "wolf", name: "Wolf", monster: "wolf", cr: 0.25 },
+          { id: "brown-bear", name: "Brown Bear", monster: "brown-bear", cr: 1 },
+          { id: "giant-eagle", name: "Giant Eagle", monster: "giant-eagle", cr: 1, fly: true },
+          { id: "rat", name: "Rat", monster: "rat", cr: 0 },
+        ],
+      },
+    },
+    {
+      target: "classes/druid",
+      op: "append",
+      path: "features.2.actions",
+      value: {
+        id: "shape",
+        name: "Test Shape",
+        economy: "bonus_action",
+        uses: "wild-shape",
+        temp_hp: { per_class_level: 1 },
+        shape: { choice: "forms" },
+      },
+    },
+    {
+      target: "features/distant-spell",
+      op: "set",
+      path: "grants.cast_options",
+      value: [
+        {
+          id: "distant",
+          name: "Distant Spell",
+          cost: 1,
+          resource_class: "sorcerer",
+          resource: "sorcery-points",
+          effect: "distant",
+        },
+      ],
+    },
+    {
+      target: "features/quickened-spell",
+      op: "set",
+      path: "grants.cast_options",
+      value: [
+        {
+          id: "quickened",
+          name: "Quickened Spell",
+          cost: 2,
+          resource_class: "sorcerer",
+          resource: "sorcery-points",
+          effect: "quickened",
+        },
+      ],
+    },
+  ],
+};
+const cb: Catalog = createCatalog([srdPack, t10b], {});
+
+describe("H3: known forms, their CR/Fly limits, the form's attacks and AC (Wild Shape)", () => {
+  const druid = (level: number, moon = false) => {
+    let b = autocomplete(classBuild("druid"), cb);
+    b = autocomplete(builder.levelUp(b, cb, "druid", null).build, cb);
+    b = builder.setChoice(b, cb, "class:druid:2#forms", ["wolf", "rat"]).build;
+    for (let l = 3; l <= level; l++) {
+      b = builder.levelUp(b, cb, "druid", null).build;
+      if (l === 3)
+        b = builder.setChoice(b, cb, "class:druid:3#subclass", [
+          moon ? "test-moon" : "circle-of-the-land",
+        ]).build;
+      b = autocomplete(b, cb);
+    }
+    return b;
+  };
+  const opt = (b: CharacterBuild, id: string) => {
+    const res = resolve(b, cb);
+    const c = res.choices.find((x) => x.key === "class:druid:2#forms");
+    return c ? res.options(c).find((o) => o.id === id) : undefined;
+  };
+  it("Druid 2: CR 1/4 and no Fly Speed; a form above is unavailable", () => {
+    const b = druid(2);
+    expect(opt(b, "wolf")?.unavailable).toBeNull();
+    expect(opt(b, "brown-bear")?.unavailable).toMatch(/Challenge Rating 1 is above 0.25/);
+    expect(opt(b, "giant-eagle")?.unavailable).toMatch(/above|Fly/);
+  });
+  it("takes a known form: one use, THP, its attacks and AC; unknown/none refused; end_shape and a Long Rest end it", () => {
+    const b = druid(2);
+    let s = createState(b, cb);
+    expect(() => applyAction(b, s, cb, { type: "use_feature", key: "druid:shape" })).toThrow(
+      /which form/,
+    );
+    expect(() =>
+      applyAction(b, s, cb, { type: "use_feature", key: "druid:shape", form: "brown-bear" }),
+    ).toThrow(/isn't one of your known forms/);
+    s = applyAction(b, s, cb, { type: "set_concentration", spell: "Shillelagh" }).state;
+    s = applyAction(b, s, cb, { type: "use_feature", key: "druid:shape", form: "wolf" }).state;
+    expect(s.shape).toBe("wolf");
+    expect(s.uses_spent["druid:wild-shape"]).toBe(1);
+    expect(s.concentration).toBe("Shillelagh"); // taking the form doesn't end Concentration
+    const sheet = computePlaySheet(b, s, cb);
+    expect(sheet.shape).toMatchObject({ name: "Wolf", armor_class: 12 });
+    expect(sheet.armor_class.total).toBe(12);
+    const bite = sheet.attacks.find((a) => a.name === "Bite (Wolf)");
+    expect(bite).toMatchObject({ attack_bonus: 4, damage: "1d6+2" });
+    // A druid spell can't be cast in the form (no Circle exception here).
+    expect(sheet.spells.find((x) => x.level > 0)?.blocked).not.toBeNull();
+    const roll = rollByHand(
+      combatantFromCharacter(b, s, cb),
+      { type: "attack", attack: "Bite (Wolf)" },
+      { catalog: cb, character: { build: b, state: s }, rng: fixedRng(15) },
+    );
+    expect(roll.rolls.attacks?.[0]?.total).toBe(19);
+    const out = applyAction(b, s, cb, { type: "end_shape" }).state;
+    expect(out.shape).toBeUndefined();
+    expect(() => applyAction(b, out, cb, { type: "end_shape" })).toThrow(/Not in a form/);
+    expect(applyAction(b, s, cb, { type: "long_rest" }).state.shape).toBeUndefined();
+  });
+  it("Circle Forms (Moon 3): CR raised to level ÷ 3, AC at least 13 + WIS, its spells castable in a form", () => {
+    const b = druid(3, true);
+    expect(opt(b, "brown-bear")?.unavailable).toBeNull();
+    expect(opt(b, "giant-eagle")?.unavailable).toMatch(/Fly/);
+    const swapped = builder.setChoice(b, cb, "class:druid:2#forms", ["wolf", "brown-bear"]).build;
+    let s = createState(swapped, cb);
+    s = applyAction(swapped, s, cb, {
+      type: "use_feature",
+      key: "druid:shape",
+      form: "brown-bear",
+    }).state;
+    const sheet = computePlaySheet(swapped, s, cb);
+    const wis = sheet.modifiers.wis;
+    expect(sheet.shape?.armor_class).toBe(Math.max(11, 13 + wis));
+    expect(sheet.spells.find((x) => x.id === "cure-wounds")?.blocked).toBeNull();
+    expect(sheet.spells.find((x) => x.level > 0 && x.id !== "cure-wounds")?.blocked).not.toBeNull();
+  });
+});
+
+describe("H4: a companion's derived stat block and its strike (Primal Companion)", () => {
+  const ranger = (level: number) => {
+    let b = levelUpIn(autocomplete(classBuild("ranger"), cb), "ranger", 2, null, cb);
+    b = builder.setChoice(b, cb, "class:ranger:3#subclass", ["test-beasts"]).build;
+    return levelUpIn(autocomplete(b, cb), "ranger", level - 3, null, cb);
+  };
+  it("HP 5 + 5 × Ranger level, AC 13 + WIS, the strike with the spell attack; the command a Bonus Action, two strikes at 11", () => {
+    const b = ranger(3);
+    const sheet = computePlaySheet(b, createState(b, cb), cb);
+    const wis = sheet.modifiers.wis;
+    expect(sheet.companions).toEqual([
+      expect.objectContaining({
+        name: "Test Beast",
+        hp: 20,
+        armor_class: 13 + wis,
+        attack: "Test Strike",
+      }),
+    ]);
+    const strike = sheet.attacks.find((a) => a.name === "Test Strike");
+    const spellAttack = sheet.spellcasting.find((l) => l.class_id === "ranger")?.attack_bonus;
+    expect(strike).toMatchObject({ attack_bonus: spellAttack, damage: `1d8+${2 + wis}` });
+    const cmd = sheet.actions.filter((a) => a.key === "ranger:command");
+    expect(cmd).toHaveLength(1);
+    expect(cmd[0]).toMatchObject({
+      economy: "bonus_action",
+      attacks: { attack: "Test Strike", count: 1 },
+    });
+    const b11 = levelUpIn(b, "ranger", 8, null, cb);
+    const s11 = computePlaySheet(b11, createState(b11, cb), cb);
+    expect(s11.actions.filter((a) => a.key === "ranger:command")).toEqual([
+      expect.objectContaining({ attacks: { attack: "Test Strike", count: 2 } }),
+    ]);
+    expect(s11.companions[0]?.hp).toBe(60);
+  });
+});
+
+describe("R12-03: Metamagic paid with the cast (Sorcery Points)", () => {
+  const sorc = () => {
+    let b = classBuild("sorcerer");
+    b = builder.setChoice(b, cb, "class:sorcerer#cantrips", [
+      "fire-bolt",
+      "shocking-grasp",
+      "light",
+      "mage-hand",
+    ]).build;
+    b = builder.setChoice(b, cb, "class:sorcerer#prepared", ["shield", "magic-missile"]).build;
+    b = autocomplete(b, cb);
+    b = autocomplete(builder.levelUp(b, cb, "sorcerer", null).build, cb);
+    const res = resolve(b, cb);
+    const mm = res.choices.find((c) => c.key === "class:sorcerer:2#metamagic");
+    return builder.setChoice(b, cb, mm?.key ?? "", ["distant-spell", "quickened-spell"]).build;
+  };
+  const cast = (b: CharacterBuild, s: CharacterState, spell: string, options: string[]) => {
+    const r = rollByHand(
+      combatantFromCharacter(b, s, cb),
+      { type: "cast", spell, options } as RollWhat,
+      { catalog: cb, character: { build: b, state: s }, rng: fixedRng(10) },
+    );
+    let state = s;
+    for (const c of r.costs)
+      if (c.type === "play") state = applyAction(b, state, cb, c.action).state;
+    return { r, state };
+  };
+  it("Distant 1 point: range doubled (Touch → 30 feet); Quickened 2 points on an Action spell; one per spell; not enough points → refused", () => {
+    const b = sorc();
+    const s = createState(b, cb);
+    const keys = computePlaySheet(b, s, cb)
+      .cast_options.map((o) => o.key)
+      .sort();
+    expect(keys).toHaveLength(2);
+    const distant = keys.find((k) => k.includes("distant")) as string;
+    const quick = keys.find((k) => k.includes("quickened")) as string;
+    const d = cast(b, s, "fire-bolt", [distant]);
+    expect(d.state.uses_spent["sorcerer:sorcery-points"]).toBe(1);
+    expect(d.r.messages.map((m) => m.text).join(" ")).toMatch(/range 240 feet/);
+    expect(
+      cast(b, s, "shocking-grasp", [distant])
+        .r.messages.map((m) => m.text)
+        .join(" "),
+    ).toMatch(/range 30 feet/);
+    const q = cast(b, s, "fire-bolt", [quick]);
+    expect(q.state.uses_spent["sorcerer:sorcery-points"]).toBe(2);
+    expect(() => cast(b, s, "fire-bolt", [distant, quick])).toThrow(/Only one of these per spell/);
+    expect(() => cast(b, s, "shield", [quick])).toThrow(/casting time of an action/);
+    const low = { ...s, uses_spent: { "sorcerer:sorcery-points": 1 } };
+    expect(() => cast(b, low, "fire-bolt", [quick])).toThrow(/left/);
   });
 });

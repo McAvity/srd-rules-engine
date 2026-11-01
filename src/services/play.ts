@@ -284,6 +284,7 @@ export function computePlaySheet(
     conditions: new Set(conditions.keys()),
     exhaustion: state.exhaustion,
     active: new Set(state.active),
+    shape: state.shape ?? null,
   };
   const sheet = computeSheet(played, catalog, res, context);
   const max = sheet.max_hp?.total ?? 0;
@@ -405,6 +406,11 @@ export function computePlaySheet(
     : blockingToggle
       ? optionReason(message("rule.cant_cast_spells_right", { name }))
       : null;
+  // kenli F-002 T10 (H3): in a form only the spells of a source that allows it (Circle of the Moon
+  // Spells) can be cast; taking the form doesn't end Concentration.
+  const shapeCasting = new Set(res.sources.filter((s) => s.grants.shape_casting).map((s) => s.key));
+  const inShape = (line: (typeof sheet.spells)[number]) =>
+    sheet.shape !== null && !line.grants.some((g) => shapeCasting.has(g.key));
   const spells = sheet.spells.map((line) => ({
     ...line,
     ...spellSlots(line.level, play),
@@ -425,7 +431,9 @@ export function computePlaySheet(
         };
       }),
     ritual: line.level > 0 && (lookup(catalog.spells, line.id)?.ritual ?? false),
-    blocked,
+    blocked:
+      blocked ??
+      (inShape(line) ? optionReason(message("refusal.cant_cast_in_shape", { name })) : null),
   }));
   return { ...sheet, spells, play };
 }
@@ -1016,6 +1024,12 @@ export function applyAction(
   };
 
   switch (action.type) {
+    case "end_shape": {
+      if (!s.shape) fail(message("refusal.not_in_shape"));
+      notes.push(message("play.shape_ended", { form: sheet.shape?.name ?? s.shape ?? "" }));
+      delete s.shape;
+      break;
+    }
     case "cast_trigger": {
       const trigger =
         sheet.cast_triggers.find((t) => t.key === action.key) ??
@@ -1182,6 +1196,7 @@ export function applyAction(
       s.uses_spent = {};
       // Tracked pools end (Arcane Ward): not refilled, created again by their trigger.
       delete s.pools;
+      delete s.shape;
       if (s.exhaustion > 0) {
         s.exhaustion -= 1;
         notes.push(message("rest.exhaustion", { level: s.exhaustion }));
@@ -1307,6 +1322,37 @@ export function applyAction(
             }),
           );
         else s.uses_spent[use.key] = use.spent + amount;
+      }
+      // A form (Wild Shape): one of the known forms, legal now (CR, Fly Speed).
+      if (feature.shape) {
+        if (!action.form) fail(message("refusal.shape_needs_form", { feature: feature.name }));
+        const res = resolve(playBuild(build, state, catalog), catalog);
+        const choice = res.choices.find(
+          (c) =>
+            c.definition.id === feature.shape?.choice &&
+            c.source.class_id === feature.shape.class_id,
+        );
+        const picks = choice ? res.selected(choice) : [];
+        const formName = (id: string) => lookup(catalog.monsters, id)?.name ?? id;
+        if (!choice || !picks.includes(action.form as string))
+          fail(
+            message("refusal.shape_not_known", {
+              feature: feature.name,
+              form: formName(action.form as string),
+            }),
+          );
+        const option = choice && res.options(choice).find((o) => o.id === action.form);
+        if (option?.unavailable_message)
+          fail(
+            message("refusal.shape_not_allowed", {
+              feature: feature.name,
+              form: option.name,
+              why: option.unavailable_message,
+            }),
+          );
+        const monster = choice?.definition.options.find((o) => o.id === action.form)?.monster;
+        s.shape = monster ?? (action.form as string);
+        notes.push(message("play.shape_taken", { feature: feature.name, form: formName(s.shape) }));
       }
       // Temporary Hit Points it gives (Wild Shape): they don't stack, the higher ones stay.
       if (feature.temp_hp && !action.manual) {

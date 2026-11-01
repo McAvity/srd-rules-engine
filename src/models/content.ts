@@ -473,6 +473,12 @@ export const FeatureActionSchema = z.strictObject({
    */
   temp_hp: z.strictObject({ per_class_level: z.int().min(1) }).optional(),
   /**
+   * Taking a form (Wild Shape): `use_feature` takes the `form`, one of the picks of the class's
+   * choice `choice` (known forms), within its CR/Fly limits now; the play state keeps it until
+   * `end_shape` or a Long Rest. Optional.
+   */
+  shape: z.strictObject({ choice: z.string() }).optional(),
+  /**
    * Used when one of your attack rolls misses: it hits instead (a decision after the roll, the
    * roll kept); then not again until the start of your next turn (Peerless Aim). Optional.
    */
@@ -685,6 +691,59 @@ export const CastTriggerSchema = z.strictObject({
 export type CastTrigger = z.infer<typeof CastTriggerSchema>;
 
 /**
+ * kenli F-002 T10 (H4): an attack line with its own numbers, not a weapon's: a summoned creature's
+ * strike made with your spell attack (`to_hit: "spell"`: the source class's spell attack bonus, or a
+ * number), damage dice + a flat bonus + an ability modifier (Beast's Strike: 1d8 + 2 + WIS).
+ */
+export const FixedAttackSchema = z.strictObject({
+  name: z.string(),
+  kind: z.enum(["melee", "ranged"]).default("melee"),
+  reach: z.int().min(0).default(5),
+  to_hit: z.union([z.literal("spell"), z.int()]),
+  damage: z.strictObject({
+    dice: z.string(),
+    bonus: z.int().default(0),
+    ability: z.enum(ABILITIES).optional(),
+    type: z.string(),
+  }),
+  notes: z.array(z.string()).default([]),
+});
+export type FixedAttack = z.infer<typeof FixedAttackSchema>;
+
+/**
+ * kenli F-002 T10 (H4): a creature that comes with a feature (the Primal Companion), its numbers
+ * derived for the character: Hit Points `base` + `per_class_level` × the class level, AC `base` +
+ * an ability modifier, its `attack` (an `attack_lines` name). What it does in the world is the table's.
+ */
+export const CompanionSchema = z.strictObject({
+  name: z.string(),
+  size: z.string(),
+  hp: z.strictObject({ base: z.int(), per_class_level: z.int() }),
+  ac: z.strictObject({ base: z.int(), ability: z.enum(ABILITIES).optional() }),
+  speed: z.string(),
+  attack: z.string(),
+  notes: z.array(z.string()).default([]),
+});
+export type Companion = z.infer<typeof CompanionSchema>;
+
+/**
+ * kenli F-002 T10 (R12-03): something added to a spell when it's cast, paid from a class resource
+ * (Metamagic: `cost` Sorcery Points of `resource_class:resource`). One per spell unless
+ * `combinable` (Empowered Spell); `effect` the change the engine states with the cast (`distant`:
+ * range doubled, Touch → 30 feet; `quickened`: a Bonus Action). Optional, absent from older content.
+ */
+export const CastOptionSchema = z.strictObject({
+  id: z.string(),
+  name: z.string(),
+  cost: z.int().min(1),
+  resource_class: z.string(),
+  resource: z.string(),
+  combinable: z.boolean().default(false),
+  effect: z.enum(["distant", "quickened"]).nullable().default(null),
+});
+export type CastOption = z.infer<typeof CastOptionSchema>;
+
+/**
  * A d20 roll of `min - 1` or lower counts as `min` on some ability checks (Reliable Talent-like):
  * checks with one of `skills` (any skill when absent), made with one of `abilities` (any when
  * absent), only proficient ones with `proficient`. Each d20 is raised before one is kept.
@@ -725,6 +784,14 @@ export interface ChoiceOption {
    * (Resilient: "an ability in which you lack saving throw proficiency"). Optional.
    */
   requires_lacking_saves?: boolean;
+  /**
+   * kenli F-002 T10 (H3): a creature's stat block this option is (a Wild Shape form: the
+   * `monsters` id), its Challenge Rating and whether it has a Fly Speed: the choice's `max_cr` /
+   * `fly_from` make it unavailable above the limit. Optional.
+   */
+  monster?: string;
+  cr?: number;
+  fly?: boolean;
 }
 
 export interface ChoiceDef {
@@ -767,7 +834,14 @@ export interface ChoiceDef {
    * A list that grows with the class and can be changed freely (SRD: "after a Long Rest"):
    * `count` / `max_spell_level` by the source class's current level (20 values each).
    */
-  scaling: { count: number[] | null; max_spell_level: number[] | null } | null;
+  scaling: {
+    count: number[] | null;
+    max_spell_level: number[] | null;
+    /** The highest option `cr` by class level (Wild Shape forms); Circle Forms can raise it. */
+    max_cr?: number[];
+  } | null;
+  /** Options with `fly` are unavailable below this class level (Wild Shape: 8). Optional. */
+  fly_from?: number;
   /**
    * The picks can be replaced one at a time later (SRD: "whenever you gain a level, you can
    * replace one…"): `class_level` at each later level in the source's class, `any_level` at every
@@ -848,6 +922,15 @@ export interface Grants {
   /** Spells cast without a slot, spending a use (Magic Initiate). Optional. */
   free_casts?: FreeCast[];
   cast_triggers?: CastTrigger[];
+  attack_lines?: FixedAttack[];
+  companions?: Companion[];
+  cast_options?: CastOption[];
+  /** Circle Forms: the forms' maximum CR is at least the class level ÷ this (round down). */
+  shape_cr_divisor?: number;
+  /** Circle Forms: while in a form, AC is at least `base` + the ability's modifier. */
+  shape_ac?: { base: number; ability: Ability };
+  /** This source's spells can be cast while in a form (Circle of the Moon Spells). */
+  shape_casting?: boolean;
   /** d20 floors on ability checks (Reliable Talent-like features in packs). Optional. */
   d20_floors?: D20Floor[];
   /** Extra attack lines made with a carried weapon (Polearm Master's Pole Strike). Optional. */
@@ -879,6 +962,9 @@ export const ChoiceOptionSchema: z.ZodType<ChoiceOption, unknown> = z
       description: z.string().default(""),
       grants: GrantsSchema.prefault({}),
       requires_lacking_saves: z.boolean().optional(),
+      monster: z.string().optional(),
+      cr: z.number().min(0).optional(),
+      fly: z.boolean().optional(),
     }),
   )
   .meta({ id: "ChoiceOption" });
@@ -920,6 +1006,7 @@ export const ChoiceDefSchema: z.ZodType<ChoiceDef, unknown> = z
           .strictObject({
             count: z.array(z.int().min(0)).length(20).nullable().default(null),
             max_spell_level: z.array(z.int().min(0).max(9)).length(20).nullable().default(null),
+            max_cr: z.array(z.number().min(0)).length(20).optional(),
           })
           .nullable()
           .default(null),
@@ -927,6 +1014,7 @@ export const ChoiceDefSchema: z.ZodType<ChoiceDef, unknown> = z
         same_level: z.boolean().default(false),
         rest_change: z.enum(["short", "long"]).nullable().default(null),
         weapon_kind: z.enum(["melee", "ranged"]).nullable().default(null),
+        fly_from: z.int().min(1).max(20).optional(),
       })
       .refine((c) => c.swap === null || c.tag !== null, {
         error: (issue) =>
@@ -983,6 +1071,12 @@ export const GrantsSchema: z.ZodType<Grants, unknown> = z
       toggles: z.array(ToggleSchema).default([]),
       free_casts: z.array(FreeCastSchema).optional(),
       cast_triggers: z.array(CastTriggerSchema).optional(),
+      attack_lines: z.array(FixedAttackSchema).optional(),
+      companions: z.array(CompanionSchema).optional(),
+      cast_options: z.array(CastOptionSchema).optional(),
+      shape_cr_divisor: z.int().min(1).optional(),
+      shape_ac: z.strictObject({ base: z.int(), ability: z.enum(ABILITIES) }).optional(),
+      shape_casting: z.boolean().optional(),
       d20_floors: z.array(D20FloorSchema).optional(),
       weapon_strikes: z.array(WeaponStrikeSchema).optional(),
       items: z.array(ItemGrantSchema).default([]),

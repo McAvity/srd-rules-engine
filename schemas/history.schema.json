@@ -2217,6 +2217,9 @@
                       "maximum": 9007199254740991
                     }
                   },
+                  "shape": {
+                    "type": "string"
+                  },
                   "choices": {
                     "default": {},
                     "type": "object",
@@ -5293,11 +5296,26 @@
             },
             "force": {
               "type": "boolean"
+            },
+            "form": {
+              "type": "string"
             }
           },
           "required": [
             "type",
             "key"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "end_shape"
+            }
+          },
+          "required": [
+            "type"
           ]
         },
         {
@@ -5975,6 +5993,12 @@
                   "key",
                   "mode"
                 ]
+              }
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
               }
             }
           },

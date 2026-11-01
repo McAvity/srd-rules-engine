@@ -1477,6 +1477,18 @@
                 ],
                 "additionalProperties": false
               },
+              "shape": {
+                "type": "object",
+                "properties": {
+                  "choice": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "choice"
+                ],
+                "additionalProperties": false
+              },
               "hit_on_miss": {
                 "type": "boolean"
               },
@@ -1964,6 +1976,257 @@
             "additionalProperties": false
           }
         },
+        "attack_lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "default": "melee",
+                "type": "string",
+                "enum": [
+                  "melee",
+                  "ranged"
+                ]
+              },
+              "reach": {
+                "default": 5,
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "to_hit": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "spell"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                ]
+              },
+              "damage": {
+                "type": "object",
+                "properties": {
+                  "dice": {
+                    "type": "string"
+                  },
+                  "bonus": {
+                    "default": 0,
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "ability": {
+                    "type": "string",
+                    "enum": [
+                      "str",
+                      "dex",
+                      "con",
+                      "int",
+                      "wis",
+                      "cha"
+                    ]
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "dice",
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              "notes": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "to_hit",
+              "damage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "companions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "size": {
+                "type": "string"
+              },
+              "hp": {
+                "type": "object",
+                "properties": {
+                  "base": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "per_class_level": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "base",
+                  "per_class_level"
+                ],
+                "additionalProperties": false
+              },
+              "ac": {
+                "type": "object",
+                "properties": {
+                  "base": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "ability": {
+                    "type": "string",
+                    "enum": [
+                      "str",
+                      "dex",
+                      "con",
+                      "int",
+                      "wis",
+                      "cha"
+                    ]
+                  }
+                },
+                "required": [
+                  "base"
+                ],
+                "additionalProperties": false
+              },
+              "speed": {
+                "type": "string"
+              },
+              "attack": {
+                "type": "string"
+              },
+              "notes": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "size",
+              "hp",
+              "ac",
+              "speed",
+              "attack"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "cast_options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "cost": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "resource_class": {
+                "type": "string"
+              },
+              "resource": {
+                "type": "string"
+              },
+              "combinable": {
+                "default": false,
+                "type": "boolean"
+              },
+              "effect": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "distant",
+                      "quickened"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "cost",
+              "resource_class",
+              "resource"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "shape_cr_divisor": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "shape_ac": {
+          "type": "object",
+          "properties": {
+            "base": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "ability": {
+              "type": "string",
+              "enum": [
+                "str",
+                "dex",
+                "con",
+                "int",
+                "wis",
+                "cha"
+              ]
+            }
+          },
+          "required": [
+            "base",
+            "ability"
+          ],
+          "additionalProperties": false
+        },
+        "shape_casting": {
+          "type": "boolean"
+        },
         "d20_floors": {
           "type": "array",
           "items": {
@@ -2392,6 +2655,15 @@
                       "type": "null"
                     }
                   ]
+                },
+                "max_cr": {
+                  "minItems": 20,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0
+                  }
                 }
               },
               "additionalProperties": false
@@ -2449,6 +2721,11 @@
               "type": "null"
             }
           ]
+        },
+        "fly_from": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
         }
       },
       "required": [
@@ -2476,6 +2753,16 @@
           "$ref": "#/$defs/Grants"
         },
         "requires_lacking_saves": {
+          "type": "boolean"
+        },
+        "monster": {
+          "type": "string"
+        },
+        "cr": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fly": {
           "type": "boolean"
         }
       },

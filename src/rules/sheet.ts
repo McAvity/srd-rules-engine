@@ -187,10 +187,27 @@ export interface FeatureActionLine {
   readonly restores_per_slot_level?: number;
   /** Temporary Hit Points it gives when used, at this class level (Wild Shape). */
   readonly temp_hp?: number;
+  /** It takes one of the known forms (`use_feature`'s `form`): the class's choice id. */
+  readonly shape?: { readonly choice: string; readonly class_id: string | null };
   /** Paid with a spell slot instead of its uses, or always (`FeatureActionDef.slot_payment`). */
   readonly slot_payment?: "instead" | "required";
   /** The die the user rolls when using it (`1d8`), when it has one; `null`: no column value. */
   readonly roll_die?: string | null;
+}
+
+/** The last line per key, in the place of the first (a later definition replaces an earlier one). */
+function lastByKey<T extends { readonly key: string }>(lines: readonly T[]): T[] {
+  const last = new Map(lines.map((l) => [l.key, l]));
+  return lines
+    .filter((l, i) => lines.findIndex((x) => x.key === l.key) === i)
+    .map((l) => last.get(l.key) as T);
+}
+
+/** A Challenge Rating as a number (`1/4` → 0.25). */
+export function crValue(cr: string | number): number {
+  if (typeof cr === "number") return cr;
+  const [n, d] = String(cr).split("/").map(Number);
+  return d ? (n ?? 0) / d : (n ?? 0);
 }
 
 /** A cast trigger on the sheet (`Grants.cast_triggers`), its keys scoped like resources. */
@@ -310,6 +327,45 @@ export interface PlayContext {
   /** Active condition ids, including implied ones (Unconscious → Prone, Incapacitated). */
   readonly conditions: ReadonlySet<string>;
   readonly exhaustion: number;
+  /** kenli F-002 T10 (H3): the form the character is in (Wild Shape), a `monsters` id. */
+  readonly shape?: string | null;
+}
+
+/** kenli F-002 T10 (H3): the form a character is in, its numbers for the table. */
+export interface ShapeLine {
+  readonly monster: string;
+  readonly name: string;
+  readonly cr: number;
+  /** The form's AC (Circle Forms: at least 13 + WIS). */
+  readonly armor_class: number;
+  readonly speed: string;
+  /** The form's own Hit Points, for reference: you keep yours (and the THP the use gave). */
+  readonly stat_block_hp: number;
+  /** Its attacks, on the sheet's attack lines with this suffix (`Bite (Wolf)`). */
+  readonly attacks: readonly string[];
+}
+
+/** kenli F-002 T10 (H4): a companion's numbers derived for the character (`Grants.companions`). */
+export interface CompanionLine {
+  readonly name: string;
+  readonly size: string;
+  readonly hp: number;
+  readonly armor_class: number;
+  readonly speed: string;
+  /** Its strike, an attack line of the sheet (rolled like the character's). */
+  readonly attack: string;
+  readonly notes: readonly string[];
+}
+
+/** kenli F-002 T10 (R12-03): a cast option on the sheet (Metamagic), its resource key resolved. */
+export interface CastOptionLine {
+  readonly key: string;
+  readonly name: string;
+  readonly cost: number;
+  /** The limited use it spends (`sorcerer:sorcery-points`). */
+  readonly uses: string;
+  readonly combinable: boolean;
+  readonly effect: "distant" | "quickened" | null;
 }
 
 export interface DerivedSheet {
@@ -382,6 +438,10 @@ export interface DerivedSheet {
    * the caster picks it with that cast (a roll's `triggers`).
    */
   readonly cast_triggers: readonly CastTriggerLine[];
+  /** kenli F-002 T10: the form you're in (null outside one), companions, cast options. */
+  readonly shape: ShapeLine | null;
+  readonly companions: readonly CompanionLine[];
+  readonly cast_options: readonly CastOptionLine[];
   /** d20 floors on ability checks from features (besides the named rule Reliable Talent). */
   readonly d20_floors: readonly D20FloorLine[];
   /**
@@ -897,6 +957,117 @@ export function computeSheet(
     }
   }
 
+  // kenli F-002 T10 (H4): fixed attack lines (a companion's strike with your spell attack).
+  const spellAttackOf = (src: ActiveSource): number =>
+    magic.spellcasting.find((l) => l.class_id === classScope(src) && l.attack_bonus !== null)
+      ?.attack_bonus ?? pb;
+  for (const src of res.sources) {
+    for (const f of src.grants.attack_lines ?? []) {
+      const damage: DamagePart[] = [
+        {
+          dice: f.damage.dice,
+          bonus: f.damage.bonus + (f.damage.ability ? mod[f.damage.ability] : 0),
+          type: f.damage.type,
+        },
+      ];
+      attacks.push({
+        name: f.name,
+        kind: f.kind,
+        ability: null,
+        weapon: false,
+        properties: [],
+        riders: [],
+        attack_bonus: f.to_hit === "spell" ? spellAttackOf(src) : f.to_hit,
+        damage: formatDamage(damage),
+        damage_type: f.damage.type,
+        damage_parts: damage,
+        two_handed_damage_parts: null,
+        light_extra_damage_parts: null,
+        cleave_damage_parts: null,
+        mastery: null,
+        notes: f.notes,
+        reach: f.kind === "melee" ? f.reach : null,
+        range: null,
+      });
+    }
+  }
+  const companions: CompanionLine[] = res.sources.flatMap((src) => {
+    const lvl = src.class_id ? (classLevels.get(src.class_id) ?? 0) : level;
+    return (src.grants.companions ?? []).map((c) => ({
+      name: c.name,
+      size: c.size,
+      hp: c.hp.base + c.hp.per_class_level * lvl,
+      armor_class: c.ac.base + (c.ac.ability ? mod[c.ac.ability] : 0),
+      speed: c.speed,
+      attack: c.attack,
+      notes: c.notes,
+    }));
+  });
+  const cast_options: CastOptionLine[] = res.sources.flatMap((src) =>
+    (src.grants.cast_options ?? []).map((o) => ({
+      key: `${usesScope(src)}:${o.id}`,
+      name: o.name,
+      cost: o.cost,
+      uses: `${o.resource_class}:${o.resource}`,
+      combinable: o.combinable,
+      effect: o.effect,
+    })),
+  );
+  // kenli F-002 T10 (H3): in a form, its attacks are lines of the sheet and its AC is yours.
+  let shape: ShapeLine | null = null;
+  let acParts = ac.parts;
+  const beast = play?.shape ? lookup(catalog.monsters, play.shape) : undefined;
+  if (beast) {
+    const floor = res.sources.flatMap((s) => (s.grants.shape_ac ? [s.grants.shape_ac] : []));
+    const beastAc = beast.armor_class;
+    const acNow = Math.max(beastAc, ...floor.map((f) => f.base + mod[f.ability]));
+    const names: string[] = [];
+    for (const action of [...beast.actions, ...beast.bonus_actions]) {
+      const a = action.attack;
+      if (!a?.damage.length) continue;
+      const damage: DamagePart[] = a.damage.map((d) =>
+        d.dice === null
+          ? { dice: null, bonus: d.average, type: d.type }
+          : { dice: d.dice, bonus: d.bonus, type: d.type },
+      );
+      const name = `${action.name} (${beast.name})`;
+      names.push(name);
+      attacks.push({
+        name,
+        kind: a.kind === "ranged" ? "ranged" : "melee",
+        ability: null,
+        weapon: false,
+        properties: [],
+        riders: [],
+        attack_bonus: a.bonus,
+        damage: formatDamage(damage),
+        damage_type: damage[0]?.type ?? "",
+        damage_parts: damage,
+        two_handed_damage_parts: null,
+        light_extra_damage_parts: null,
+        cleave_damage_parts: null,
+        mastery: null,
+        notes: [`${beast.name} form`],
+        reach: a.kind === "ranged" ? null : (a.reach ?? 5),
+        range: parseRange(a.range),
+      });
+    }
+    const speed = Object.entries(beast.speed)
+      .filter(([, v]) => typeof v === "number")
+      .map(([k, v]) => `${k} ${v} ft.`)
+      .join(", ");
+    shape = {
+      monster: beast.id,
+      name: beast.name,
+      cr: crValue(beast.cr),
+      armor_class: acNow,
+      speed,
+      stat_block_hp: typeof beast.hit_points === "number" ? beast.hit_points : 0,
+      attacks: names,
+    };
+    acParts = [{ source: `${beast.name} form`, value: acNow }];
+  }
+
   let size: Size | null = null;
   for (const src of res.sources) size = src.grants.size ?? size;
 
@@ -913,7 +1084,7 @@ export function computeSheet(
     proficiency_bonus: pb,
     max_hp: maxHp,
     hit_dice: hitDice,
-    armor_class: stat(ac.parts),
+    armor_class: stat(acParts),
     armor_worn: armor ? armor.name : null,
     initiative,
     speed: stat(speedParts),
@@ -950,101 +1121,106 @@ export function computeSheet(
     )
       ? heldWeapons.filter((x) => weaponQualifies(x.weapon, REACTIVE_STRIKE)).map((x) => x.name)
       : [],
-    actions: res.sources.flatMap((src) =>
-      src.grants.actions.map((a): FeatureActionLine => {
-        const scope = usesScope(src);
-        const classLevel = src.class_id ? (classLevels.get(src.class_id) ?? 0) : level;
-        const column = (name: string) =>
-          lookup(catalog.classes, src.class_id ?? "")?.progression[name]?.[classLevel - 1];
-        /** Dice at this class level: the last `scaling` step reached. */
-        const scaled = (dice: string, steps: readonly { level: number; dice: string }[]) =>
-          steps.filter((x) => x.level <= classLevel).at(-1)?.dice ?? dice;
-        const heal = a.heal && {
-          dice: a.heal.dice === null ? null : scaled(a.heal.dice, a.heal.scaling),
-          bonus:
-            a.heal.bonus === "class_level"
-              ? classLevel
-              : typeof a.heal.bonus === "number"
-                ? a.heal.bonus
-                : mod[a.heal.bonus],
-          pooled: a.heal.pooled,
-        };
-        const die = a.inspiration
-          ? /(\d+)$/.exec(String(column(a.inspiration.progression)))?.[1]
-          : null;
-        const rollDie = (roll: NonNullable<typeof a.roll>): string | null => {
-          if ("dice" in roll) return roll.dice;
-          const sides = /(\d+)$/.exec(String(column(roll.progression)))?.[1];
-          return sides ? `1d${sides}` : null;
-        };
-        const qualifying = a.after_attack_with;
-        return {
-          key: `${scope}:${a.id}`,
-          name: a.name,
-          economy: a.economy,
-          uses: a.uses === null ? null : `${scope}:${a.uses}`,
-          cost: a.cost,
-          pool: a.pool,
-          target: a.target,
-          heal,
-          extra_action: a.extra_action,
-          also: a.also,
-          attacks: a.attacks,
-          after_hit: a.after_hit,
-          ...(a.after_attack_action ? { after_attack_action: true } : {}),
-          ...(qualifying
-            ? {
-                after_attack_with: carriedWeapons
-                  .filter((x) => weaponQualifies(x.weapon, qualifying))
-                  .map((x) => x.name),
-              }
-            : {}),
-          once_per_turn: a.once_per_turn,
-          ...(a.alternative ? { alternative: { label: a.alternative.label } } : {}),
-          ...(a.counts_as ? { counts_as: `${scope}:${a.counts_as}` } : {}),
-          ...(a.hit_on_miss ? { hit_on_miss: true } : {}),
-          save: a.save && {
-            ability: a.save.ability,
-            dc:
-              a.save.dc_ability === "spell"
-                ? spellDc(src.class_id)
-                : 8 + mod[a.save.dc_ability] + pb,
-            conditions: a.save.conditions,
-            rounds: a.save.rounds,
-            ends_on: a.save.ends_on,
-            damage: a.save.damage && {
-              dice: scaled(a.save.damage.dice, a.save.damage.scaling),
-              bonus:
-                typeof a.save.damage.bonus === "number"
-                  ? a.save.damage.bonus
-                  : mod[a.save.damage.bonus],
-              types: a.save.damage.types,
-              half: a.save.damage.half,
-            },
-            on_success: a.save.on_success,
-          },
-          range: a.range,
-          many: a.many,
-          creature_types: a.creature_types,
-          removes: a.removes,
-          reduces_attack_damage: a.reduces_attack_damage && {
-            dice: a.reduces_attack_damage.dice,
+    // A later action with the same key replaces an earlier one (kenli F-002 T10: Bestial Fury's
+    // command with two strikes at Ranger 11), as riders do.
+    actions: lastByKey(
+      res.sources.flatMap((src) =>
+        src.grants.actions.map((a): FeatureActionLine => {
+          const scope = usesScope(src);
+          const classLevel = src.class_id ? (classLevels.get(src.class_id) ?? 0) : level;
+          const column = (name: string) =>
+            lookup(catalog.classes, src.class_id ?? "")?.progression[name]?.[classLevel - 1];
+          /** Dice at this class level: the last `scaling` step reached. */
+          const scaled = (dice: string, steps: readonly { level: number; dice: string }[]) =>
+            steps.filter((x) => x.level <= classLevel).at(-1)?.dice ?? dice;
+          const heal = a.heal && {
+            dice: a.heal.dice === null ? null : scaled(a.heal.dice, a.heal.scaling),
             bonus:
-              a.reduces_attack_damage.abilities.reduce((t, ab) => t + mod[ab], 0) +
-              (a.reduces_attack_damage.class_level ? classLevel : 0),
-            types: a.reduces_attack_damage.types,
-          },
-          inspiration_die: die ? Number(die) : null,
-          halves_attack_damage: a.halves_attack_damage,
-          ...(a.restores ? { restores: `${scope}:${a.restores}` } : {}),
-          ...(a.restores_per_slot_level
-            ? { restores_per_slot_level: a.restores_per_slot_level }
-            : {}),
-          ...(a.temp_hp ? { temp_hp: a.temp_hp.per_class_level * classLevel } : {}),
-          ...(a.slot_payment ? { slot_payment: a.slot_payment } : {}),
-          ...(a.roll ? { roll_die: rollDie(a.roll) } : {}),
-        };
-      }),
+              a.heal.bonus === "class_level"
+                ? classLevel
+                : typeof a.heal.bonus === "number"
+                  ? a.heal.bonus
+                  : mod[a.heal.bonus],
+            pooled: a.heal.pooled,
+          };
+          const die = a.inspiration
+            ? /(\d+)$/.exec(String(column(a.inspiration.progression)))?.[1]
+            : null;
+          const rollDie = (roll: NonNullable<typeof a.roll>): string | null => {
+            if ("dice" in roll) return roll.dice;
+            const sides = /(\d+)$/.exec(String(column(roll.progression)))?.[1];
+            return sides ? `1d${sides}` : null;
+          };
+          const qualifying = a.after_attack_with;
+          return {
+            key: `${scope}:${a.id}`,
+            name: a.name,
+            economy: a.economy,
+            uses: a.uses === null ? null : `${scope}:${a.uses}`,
+            cost: a.cost,
+            pool: a.pool,
+            target: a.target,
+            heal,
+            extra_action: a.extra_action,
+            also: a.also,
+            attacks: a.attacks,
+            after_hit: a.after_hit,
+            ...(a.after_attack_action ? { after_attack_action: true } : {}),
+            ...(qualifying
+              ? {
+                  after_attack_with: carriedWeapons
+                    .filter((x) => weaponQualifies(x.weapon, qualifying))
+                    .map((x) => x.name),
+                }
+              : {}),
+            once_per_turn: a.once_per_turn,
+            ...(a.alternative ? { alternative: { label: a.alternative.label } } : {}),
+            ...(a.counts_as ? { counts_as: `${scope}:${a.counts_as}` } : {}),
+            ...(a.hit_on_miss ? { hit_on_miss: true } : {}),
+            save: a.save && {
+              ability: a.save.ability,
+              dc:
+                a.save.dc_ability === "spell"
+                  ? spellDc(src.class_id)
+                  : 8 + mod[a.save.dc_ability] + pb,
+              conditions: a.save.conditions,
+              rounds: a.save.rounds,
+              ends_on: a.save.ends_on,
+              damage: a.save.damage && {
+                dice: scaled(a.save.damage.dice, a.save.damage.scaling),
+                bonus:
+                  typeof a.save.damage.bonus === "number"
+                    ? a.save.damage.bonus
+                    : mod[a.save.damage.bonus],
+                types: a.save.damage.types,
+                half: a.save.damage.half,
+              },
+              on_success: a.save.on_success,
+            },
+            range: a.range,
+            many: a.many,
+            creature_types: a.creature_types,
+            removes: a.removes,
+            reduces_attack_damage: a.reduces_attack_damage && {
+              dice: a.reduces_attack_damage.dice,
+              bonus:
+                a.reduces_attack_damage.abilities.reduce((t, ab) => t + mod[ab], 0) +
+                (a.reduces_attack_damage.class_level ? classLevel : 0),
+              types: a.reduces_attack_damage.types,
+            },
+            inspiration_die: die ? Number(die) : null,
+            halves_attack_damage: a.halves_attack_damage,
+            ...(a.restores ? { restores: `${scope}:${a.restores}` } : {}),
+            ...(a.restores_per_slot_level
+              ? { restores_per_slot_level: a.restores_per_slot_level }
+              : {}),
+            ...(a.temp_hp ? { temp_hp: a.temp_hp.per_class_level * classLevel } : {}),
+            ...(a.shape ? { shape: { choice: a.shape.choice, class_id: src.class_id } } : {}),
+            ...(a.slot_payment ? { slot_payment: a.slot_payment } : {}),
+            ...(a.roll ? { roll_die: rollDie(a.roll) } : {}),
+          };
+        }),
+      ),
     ),
     spell_damage: [...res.sources, ...itemSources].flatMap((src) =>
       src.grants.spell_damage.map((d) => ({
@@ -1082,6 +1258,9 @@ export function computeSheet(
       ...f,
       name: uses.find((u) => u.key === f.use)?.name ?? f.use,
     })),
+    shape,
+    companions,
+    cast_options,
     cast_triggers: res.sources.flatMap((src) =>
       (src.grants.cast_triggers ?? []).map((t) => ({
         key: `${usesScope(src)}:${t.id}`,

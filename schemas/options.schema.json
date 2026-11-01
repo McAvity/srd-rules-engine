@@ -7226,11 +7226,27 @@
             },
             "force": {
               "type": "boolean"
+            },
+            "form": {
+              "type": "string"
             }
           },
           "required": [
             "type",
             "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "end_shape"
+            }
+          },
+          "required": [
+            "type"
           ],
           "additionalProperties": false
         },
@@ -7938,6 +7954,12 @@
                   "mode"
                 ],
                 "additionalProperties": false
+              }
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
               }
             }
           },

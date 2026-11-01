@@ -449,6 +449,12 @@ an ability (`max: {per_class_level: 2, plus_ability: int}`: Arcane Ward). A feat
 one with `uses` + `pool: true` spends from it. `temp_hp: {per_class_level: 1}` on an action gives
 Temporary Hit Points when it's used (Wild Shape).
 
+Wild Shape forms are an `option` choice whose options name a stat block (`monster`, `cr`, `fly`),
+with `scaling.max_cr` and `fly_from`; an action with `shape: {choice}` takes one of the picks
+(`use_feature` `form`), `end_shape` leaves it; `shape_cr_divisor`, `shape_ac` and `shape_casting`
+are Circle Forms. `attack_lines` give attack lines with their own numbers (`to_hit: spell`) and
+`companions` a creature's derived HP/AC; `cast_options` are Metamagic costs paid with a cast.
+
 Limited-use features declare `resources` in their grants; the play sheet lists them with their
 maximum and the state tracks what's spent:
 

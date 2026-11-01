@@ -584,6 +584,8 @@ export const RollWhatSchema = z
       triggers: z
         .array(z.object({ key: z.string(), mode: z.enum(["create", "restore"]) }))
         .optional(),
+      /** Cast options paid with it (`sheet.cast_options`: Metamagic), by key. */
+      options: z.array(z.string()).optional(),
     }),
     /** A character's feature (`sheet.actions`, by key or name); `amount` for a pool. */
     z.object({

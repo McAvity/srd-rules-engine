@@ -207,7 +207,39 @@ export function rollWith(
     instead?: { use: string; message: Message } | { ritual: Message },
     /** Cast triggers paid with this cast (Arcane Ward), after its slot. */
     triggers: readonly { key: string; mode: "create" | "restore" }[] = [],
+    /** Cast options paid with it (Metamagic), by key. */
+    options: readonly string[] = [],
   ): ByHandRoll => {
+    // kenli F-002 T10 (R12-03): Metamagic — each picked option's cost spent once with the cast,
+    // one per spell unless combinable; what it changes stated (Distant's range, Quickened's Bonus
+    // Action), refused when the spell can't take it.
+    const optionSheet = options.length ? sheetOf() : null;
+    const picked = options.map(
+      (k) =>
+        optionSheet?.cast_options.find((o) => o.key === k) ??
+        fail(message("refusal.no_cast_option", { key: k })),
+    );
+    const single = picked.filter((o) => !o.combinable);
+    if (single.length > 1)
+      fail(message("refusal.cast_options_one", { options: single.map((o) => o.name).join(", ") }));
+    const optionNotes: Message[] = [];
+    for (const o of picked) {
+      if (o.effect === "distant") {
+        const feet = /^(\d+) feet/.exec(spell.range)?.[1];
+        const range =
+          spell.range === "Touch" ? "30 feet" : feet ? `${Number(feet) * 2} feet` : null;
+        if (!range) fail(message("refusal.distant_needs_range", { spell: spell.name }));
+        optionNotes.push(message("cast.distant", { range: range as string }));
+      } else if (o.effect === "quickened") {
+        if (spell.casting_time !== "Action")
+          fail(message("refusal.quickened_needs_action", { spell: spell.name }));
+        optionNotes.push(message("cast.quickened"));
+      }
+    }
+    const optionCosts: RollCost[] = picked.map((o) => ({
+      type: "play",
+      action: { type: "use", key: o.uses, amount: o.cost },
+    }));
     const { dm, ...rest } = cast;
     const r = castSpell(combatant, spell, [], {
       ...rest,
@@ -254,8 +286,8 @@ export function rollWith(
     return roll(r.by_hand ?? {}, {
       name: as,
       slot_level: r.slot_level,
-      costs: [...costs, ...use, ...paid, ...triggered],
-      messages: [...r.messages, ...note],
+      costs: [...costs, ...use, ...paid, ...triggered, ...optionCosts],
+      messages: [...r.messages, ...note, ...optionNotes],
     });
   };
   const spellOf = (id: string): SpellDef =>
@@ -365,6 +397,7 @@ export function rollWith(
           [],
           { use: entry.use, message: free },
           what.triggers,
+          what.options,
         );
       }
       if (payment.type === "ritual") {
@@ -385,6 +418,7 @@ export function rollWith(
           [],
           { ritual: message("cast.ritual", { spell: spell.name }) },
           what.triggers,
+          what.options,
         );
       }
       return spellRoll(
@@ -399,6 +433,7 @@ export function rollWith(
         [],
         undefined,
         what.triggers,
+        what.options,
       );
     }
     case "feature": {

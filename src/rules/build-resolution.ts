@@ -243,6 +243,23 @@ export class Resolution {
     return byLevel[this.currentClassLevel(choice) - 1] ?? choice.definition.max_spell_level;
   }
 
+  /**
+   * kenli F-002 T10 (H3): a form choice's limits now (Wild Shape known forms): the highest CR by
+   * the class level (`scaling.max_cr`), raised to class level ÷ `shape_cr_divisor` by Circle Forms,
+   * and whether forms with a Fly Speed are allowed yet (`fly_from`).
+   */
+  formLimits(choice: ActiveChoice): { maxCr: number | null; fly: boolean } {
+    const level = this.currentClassLevel(choice);
+    const base = choice.definition.scaling?.max_cr?.[level - 1];
+    if (base === undefined) return { maxCr: null, fly: true };
+    const divisors = this.sources
+      .filter((s) => s.class_id === choice.source.class_id)
+      .flatMap((s) => (s.grants.shape_cr_divisor ? [s.grants.shape_cr_divisor] : []));
+    const raised = Math.max(base, ...divisors.map((d) => Math.floor(level / d)));
+    const flyFrom = choice.definition.fly_from;
+    return { maxCr: raised, fly: flyFrom === undefined || level >= flyFrom };
+  }
+
   private currentClassLevel(choice: ActiveChoice): number {
     const id = choice.source.class_id;
     return (id && this.classLevels().get(id)) || 1;
@@ -980,10 +997,18 @@ function optionViews(res: Resolution, choice: ActiveChoice): OptionView[] {
               .flatMap((s) => s.grants.saving_throws),
           )
         : null;
+      const limits = d.options.some((o) => o.cr !== undefined) ? res.formLimits(choice) : null;
       return d.options.map((o) => {
         const proficient = o.requires_lacking_saves
           ? o.grants.saving_throws.find((a) => saves?.has(a))
           : undefined;
+        // A form above the CR limit, or with a Fly Speed before it's allowed (kenli F-002 T10 H3).
+        const form =
+          limits && o.cr !== undefined && limits.maxCr !== null && o.cr > limits.maxCr
+            ? message("option.form_cr_above", { cr: o.cr, max: limits.maxCr })
+            : limits && o.fly && !limits.fly
+              ? message("option.form_no_fly_yet", { level: d.fly_from ?? 0 })
+              : null;
         return view(
           o.id,
           o.name,
@@ -994,7 +1019,7 @@ function optionViews(res: Resolution, choice: ActiveChoice): OptionView[] {
               ? message("option.already_save_proficient", {
                   ability: message(`ability.${proficient}`),
                 })
-              : null,
+              : form,
         );
       });
     }
