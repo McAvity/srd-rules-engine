@@ -1720,6 +1720,17 @@
                     "properties": {
                       "progression": {
                         "type": "string"
+                      },
+                      "ability": {
+                        "type": "string",
+                        "enum": [
+                          "str",
+                          "dex",
+                          "con",
+                          "int",
+                          "wis",
+                          "cha"
+                        ]
                       }
                     },
                     "required": [
@@ -1733,6 +1744,17 @@
                       "dice": {
                         "type": "string",
                         "pattern": "^\\d+d\\d+$"
+                      },
+                      "ability": {
+                        "type": "string",
+                        "enum": [
+                          "str",
+                          "dex",
+                          "con",
+                          "int",
+                          "wis",
+                          "cha"
+                        ]
                       }
                     },
                     "required": [

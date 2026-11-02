@@ -7,6 +7,12 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Added — kenli F-002 D052 (optional feature roll modifier)
+- A feature's `roll` can add an optional `ability` modifier, resolved from the current sheet.
+  Both fixed and progression dice support it; existing rolls without the field retain their
+  expressions and content bytes. The normal roll result, journal and shared use cost apply;
+  the caller still resolves the effect. No automatic damage absorption or SRD data change.
+
 ### Added — kenli F-002 T12 final integration (no document change; SRD bytes unchanged)
 - D043: `levelItems(before, after, catalog)` — the items the grants of a build give beyond an
   earlier one's (a gained level's new features, e.g. the XPHB Assassin's Tools at Rogue 3) — and

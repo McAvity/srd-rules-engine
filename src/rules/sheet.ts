@@ -31,7 +31,7 @@ import {
 import { finalScores } from "./ability-scores";
 import { type ActiveSource, mergeGrants, type Resolution, resolve } from "./build-resolution";
 import { type DamagePart, formatDamage } from "./damage";
-import { abilityModifier, proficiencyBonus } from "./dice";
+import { abilityModifier, parseDiceExpression, proficiencyBonus } from "./dice";
 import { isMonkWeapon, isWeaponProficient, parseRange } from "./weapons";
 
 export interface Contribution {
@@ -1290,9 +1290,13 @@ export function computeSheet(
             ? /(\d+)$/.exec(String(column(a.inspiration.progression)))?.[1]
             : null;
           const rollDie = (roll: NonNullable<typeof a.roll>): string | null => {
-            if ("dice" in roll) return roll.dice;
-            const sides = /(\d+)$/.exec(String(column(roll.progression)))?.[1];
-            return sides ? `1d${sides}` : null;
+            const sides =
+              "progression" in roll ? /(\d+)$/.exec(String(column(roll.progression)))?.[1] : null;
+            const dice = "dice" in roll ? roll.dice : sides ? `1d${sides}` : null;
+            if (dice === null || roll.ability === undefined) return dice;
+            const parsed = parseDiceExpression(dice);
+            const bonus = parsed.modifier + mod[roll.ability];
+            return `${parsed.count}d${parsed.sides}${bonus ? (bonus > 0 ? `+${bonus}` : bonus) : ""}`;
           };
           const qualifying = a.after_attack_with;
           return {

@@ -609,10 +609,14 @@ export const FeatureActionSchema = z.strictObject({
   slot_payment: z.enum(["instead", "required"]).optional(),
   /**
    * A die the user rolls when using it (a class table column: `{progression: Bardic Die}`, or
-   * fixed `{dice: 1d6}`); what it does is the table's (a target's next save, …).
+   * fixed `{dice: 1d6}`). An optional ability adds its current modifier; what the result does
+   * remains the table's (a target's next save, damage reduction, …).
    */
   roll: z
-    .union([z.strictObject({ progression: z.string() }), z.strictObject({ dice: Dice })])
+    .union([
+      z.strictObject({ progression: z.string(), ability: z.enum(ABILITIES).optional() }),
+      z.strictObject({ dice: Dice, ability: z.enum(ABILITIES).optional() }),
+    ])
     .optional(),
 });
 export type FeatureActionDef = z.infer<typeof FeatureActionSchema>;
