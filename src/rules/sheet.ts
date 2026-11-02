@@ -1303,7 +1303,7 @@ export function computeSheet(
             key: `${scope}:${a.id}`,
             name: a.name,
             economy: a.economy,
-            uses: a.uses === null ? null : `${scope}:${a.uses}`,
+            uses: a.uses === null ? null : actionUsesKey(src, a.uses, res, uses),
             cost: a.cost,
             pool: a.pool,
             target: a.target,
@@ -1651,6 +1651,31 @@ function wornArmorClass(
 /** Resources and toggles of a class are keyed by the class (`barbarian:rage`), others by source. */
 function usesScope(src: ActiveSource): string {
   return src.feat === null && src.feature === null && src.class_id ? src.class_id : src.key;
+}
+
+/** An option's action may spend a resource declared by that option or its nearest parent.
+ * Follow real option ancestry, never an unrelated source with the same resource id.
+ * An unresolved reference keeps its old key and remains unpayable.
+ */
+function actionUsesKey(
+  src: ActiveSource,
+  id: string,
+  res: Resolution,
+  uses: readonly UsesLine[],
+): string {
+  const original = `${usesScope(src)}:${id}`;
+  let current: ActiveSource | undefined = src;
+  while (current) {
+    const key = `${usesScope(current)}:${id}`;
+    if (uses.some((u) => u.key === key)) return key;
+    const childKey: string = current.key;
+    current = res.choices.find(
+      (choice) =>
+        choice.definition.kind === "option" &&
+        choice.definition.options.some((option) => `${choice.key}=${option.id}` === childKey),
+    )?.source;
+  }
+  return original;
 }
 
 function limitedUses(

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyAction,
+  checkCosts,
   combatantFromCharacter,
   computePlaySheet,
   createCatalog,
@@ -96,5 +98,137 @@ describe("feature roll ability modifier", () => {
         roll: { dice: "1d12", ability: "constitution" },
       }).success,
     ).toBe(false);
+  });
+});
+
+// Synthetic options exercise parent-resource lookup without private pack data.
+function optionCatalog(local = false, missing = false) {
+  return createCatalog(
+    [
+      srdPack,
+      {
+        manifest: {
+          id: "test-option-uses",
+          version: "1.0.0",
+          source: "test",
+          requires: ["srd-5.2.1"],
+        },
+        patches: [
+          {
+            target: "species/human",
+            op: "append",
+            path: "grants.resources",
+            value: { id: "shared", name: "Shared", max: { value: 2 }, recharge: "long" },
+          },
+          {
+            target: "backgrounds/soldier",
+            op: "append",
+            path: "grants.resources",
+            value: { id: "absent", name: "Unrelated", max: { value: 3 }, recharge: "long" },
+          },
+          {
+            target: "species/human",
+            op: "append",
+            path: "grants.choices",
+            value: {
+              id: "test-option",
+              label: "Test option",
+              kind: "option",
+              count: 1,
+              options: [
+                {
+                  id: "roller",
+                  name: "Roller",
+                  grants: {
+                    ...(local
+                      ? {
+                          resources: [
+                            { id: "shared", name: "Local", max: { value: 1 }, recharge: "long" },
+                          ],
+                        }
+                      : {}),
+                    actions: [
+                      {
+                        id: "option-roll",
+                        name: "Option roll",
+                        economy: "reaction",
+                        uses: missing ? "absent" : "shared",
+                        roll: { dice: "1d12", ability: "con" },
+                      },
+                    ],
+                  },
+                },
+                { id: "other", name: "Other", grants: {} },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+    {},
+  );
+}
+function optionBuild(option = "roller") {
+  const base = fighterBuild();
+  return { ...base, choices: { ...base.choices, "species:human#test-option": [option] } };
+}
+describe("option action resource ancestry", () => {
+  it("rolls using the parent's shared pool once, and refuses payment when exhausted", () => {
+    const cat = optionCatalog();
+    const build = optionBuild();
+    const state = createState(build, cat);
+    const sheet = computePlaySheet(build, state, cat);
+    const action = sheet.actions.find((a) => a.name === "Option roll");
+    expect(action?.uses).toBe("species:human:shared");
+    const result = rollByHand(
+      combatantFromCharacter(build, state, cat),
+      { type: "feature", feature: "Option roll" },
+      { catalog: cat, character: { build, state }, rng: fixedRng(0.5) },
+    );
+    expect(result.costs).toHaveLength(1);
+    let spent = state;
+    for (const cost of result.costs) {
+      if (cost.type === "play") spent = applyAction(build, spent, cat, cost.action).state;
+    }
+    expect(spent.uses_spent["species:human:shared"]).toBe(1);
+    expect(Object.keys(spent.uses_spent)).not.toContain("species:human#test-option=roller:shared");
+    const exhausted = applyAction(build, spent, cat, {
+      type: "use",
+      key: "species:human:shared",
+    }).state;
+    expect(
+      checkCosts(result.costs, {
+        catalog: cat,
+        name: build.name,
+        character: { build, state: exhausted },
+      }).every((cost) => cost.payable),
+    ).toBe(false);
+  });
+  it("does not show an action from an unselected option", () => {
+    const cat = optionCatalog();
+    const build = optionBuild("other");
+    expect(
+      computePlaySheet(build, createState(build, cat), cat).actions.some(
+        (a) => a.name === "Option roll",
+      ),
+    ).toBe(false);
+  });
+  it("prefers a declared local resource over the parent's resource", () => {
+    const cat = optionCatalog(true);
+    const build = optionBuild();
+    expect(
+      computePlaySheet(build, createState(build, cat), cat).actions.find(
+        (a) => a.name === "Option roll",
+      )?.uses,
+    ).toBe("species:human#test-option=roller:shared");
+  });
+  it("keeps a missing resource unpayable rather than using an unrelated pool", () => {
+    const cat = optionCatalog(false, true);
+    const build = optionBuild();
+    expect(
+      computePlaySheet(build, createState(build, cat), cat).actions.find(
+        (a) => a.name === "Option roll",
+      )?.uses,
+    ).toBe("species:human#test-option=roller:absent");
   });
 });

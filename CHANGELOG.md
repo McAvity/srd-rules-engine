@@ -7,6 +7,11 @@ migrated when it's loaded.
 
 ## [Unreleased]
 
+### Fixed — kenli F-002 D052 (option action resource)
+- An option-granted action can spend the nearest declared parent resource. Its own resource
+  takes precedence, unrelated sources are never searched, and an absent resource remains
+  unpayable. Choice visibility and action keys are unchanged; no content or document migration.
+
 ### Added — kenli F-002 D052 (optional feature roll modifier)
 - A feature's `roll` can add an optional `ability` modifier, resolved from the current sheet.
   Both fixed and progression dice support it; existing rolls without the field retain their
