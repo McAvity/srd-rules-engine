@@ -26,18 +26,23 @@ import {
 import { type Resolution, resolve } from "../rules/build-resolution";
 import { choiceIssues } from "../rules/build-validation";
 import {
+  type AttackDice,
   type Combatant,
   conditionRolls,
   type D20TestOptions,
   type D20TestRequest,
   type D20TestResult,
+  type RolledBonusDie,
   rollD20Test,
 } from "../rules/combatant";
 import { coinsFor, formatCp, pay, priceInCp, purseValue } from "../rules/currency";
+import type { RolledDamage } from "../rules/damage";
 import { type Defenses, isBloodied, rollDamage, takeDamage } from "../rules/damage";
 import { roll } from "../rules/dice";
 import { spaceForSize } from "../rules/grid";
-import { message, texts, toMessage } from "../rules/messages";
+import { message, RuleError, texts, toMessage } from "../rules/messages";
+import { empowerDamage } from "../rules/metamagic";
+import { addBonusDie, type DamageDie } from "../rules/rerolls";
 import { mathRng, type Rng } from "../rules/rng";
 import {
   type CarriedItem,
@@ -1283,6 +1288,15 @@ export function applyAction(
       const feature =
         sheet.actions.find((a) => a.key === action.key) ??
         fail(message("refusal.no_feature_2", { key: action.key }));
+      // kenli F-002 T12 B2a (D040): it switches its toggle on (the toggle's own cost).
+      if (feature.activates)
+        return applyAction(
+          build,
+          state,
+          catalog,
+          { type: "activate", key: feature.activates },
+          { rng },
+        );
       if (feature.pool && action.amount === undefined)
         fail(message("refusal.how_much_amount", { feature: feature.name }));
       const amount = feature.pool ? (action.amount as number) : feature.cost;
@@ -1320,6 +1334,15 @@ export function applyAction(
           : payment?.type === "pact"
             ? (p.pact_magic?.slot_level ?? 0)
             : 0;
+      // kenli F-002 T12 (D021) Wild Resurgence: a slot for a use only when none is left.
+      if (feature.restores_when_empty && restored && restored.spent < restored.max)
+        fail(
+          message("refusal.restores_when_empty", {
+            feature: feature.name,
+            use: restored.name,
+            left: restored.max - restored.spent,
+          }),
+        );
       if (restored?.tracked) {
         if (!restored.created) fail(notCreated(restored));
         if ((restored.current ?? 0) >= restored.max)
@@ -1327,6 +1350,22 @@ export function applyAction(
       } else if (feature.restores && !restored?.spent) {
         const use = restored?.name ?? feature.restores;
         fail(message("refusal.nothing_to_restore", { feature: feature.name, use }));
+      }
+      // …and a use for a level 1 slot: the other use spent, a slot of that level given back.
+      if (feature.also_spends) {
+        const other =
+          p.uses.find((u) => u.key === feature.also_spends) ??
+          fail(message("refusal.no_uses", { feature: feature.name }));
+        if (other.spent >= other.max)
+          fail(message("refusal.uses_left_count", { name: other.name, left: 0 }));
+        s.uses_spent[other.key] = other.spent + 1;
+      }
+      if (feature.restores_slot) {
+        const level = feature.restores_slot;
+        if (!(s.spell_slots_spent[level - 1] ?? 0))
+          fail(message("refusal.no_spent_level_slot", { level }));
+        s.spell_slots_spent[level - 1] = (s.spell_slots_spent[level - 1] ?? 1) - 1;
+        notes.push(message("play.feature_slot_back", { feature: feature.name, level }));
       }
       if (payment?.type === "slot") {
         s.spell_slots_spent[payment.level - 1] = (s.spell_slots_spent[payment.level - 1] ?? 0) + 1;
@@ -1485,9 +1524,33 @@ export function applyAction(
         );
       if (toggle.uses) {
         const use = p.uses.find((u) => u.key === toggle.uses);
-        if (!use || use.spent >= use.max)
-          fail(message("refusal.no_uses_left", { toggle: toggle.name }));
-        s.uses_spent[toggle.uses] = (use?.spent ?? 0) + 1;
+        // kenli F-002 T12 B2a (Sorcery Incarnate): with no use left, another resource can pay.
+        const alt = sheet.toggle_alternatives.find((x) => x.toggle === toggle.key);
+        if ((!use || use.spent >= use.max) && alt) {
+          const found = p.uses.find((u) => u.key === alt.uses);
+          const other =
+            (found && found.max - found.spent >= alt.amount ? found : undefined) ??
+            fail(
+              message("refusal.toggle_alternative", {
+                toggle: toggle.name,
+                use: found?.name ?? alt.uses,
+                amount: alt.amount,
+                left: found ? found.max - found.spent : 0,
+              }),
+            );
+          s.uses_spent[other.key] = other.spent + alt.amount;
+          notes.push(
+            message("play.toggle_alternative", {
+              toggle: toggle.name,
+              use: other.name,
+              amount: alt.amount,
+            }),
+          );
+        } else {
+          if (!use || use.spent >= use.max)
+            fail(message("refusal.no_uses_left", { toggle: toggle.name }));
+          s.uses_spent[toggle.uses] = (use?.spent ?? 0) + 1;
+        }
       }
       s.active.push(toggle.key);
       if (toggle.no_spells) dropConcentration(message("why.toggle", { toggle: toggle.name }));
@@ -1875,4 +1938,297 @@ function pounds(weight: string): number | null {
   const m = /^(\d+)?(½|\s*1\/2)?(?:\s*lb)?/.exec(weight.trim());
   if (!m || (!m[1] && !m[2])) return null;
   return Number(m[1] ?? 0) + (m[2] ? 0.5 : 0);
+}
+
+/** kenli F-002 T13: an item's listed price as data (`itemQuote`): copper per bundle, bundle size. */
+export interface ItemQuote {
+  readonly item: string;
+  readonly name: string;
+  /** Copper per bundle (`null`: no listed price, a magic item: it can't be bought). */
+  readonly cp: number | null;
+  /** Units one purchase gives (20 Arrows for 1 GP); 1 for most items. */
+  readonly bundle: number;
+}
+
+/** kenli F-002 T13: the catalog's price of an item (the one `buy` charges); unknown → `PlayError`. */
+export function itemQuote(catalog: Catalog, id: string): ItemQuote {
+  const d = itemPrice(catalog, id);
+  return { item: id, name: d.name, cp: d.cp, bundle: d.bundle };
+}
+
+/** One line of `stockItems`: what was wanted, owned, bought (whole bundles) and what it cost. */
+export interface StockLine {
+  readonly item: string;
+  readonly name: string;
+  /** Units wanted on the character (20 Arrows: 20). */
+  readonly units: number;
+  /** Units already carried before (a class or background grant): never bought again. */
+  readonly owned: number;
+  /** Purchases made (bundles), the units they gave and their catalog cost. */
+  readonly bundles: number;
+  readonly bundle: number;
+  readonly received: number;
+  readonly cost_cp: number;
+  /** Copper per bundle from the catalog. */
+  readonly price_cp: number | null;
+  /**
+   * Worn or held after the whole list (kenli F-002 T12, D044: the staged state, not the request).
+   * `equip: false` asks nothing: an item already worn (a class's granted armor) stays worn, and
+   * shows `true` here.
+   */
+  readonly equip: boolean;
+}
+
+/**
+ * kenli F-002 T13: buy what a list asks for, to have at least `units` of each catalog item
+ * carried, then wear/hold the ones marked `equip` — the starting kit of a new character, staged
+ * on a state in memory. Units already carried (granted by the class or background) are not bought
+ * again; a missing amount is bought in whole catalog bundles (a partial Arrow bundle becomes one
+ * whole bundle: `received` says how many); the price is always the catalog's (`buy` without a
+ * price). All or nothing: an unknown item, one without a listed price, a bad count or not enough
+ * coins refuses the whole list (`PlayError`), nothing changes. Nothing is stored here. Each line's
+ * `equip` is the staged result; items asked to be worn that can't all be worn together (two
+ * armors) refuse the list (D044).
+ */
+export function stockItems(
+  build: CharacterBuild,
+  state: CharacterState,
+  catalog: Catalog,
+  items: readonly { readonly item: string; readonly units: number; readonly equip: boolean }[],
+): {
+  state: CharacterState;
+  lines: StockLine[];
+  before_cp: number;
+  after_cp: number;
+  spent_cp: number;
+  messages: Message[];
+} {
+  let s = state;
+  const lines: StockLine[] = [];
+  const messages: Message[] = [];
+  const seen = new Set<string>();
+  const carriedQty = (st: CharacterState, id: string) =>
+    st.inventory
+      .filter((i) => i.item === id && !i.location && !i.custom && i.base === null)
+      .reduce((n, i) => n + i.qty, 0);
+  for (const want of items) {
+    if (!Number.isInteger(want.units) || want.units < 1)
+      throw new PlayError([message("refusal.stock_units", { item: want.item })]);
+    if (seen.has(want.item))
+      throw new PlayError([message("refusal.stock_twice", { item: want.item })]);
+    seen.add(want.item);
+    const q = itemQuote(catalog, want.item);
+    const owned = carriedQty(s, want.item);
+    const missing = Math.max(0, want.units - owned);
+    const bundles = Math.ceil(missing / q.bundle);
+    if (bundles > 0 && q.cp === null)
+      throw new PlayError([message("refusal.stock_unpriced", { item: q.name })]);
+    if (bundles > 0) {
+      const r = applyAction(build, s, catalog, { type: "buy", item: want.item, qty: bundles });
+      s = r.state;
+      messages.push(...r.messages);
+    }
+    lines.push({
+      item: want.item,
+      name: q.name,
+      units: want.units,
+      owned,
+      bundles,
+      bundle: q.bundle,
+      received: bundles * q.bundle,
+      cost_cp: bundles * (q.cp ?? 0),
+      price_cp: q.cp,
+      equip: false,
+    });
+  }
+  for (const want of items) {
+    if (!want.equip) continue;
+    const line = s.inventory.find(
+      (i) => i.item === want.item && !i.location && !i.custom && i.base === null,
+    );
+    if (!line) throw new PlayError([message("refusal.unknown_item", { item: want.item })]);
+    if (line.equipped) continue;
+    const r = applyAction(build, s, catalog, { type: "equip", id: line.id, equipped: true });
+    s = r.state;
+    messages.push(...r.messages);
+  }
+  // D044: what is worn is read from the staged state. A wanted item that a later one took off
+  // (a second armor) can't be worn with the rest: the whole list is refused, not shown worn.
+  const worn = (id: string) =>
+    s.inventory.some(
+      (i) => i.item === id && !i.location && !i.custom && i.base === null && i.equipped,
+    );
+  for (const want of items)
+    if (want.equip && !worn(want.item))
+      throw new PlayError([
+        message("refusal.stock_equip_conflict", { item: itemQuote(catalog, want.item).name }),
+      ]);
+  const final = lines.map((l) => ({ ...l, equip: worn(l.item) }));
+  const before_cp = purseValue(state.currency);
+  const after_cp = purseValue(s.currency);
+  return { state: s, lines: final, before_cp, after_cp, spent_cp: before_cp - after_cp, messages };
+}
+
+/** kenli F-002 T12 (D043): an item a gained level's grants give that the previous build's didn't. */
+export interface LevelItem {
+  readonly item: string;
+  readonly name: string;
+  readonly qty: number;
+}
+
+/**
+ * kenli F-002 T12 (D043): the items the grants of `after` give beyond those of `before` (the
+ * equipment its sources grant, e.g. the XPHB Assassin's Tools at Rogue 3), each with the missing
+ * quantity. Pure; nothing is bought or written. Starting-equipment choices of level 1 are the same
+ * in both builds, so a level gained adds only what its new features grant.
+ */
+export function levelItems(
+  before: CharacterBuild,
+  after: CharacterBuild,
+  catalog: Catalog,
+): LevelItem[] {
+  const had = computeSheet(before, catalog).equipment;
+  const has = computeSheet(after, catalog).equipment;
+  return Object.entries(has).flatMap(([item, qty]) => {
+    const more = qty - (had[item] ?? 0);
+    return more > 0 ? [{ item, name: mundaneName(catalog, item) ?? item, qty: more }] : [];
+  });
+}
+
+/**
+ * kenli F-002 T12 (D043): a level gained in play adds what its new features grant (`levelItems`)
+ * to the inventory, free (`add_item`), once: the next level's diff no longer has them. The rest of
+ * the state (coins, other items, spent HP/slots/uses) is unchanged. `items` empty: `state` as given.
+ */
+export function gainLevelItems(
+  before: CharacterBuild,
+  after: CharacterBuild,
+  state: CharacterState,
+  catalog: Catalog,
+): { state: CharacterState; items: LevelItem[]; messages: Message[] } {
+  const items = levelItems(before, after, catalog);
+  let s = state;
+  const messages: Message[] = [];
+  for (const g of items) {
+    const r = applyAction(after, s, catalog, { type: "add_item", item: g.item, qty: g.qty });
+    s = r.state;
+  }
+  if (items.length)
+    messages.push(
+      message("play.level_items", {
+        items: items.map((i) => message("item.qty", { item: i.name, qty: i.qty })),
+      }),
+    );
+  return { state: s, items, messages };
+}
+
+/**
+ * kenli F-002 T12 B2b, Empowered Spell on a spell rolled by hand, after its damage: `rolls` are
+ * the damage rolls of that one cast (a beam's each, or the one roll), `roll` the one whose `dice`
+ * are rerolled. Refused (nothing rolled or spent) without the option, for a spell the sheet doesn't
+ * cast, once it was used on any roll of this cast, for no or a non-damage roll, too many, repeated
+ * or unknown dice, or without the Sorcery Point. Otherwise the new rolls are kept and the option's
+ * cost is paid once (one `use`).
+ */
+export function useEmpoweredSpell(
+  build: CharacterBuild,
+  state: CharacterState,
+  catalog: Catalog,
+  rolls: readonly (RolledDamage | null)[],
+  pick: { readonly roll: number; readonly dice: readonly DamageDie[] },
+  options: { readonly spell: string; readonly rng?: Rng },
+): { damage: RolledDamage; state: CharacterState; messages: Message[] } {
+  const rng = options.rng ?? mathRng;
+  const sheet = computePlaySheet(build, state, catalog);
+  const name = build.name || "?";
+  const option = sheet.cast_options.find((o) => o.effect === "empowered");
+  if (!option) throw new PlayError([message("refusal.no_empowered", { name })]);
+  const spell = sheet.spells.find((x) => x.id === options.spell);
+  if (!spell) throw new PlayError([message("refusal.cant_cast", { name, spell: options.spell })]);
+  if (rolls.some((r) => r?.rerolled?.source === option.key))
+    throw new PlayError([message("refusal.empowered_used", { option: option.name })]);
+  const damage = Number.isInteger(pick.roll) ? rolls[pick.roll] : undefined;
+  if (!damage) throw new PlayError([message("refusal.reroll_die_unknown")]);
+  let r: ReturnType<typeof empowerDamage>;
+  try {
+    r = empowerDamage(option, sheet.modifiers.cha, damage, pick.dice, { rng });
+  } catch (error) {
+    if (error instanceof RuleError) throw new PlayError([error.detail]);
+    throw error;
+  }
+  const paid = applyAction(build, state, catalog, r.cost);
+  return { damage: r.damage, state: paid.state, messages: [r.message] };
+}
+
+/**
+ * kenli F-002 T12 (R14-01): a feature used on a roll that failed (`after_failed_roll`: Peerless
+ * Skill on an ability check or an attack roll). The roll must be of one of its kinds (a save is
+ * refused), must have failed against its DC (or `dc`, the DC or AC the table states when the roll
+ * had none) and the use must have one left. Its die is rolled and added to that roll
+ * (`addBonusDie`); with `spend: on_success` the use is spent only if the roll now succeeds,
+ * otherwise nothing changes ("isn't expended"). The roll's own costs are never paid again.
+ */
+export function useAfterFailedRoll<T extends D20TestResult | AttackDice>(
+  build: CharacterBuild,
+  state: CharacterState,
+  catalog: Catalog,
+  rolled: T,
+  key: string,
+  options: { readonly dc?: number; readonly rng?: Rng } = {},
+): { roll: T; state: CharacterState; success: boolean; spent: boolean; messages: Message[] } {
+  const rng = options.rng ?? mathRng;
+  const sheet = computePlaySheet(build, state, catalog);
+  const line = sheet.actions.find((a) => a.key === key);
+  const after = line?.after_failed_roll;
+  if (!line || !after)
+    throw new PlayError([message("refusal.no_feature", { name: build.name || "?", feature: key })]);
+  const kind = rolled.resolution.kind;
+  if (kind !== "check" && kind !== "attack")
+    throw new PlayError([message("refusal.after_roll_kind", { feature: line.name })]);
+  if (!after.kinds.includes(kind))
+    throw new PlayError([message("refusal.after_roll_kind", { feature: line.name })]);
+  // review15 R15-01: once per roll, whatever its outcome (a still-failing roll can't take it again).
+  if (rolled.bonus_dice.some((d) => d.source === line.key))
+    throw new PlayError([message("refusal.after_roll_used", { feature: line.name })]);
+  const known = "dc" in rolled ? rolled.dc : null;
+  const dc = known ?? options.dc ?? null;
+  if (dc === null)
+    throw new PlayError([message("refusal.after_roll_needs_dc", { feature: line.name })]);
+  const succeeds = (r: D20TestResult | AttackDice) =>
+    "critical_hit" in r
+      ? !r.critical_miss && (r.critical_hit || r.total >= dc)
+      : r.resolution.automatic_failure
+        ? false
+        : r.total >= dc;
+  if (succeeds(rolled))
+    throw new PlayError([message("refusal.after_roll_not_failed", { feature: line.name })]);
+  const use = line.uses ? sheet.play.uses.find((u) => u.key === line.uses) : undefined;
+  if (!use || use.max - use.spent < line.cost)
+    throw new PlayError([message("refusal.no_uses_left", { toggle: line.name })]);
+  const dice = line.roll_die ?? null;
+  if (!dice)
+    throw new PlayError([message("refusal.no_feature", { name: build.name || "?", feature: key })]);
+  const r = roll(dice, rng);
+  const die: RolledBonusDie = {
+    label: line.name,
+    dice,
+    sign: 1,
+    rolls: r.rolls,
+    total: r.total,
+    source: line.key,
+  };
+  const after2 = addBonusDie(rolled, die);
+  const success = succeeds(after2);
+  const spent = success || after.spend !== "on_success";
+  const paid = spent
+    ? applyAction(build, state, catalog, { type: "use", key: use.key, amount: line.cost }).state
+    : state;
+  const note = message(success ? "after_roll.succeeds" : "after_roll.still_fails", {
+    feature: line.name,
+    die: dice,
+    rolled: r.total,
+    total: after2.total,
+    dc,
+  });
+  return { roll: after2, state: paid, success, spent, messages: [note] };
 }

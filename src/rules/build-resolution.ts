@@ -845,6 +845,38 @@ function resolvePass(build: CharacterBuild, catalog: Catalog, prev: Resolution |
     }
   }
 
+  // kenli F-002 T12 (R14-04): packs' play automation for features the character already has
+  // (`AutomationDef`): a source only once its gate holds — the class or the subclass's class at
+  // `class_level`, the subclass chosen, the feat taken. It adds no choice and no feat.
+  for (const a of catalog.automation ?? []) {
+    const w = a.when;
+    const sub = w.subclass !== undefined ? lookup(catalog.subclasses, w.subclass) : undefined;
+    if (w.subclass !== undefined && !sub) continue;
+    if (sub && !sources.some((x) => x.key.startsWith(`subclass:${sub.id}:`))) continue;
+    const classId = w.class ?? sub?.class ?? null;
+    if (w.class !== undefined && sub && sub.class !== w.class) continue;
+    let level = 1;
+    if (classId !== null) {
+      const reached = levels.find(
+        (l) => l.class_id === classId && l.class_level === (w.class_level ?? 1),
+      );
+      if (!reached) continue;
+      level = reached.level;
+    }
+    if (w.feat !== undefined) {
+      const feat = sources.find((x) => x.feat?.id === w.feat);
+      if (!feat) continue;
+      level = Math.max(level, feat.level);
+    }
+    addSource(
+      source(`automation:${a.id}`, a.name, a.grants, {
+        description: a.description,
+        level,
+        class_id: classId,
+      }),
+    );
+  }
+
   return new Resolution(build, catalog, sources, choices, levels, new SwapLedger(events));
 }
 

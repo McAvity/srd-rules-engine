@@ -199,7 +199,8 @@ export interface Decision {
     | "hit_on_miss"
     | "tactical_mind"
     | "guarded_mind"
-    | "savage_attacker";
+    | "savage_attacker"
+    | "empowered_spell";
   /** Who decides. */
   readonly combatant: Combatant;
   /** The question for the table, with the roll: "Brakka: Dexterity saving throw 7 vs 15…". */
@@ -524,6 +525,11 @@ export interface RolledBonusDie {
   readonly sign: 1 | -1;
   readonly rolls: readonly number[];
   readonly total: number;
+  /**
+   * kenli F-002 T12 (review15 R15-01): the sheet action key that added it (`useAfterFailedRoll`),
+   * so that feature is used once per roll; absent for the GM's dice and Bardic Inspiration.
+   */
+  readonly source?: string;
 }
 
 /** A floor raised on a roll's dice (`{label, from, to}`). */
@@ -727,6 +733,11 @@ export interface AttackResult {
 export interface AttackOptions {
   rng?: Rng;
   mode?: RollMode;
+  /**
+   * kenli F-002 T12 (D021/D022): the damage dealt as another type the line allows
+   * (`AttackLine.damage_types`: Lunar Radiance's Radiant, Exceptional Training's Force).
+   */
+  damage_type?: string;
   /** Wield a Versatile weapon with two hands. */
   two_handed?: boolean;
   /**
@@ -798,15 +809,35 @@ function prepareAttack(
     forgo = [],
     extra_damage = [],
     forgo_advantage = false,
+    damage_type,
   }: AttackOptions,
 ) {
-  const line =
+  const found =
     typeof attack === "string" ? attacker.attacks.find((a) => a.name === attack) : attack;
-  if (!line) {
+  if (!found) {
     const known = attacker.attacks.map((a) => a.name).join(", ");
     throw new RuleError(
       message("rule.no_attack_named", { name: attacker.name, attack: String(attack), known }),
     );
+  }
+  let line = found;
+  if (damage_type !== undefined && damage_type !== found.damage_type) {
+    if (!found.damage_types?.includes(damage_type))
+      throw new RuleError(
+        message("rule.damage_type_not_allowed", {
+          attack: found.name,
+          type: damage_type,
+          types: (found.damage_types ?? [found.damage_type]).join(", "),
+        }),
+      );
+    const as = (parts: readonly DamagePart[] | null) =>
+      parts ? parts.map((p) => ({ ...p, type: damage_type })) : null;
+    line = {
+      ...found,
+      damage_type,
+      damage_parts: as(found.damage_parts) as DamagePart[],
+      two_handed_damage_parts: as(found.two_handed_damage_parts),
+    };
   }
   const raw = attackReasons(attacker, target, {
     within_5ft: within_5ft ?? line.kind === "melee",
@@ -1170,6 +1201,8 @@ export interface SaveResult {
   readonly indomitable?: boolean;
   /** kenli F-002 T08: it failed and Guarded Mind made it a success: the use key to spend. */
   readonly guarded_mind?: string | null;
+  /** kenli F-002 T12 B2a: succeeded without a roll (Careful Spell), why. */
+  readonly automatic_success?: string;
 }
 
 /**

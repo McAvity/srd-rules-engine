@@ -12,6 +12,8 @@ export interface SplitManifest {
   readonly manifest?: unknown;
   readonly creation?: unknown;
   readonly patches?: unknown[];
+  /** kenli F-002 T12: the pack's play automation (`ContentPack.automation`). */
+  readonly automation?: unknown[];
   /** Table name → its file (`monsters.json`) and how many entities it has. */
   readonly tables: Readonly<Partial<Record<TableName, { file: string; count: number }>>>;
 }
@@ -32,6 +34,7 @@ export function splitPack(pack: ContentPack): Record<string, unknown> {
     ...(pack.manifest !== undefined ? { manifest: pack.manifest } : {}),
     ...(pack.creation !== undefined ? { creation: pack.creation } : {}),
     ...(pack.patches !== undefined ? { patches: pack.patches } : {}),
+    ...(pack.automation !== undefined ? { automation: pack.automation } : {}),
     tables,
   };
   return { "manifest.json": manifest, ...files };

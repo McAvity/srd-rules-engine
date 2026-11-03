@@ -386,6 +386,39 @@
                   }
                 ]
               },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "uses": {
                 "default": null,
                 "anyOf": [
@@ -968,6 +1001,39 @@
                     "type": "null"
                   }
                 ]
+              },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "uses": {
                 "default": null,
@@ -1552,6 +1618,39 @@
                   }
                 ]
               },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "uses": {
                 "default": null,
                 "anyOf": [
@@ -2134,6 +2233,39 @@
                     "type": "null"
                   }
                 ]
+              },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "uses": {
                 "default": null,
@@ -2718,6 +2850,39 @@
                   }
                 ]
               },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "uses": {
                 "default": null,
                 "anyOf": [
@@ -3300,6 +3465,39 @@
                     "type": "null"
                   }
                 ]
+              },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "uses": {
                 "default": null,
@@ -3884,6 +4082,39 @@
                   }
                 ]
               },
+              "free_casts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "use": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "at_will": {
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "use",
+                    "name",
+                    "at_will",
+                    "left",
+                    "available"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "uses": {
                 "default": null,
                 "anyOf": [
@@ -4314,6 +4545,14 @@
             },
             "use": {
               "type": "boolean"
+            },
+            "dice": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
             }
           },
           "required": [
@@ -5445,6 +5684,24 @@
                     "two_handed": {
                       "type": "boolean"
                     },
+                    "damage_type": {
+                      "type": "string",
+                      "enum": [
+                        "acid",
+                        "bludgeoning",
+                        "cold",
+                        "fire",
+                        "force",
+                        "lightning",
+                        "necrotic",
+                        "piercing",
+                        "poison",
+                        "psychic",
+                        "radiant",
+                        "slashing",
+                        "thunder"
+                      ]
+                    },
                     "riders": {
                       "type": "array",
                       "items": {
@@ -5522,7 +5779,10 @@
                         "enum": [
                           "poison",
                           "trip",
-                          "withdraw"
+                          "withdraw",
+                          "daze",
+                          "knock_out",
+                          "obscure"
                         ]
                       }
                     },
@@ -5809,6 +6069,38 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "payment": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "free"
+                        },
+                        "use": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "use"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "heightened": {
+                      "type": "string"
+                    },
+                    "careful": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -6074,6 +6366,24 @@
             "two_handed": {
               "type": "boolean"
             },
+            "damage_type": {
+              "type": "string",
+              "enum": [
+                "acid",
+                "bludgeoning",
+                "cold",
+                "fire",
+                "force",
+                "lightning",
+                "necrotic",
+                "piercing",
+                "poison",
+                "psychic",
+                "radiant",
+                "slashing",
+                "thunder"
+              ]
+            },
             "riders": {
               "type": "array",
               "items": {
@@ -6151,7 +6461,10 @@
                 "enum": [
                   "poison",
                   "trip",
-                  "withdraw"
+                  "withdraw",
+                  "daze",
+                  "knock_out",
+                  "obscure"
                 ]
               }
             },
@@ -6223,6 +6536,45 @@
                 "slashing",
                 "thunder"
               ]
+            },
+            "payment": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "slot"
+                    },
+                    "level": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "level"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "pact"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "form": {
+              "type": "string"
             }
           },
           "required": [
@@ -6534,6 +6886,38 @@
                   "mode"
                 ],
                 "additionalProperties": false
+              }
+            },
+            "payment": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "free"
+                },
+                "use": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "use"
+              ],
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "heightened": {
+              "type": "string"
+            },
+            "careful": {
+              "type": "array",
+              "items": {
+                "type": "string"
               }
             }
           },
@@ -7791,6 +8175,24 @@
             "two_handed": {
               "type": "boolean"
             },
+            "damage_type": {
+              "type": "string",
+              "enum": [
+                "acid",
+                "bludgeoning",
+                "cold",
+                "fire",
+                "force",
+                "lightning",
+                "necrotic",
+                "piercing",
+                "poison",
+                "psychic",
+                "radiant",
+                "slashing",
+                "thunder"
+              ]
+            },
             "riders": {
               "type": "array",
               "items": {
@@ -7825,7 +8227,10 @@
                 "enum": [
                   "poison",
                   "trip",
-                  "withdraw"
+                  "withdraw",
+                  "daze",
+                  "knock_out",
+                  "obscure"
                 ]
               }
             },

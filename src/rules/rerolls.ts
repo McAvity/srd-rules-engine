@@ -18,7 +18,7 @@ import {
   type RollMode,
   resolveMode,
 } from "./combatant";
-import type { RolledDamage, RolledDamagePart } from "./damage";
+import type { RerolledDice, RolledDamage, RolledDamagePart } from "./damage";
 import { parseDiceExpression } from "./dice";
 import { message, plainMessage, RuleError } from "./messages";
 import type { Rng } from "./rng";
@@ -292,6 +292,77 @@ export function rerollDie<T extends RerollTarget>(
   }
 }
 
+/** One die of a damage roll: its part and its index in that part's `rolls`. */
+export interface DamageDie {
+  readonly part: number;
+  readonly die: number;
+}
+
+/** Every die of a damage roll, in order (flat bonuses are no dice: never rerolled). */
+export function damageDice(
+  damage: RolledDamage,
+): { part: number; die: number; value: number; sides: number; type: string }[] {
+  return damage.parts.flatMap((p, part) =>
+    p.dice
+      ? p.rolls.map((value, die) => ({
+          part,
+          die,
+          value,
+          sides: parseDiceExpression(p.dice as string).sides,
+          type: p.type,
+        }))
+      : [],
+  );
+}
+
+/**
+ * kenli F-002 T12 B2b: reroll several dice of one damage roll together and keep the new rolls,
+ * even lower (Empowered Spell: "you must use the new rolls"). Each die once; a die of no part, or
+ * of a part without dice, is `refusal.reroll_die_unknown`; at most `max` dice
+ * (`refusal.reroll_too_many`) and at least one. The bonus of each part stays as it was. Nothing is
+ * spent here (the caller pays the feature).
+ */
+export function rerollDamageDice(
+  damage: RolledDamage,
+  dice: readonly DamageDie[],
+  source: { readonly rng: Rng } | { readonly values: readonly number[] },
+  { max, key, label }: { readonly max: number; readonly key: string; readonly label: string },
+): RolledDamage {
+  if (!dice.length) unknownDie();
+  if (dice.length > max) throw new RuleError(message("refusal.reroll_too_many", { label, max }));
+  const seen = new Set<string>();
+  for (const d of dice) {
+    const p = damage.parts[index(d.part, damage.parts.length)] as RolledDamagePart;
+    if (!p.dice) unknownDie();
+    index(d.die, p.rolls.length);
+    const id = `${d.part}:${d.die}`;
+    if (seen.has(id)) throw new RuleError(message("refusal.reroll_die_twice", { label }));
+    seen.add(id);
+  }
+  const queue = "values" in source ? [...source.values] : undefined;
+  const changed: RerolledDice["dice"][number][] = [];
+  const parts = damage.parts.map((p, part) => {
+    const mine = dice.filter((d) => d.part === part);
+    if (!mine.length || !p.dice) return p;
+    const sides = parseDiceExpression(p.dice).sides;
+    const rolls = [...p.rolls];
+    for (const d of mine) {
+      const to = newValue("rng" in source ? source : { values: [] }, sides, queue);
+      changed.push({ part, die: d.die, from: rolls[d.die] as number, to });
+      rolls[d.die] = to;
+    }
+    // A minimum that raised some dice (Great Weapon Fighting) is for the first roll only.
+    const { raw_rolls: _raw, ...rest } = p;
+    return { ...rest, rolls, total: Math.max(0, sum(rolls) + p.bonus) };
+  });
+  return {
+    ...damage,
+    parts,
+    total: sum(parts.map((p) => p.total)),
+    rerolled: { source: key, label, dice: changed },
+  };
+}
+
 /**
  * A Critical Hit the table decides (a Paralyzed target within 5 feet) or takes back: the attack's
  * damage gains a second set of every part's dice, or drops it; rolled dice stay, flat bonuses
@@ -304,4 +375,15 @@ export function setCritical(attack: AttackDice, critical: boolean, dice: Critica
     critical_hit: critical,
     damage: attack.damage ? recritical(attack.damage, critical, dice) : null,
   };
+}
+
+/**
+ * kenli F-002 T12 (R14-01): a die added to a roll after it's made (Peerless Skill's Bardic
+ * Inspiration die), as one more bonus die: its total, Critical Hit and success worked out again
+ * from the result's own `resolution`. Nothing is spent here.
+ */
+export function addBonusDie<T extends Rolled>(r: T, die: RolledBonusDie): T {
+  const withDie = { ...r, bonus_dice: [...r.bonus_dice, die] } as T;
+  const { rolls, mode, kept } = r.roll;
+  return settle(withDie, { rolls, mode, kept }, r.resolution, { values: [] });
 }

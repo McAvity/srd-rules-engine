@@ -23,6 +23,77 @@ migrated when it's loaded.
   (SRD "Armor Training"); held without it, it still counts as wielding a Shield (Unarmored Defense,
   Bracers of Defense) and the play sheet warns. No armor penalties for it.
 
+### Fixed — kenli F-002 D052 (option action resource)
+- An option-granted action can spend the nearest declared parent resource. Its own resource
+  takes precedence, unrelated sources are never searched, and an absent resource remains
+  unpayable. Choice visibility and action keys are unchanged; no content or document migration.
+
+### Added — kenli F-002 D052 (optional feature roll modifier)
+- A feature's `roll` can add an optional `ability` modifier, resolved from the current sheet.
+  Both fixed and progression dice support it; existing rolls without the field retain their
+  expressions and content bytes. The normal roll result, journal and shared use cost apply;
+  the caller still resolves the effect. No automatic damage absorption or SRD data change.
+
+### Added — kenli F-002 T12 final integration (no document change; SRD bytes unchanged)
+- D043: `levelItems(before, after, catalog)` — the items the grants of a build give beyond an
+  earlier one's (a gained level's new features, e.g. the XPHB Assassin's Tools at Rogue 3) — and
+  `gainLevelItems(before, after, state, catalog)`, which adds them free (`add_item`) once; the next
+  level's diff is empty. Message `play.level_items`. Public API snapshot updated (`LevelItem`).
+
+### Fixed — kenli F-002 T12 final corrections (SRD bytes unchanged; older documents still parse)
+- D035: an automation (`AutomationSchema`) adding a choice or a feat is refused also in nested
+  grants (`at_class_level`, a toggle's grants, any depth); `addsChoiceOrFeat(grants)`.
+- D042: Staggering Blow is two encounter marks. `staggered` (no Opportunity Attacks) ends at the
+  start of the Barbarian's next turn; the new mark kind `staggered_save` (Disadvantage on the
+  target's next saving throw) has no time limit of its own (`ends: null`, the XPHB text bounds only
+  the Opportunity Attack clause) and is used by that save, which no longer lifts the ban.
+  Encounter/history JSON Schemas regenerated (one more mark kind).
+- D037: a companion takes one action a turn however it's commanded: after a given-up Attack-action
+  attack the command is refused, and after the command the given-up attack is refused
+  (`refusal.companion_action_once`); with a command of two strikes (Bestial Fury) the given-up
+  attack is the first strike and the second is granted (`granted_attacks`). Nothing is spent on a
+  refusal.
+- D044: `stockItems`' `StockLine.equip` is the staged state's (an owned, already worn granted armor
+  with `equip: false` shows `true`; `false` takes nothing off), and items asked to be worn that
+  can't all be (two armors) refuse the whole list (`refusal.stock_equip_conflict`).
+
+### Added — kenli F-002 T13 (no document change; SRD bytes unchanged)
+- `itemQuote(catalog, id)`: an item's listed price as data (copper per bundle, bundle size; `cp:
+  null` for an unpriced magic item) — the price `buy` charges.
+- `stockItems(build, state, catalog, [{item, units, equip}])`: a kit bought on a state in memory —
+  units already carried are not bought again, a missing amount is bought in whole catalog bundles
+  (`received` units), the catalog price only, then the marked items worn/held; all or nothing
+  (`refusal.stock_units`, `refusal.stock_twice`, `refusal.stock_unpriced`, or `buy`'s refusals).
+
+### Added — kenli F-002 T12 batch B2b (optional values; SRD bytes and older documents unchanged)
+- Cast option effect `empowered` (Empowered Spell after the damage roll): `planCastOptions` asks for
+  it (`CastOptionPlan.empowered`) without paying it; `castSpell`'s `empower` hook on each damage roll;
+  an encounter cast that names it stops at the damage for the choice (`Pending.kind: empowered_spell`,
+  `Pending.dice`/`max_dice`, `answers` may hold dice indexes, `decide.dice`), same dice on replay, the
+  Sorcery Point paid once and only when used; `useEmpoweredSpell` for a roll by hand;
+  `rerollDamageDice`, `damageDice`, `RolledDamage.rerolled`. Refusals `refusal.empowered_*`,
+  `refusal.reroll_too_many`, `refusal.reroll_die_twice`.
+- Feature rule `devious_strikes`; Cunning Strike effects `daze`, `knock_out`, `obscure` with their
+  die costs (`CUNNING_STRIKE_DICE`), the Sneak Attack dice forgone are their sum; mark `dazed`
+  (only one of moving, an action or a Bonus Action that turn: `refusal.dazed_one`).
+- Fixed: Brutal Strike once per turn (its chosen roll, hit or miss).
+
+### Added — kenli F-002 T12 batch A corrections (review14 R14-01–04; all optional, SRD bytes unchanged)
+- Encounter `cast.payment: {type: "free", use}`: a free or at-will cast in an encounter (no slot;
+  the free cast's use spent once, none at will; its own level and spellcasting; no cast trigger);
+  encounter options list a spell's `free_casts`, and a free-only line defaults to its free cast.
+- Encounter casts and their target/area/zone/wall checks use the character's effective range
+  (`SpellLine.range`: Eldritch Spear, Spell Sniper) on a per-cast copy; options' targets too.
+- `FeatureAction.after_failed_roll` + `useAfterFailedRoll` (Peerless Skill: its die added to a failed
+  check or attack roll; the use spent only if it then succeeds; a save, a roll that didn't fail, no
+  use left refused; the DC/AC the table states when the roll had none) and `addBonusDie`.
+- `ContentPack.automation` (`AutomationDef`): a pack's play automation for features a character
+  already has, as ordinary grants gated by class/subclass level or a feat taken; a pack-level list
+  (like `patches`, kept in the split manifest), source-filtered; it adds no choice and no feat.
+- A skill grant with nothing left to give (every skill already proficient elsewhere) records its
+  pick as redundant (`issue.redundant_pick`, a note; no effect, no extra skill or Expertise)
+  instead of refusing or dropping it.
+
 ### Added / fixed — play hooks of kenli F-002 T12 batch A (all optional, no defaults: the SRD bundle and older documents keep their bytes)
 - `free_casts[].at_will` (Spell Mastery: no slot, nothing spent; `uses` then absent) and
   `free_casts[].line` (the named spells on the sheet only through that free cast: `SpellGrant.free_only`,
@@ -788,3 +859,11 @@ migrated when it's loaded.
 
 [Unreleased]: https://github.com/luigibrb/srd-rules-engine/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/luigibrb/srd-rules-engine/releases/tag/v0.1.0
+
+- kenli F-002 T12 (review15): `useAfterFailedRoll` once per roll (`RolledBonusDie.source`, `refusal.after_roll_used`); an encounter action whose earlier hit defeats a monster finishes, its later hits on it noted (`note.defeated_this_action`) instead of refusing the cast.
+
+- kenli F-002 T12 batch B1 (D021/D022/D024), all optional and absent from older content: `Grants.shape_saves` (an ability added to a save while in a form), `Grants.attack_damage_types` (another damage type for form attacks or a companion's strike; the attack's `damage_type`, by hand too), `DamageRider.applies_to.lines` (`shape`/`companion`), `DamageRider.scaling` (dice by class level), `DamageRider.conditions` (on the hit without a save, up to `max_size`), `FeatureAction.restores_when_empty`, `also_spends`, `restores_slot`, `after_feature`; the encounter `feature` action takes a slot `payment` and a Wild Shape `form`; one Attack action attack given up for a companion's strike per turn (`refusal.companion_strike_once`).
+
+- kenli F-002 T12 B2a (cast-time Metamagic), optional and absent from older content/records: `CastOption.effect` adds `subtle`, `heightened`, `careful`; `rules/metamagic.ts` (`planCastOptions`, `castOptionSaves`) shared by a roll by hand and an encounter cast; the encounter `cast` action takes `options` (cast option keys), `heightened` (one target) and `careful` (targets): Distant's range in the target/area checks, Quickened's Bonus Action and the level 1+ spell turn rule, Subtle (no un-hiding, costly/consumed Material kept), Heightened's Disadvantage (also on its zone's later saves), Careful's automatic successes with no damage instead of half; Sorcery Points paid once with the cast. `Grants.cast_option_limit` (more options while a toggle is active: Sorcery Incarnate) and `Grants.toggle_alternatives` (a toggle switched on with another resource when no use is left); `SaveResult.automatic_success`; `ZoneSchema.heightened`; `CastOptions.save_overrides`.
+
+- kenli F-002 T12 B2a correction (review17 D039/D040): Heightened Spell on a place-only zone (Web) chooses among the creatures in its area (no save when cast; the zone's later saves of that creature with Disadvantage); Careful Spell on one is refused (`refusal.careful_no_save_now`). `FeatureAction.activates` (optional): using it switches a same-source toggle on with the toggle's own cost and the action's economy (Innate Sorcery's Bonus Action, its use or the 2-point alternative).

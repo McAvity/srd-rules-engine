@@ -18,6 +18,7 @@ import type {
   SpellDef,
 } from "../models/content";
 import {
+  type CunningStrike,
   type EffectEnd,
   type Encounter,
   type EncounterAction,
@@ -94,6 +95,14 @@ import {
   type Terrain,
 } from "../rules/grid";
 import { message, plainMessage, ruleReason, texts, toMessage } from "../rules/messages";
+import {
+  type CastOptionPlan,
+  type CastOptionSheet,
+  castOptionSaves,
+  empowerDamage,
+  planCastOptions,
+} from "../rules/metamagic";
+import { damageDice } from "../rules/rerolls";
 import { mathRng, type Rng } from "../rules/rng";
 import type { AttackLine, AttackRider } from "../rules/sheet";
 import {
@@ -298,8 +307,8 @@ function withDodge(
         ],
       }
     : original;
-  // Staggering Blow: Disadvantage on its next saving throw.
-  const base = encounter.marks.some((m) => m.kind === "staggered" && m.on === c.id)
+  // Staggering Blow: Disadvantage on its next saving throw (its own mark, D042).
+  const base = encounter.marks.some((m) => m.kind === "staggered_save" && m.on === c.id)
     ? {
         ...view,
         condition_rolls: {
@@ -354,9 +363,14 @@ export function applyEncounterAction(
   let r: Omit<EncounterResult, "events" | "rolls">;
   if (action.type === "decide") {
     if (!pending) fail(message("refusal.there_no_decision_make"));
-    // Replay the stopped action with the same dice and one more answer.
+    // Replay the stopped action with the same dice and one more answer (kenli F-002 T12 B2b: for
+    // a choice of dice, the indexes picked; `use: false` keeps them).
     const clear = { ...encounter, pending: null };
-    r = attempt(clear, pending.action, counted, pending.rolls, [...pending.answers, action.use]);
+    if (pending.dice && action.use && !action.dice?.length)
+      fail(message("refusal.empowered_pick_dice", { max: pending.max_dice ?? 1 }));
+    if (!pending.dice && action.dice?.length) fail(message("refusal.dice_unexpected"));
+    const answer: Answer = pending.dice && action.use ? [...(action.dice ?? [])] : action.use;
+    r = attempt(clear, pending.action, counted, pending.rolls, [...pending.answers, answer]);
   } else {
     if (pending) {
       const question = pending.question_message ?? plainMessage(pending.question);
@@ -383,8 +397,13 @@ class PendingDecision {
     readonly kind: Decision["kind"],
     readonly question: Message,
     readonly recommended: boolean,
+    /** A choice of dice (Empowered Spell): the dice offered and how many can be picked. */
+    readonly choice?: { dice: NonNullable<Pending["dice"]>; max_dice: number },
   ) {}
 }
+
+/** An answer recorded for a decision: yes or no, or the dice picked (`Pending.answers`). */
+type Answer = boolean | number[];
 
 /** Run an action with recorded dice; a decision without an answer leaves it pending. */
 function attempt(
@@ -392,7 +411,7 @@ function attempt(
   action: EncounterAction,
   outer: EncounterContext,
   rolls: readonly number[],
-  answers: readonly boolean[],
+  answers: readonly Answer[],
 ): Omit<EncounterResult, "events" | "rolls"> {
   const recorded: number[] = [];
   const base = outer.rng ?? mathRng;
@@ -419,6 +438,7 @@ function attempt(
       question: error.question.text,
       question_message: error.question,
       recommended: error.recommended,
+      ...(error.choice ?? {}),
     };
     return {
       encounter: EncounterSchema.parse({ ...encounter, pending: stopped }),
@@ -435,13 +455,16 @@ function run(
   encounter: Encounter,
   action: EncounterAction,
   outer: EncounterContext,
-  answers: readonly boolean[],
+  answers: readonly Answer[],
   overridden: Message[],
 ): Omit<EncounterResult, "events" | "rolls"> {
   const e = structuredClone(encounter) as Encounter;
   // What happened, as messages; sentences from play and damage have code `text` for now.
   const notes: Message[] = [];
   const states: Record<string, CharacterState> = {};
+  // review15 R15-02: monsters defeated by an earlier hit of THIS action (Magic Missile's darts,
+  // Eldritch Blast's beams at one target): its later hits on them do nothing, the action goes on.
+  const defeatedNow = new Set<string>();
   // `force`: the GM overrides a refusal of legality (`FORCEABLE_REFUSALS`), noted in the log.
   const forcing = "force" in action && action.force === true;
   const forceable = (reason: Message) =>
@@ -515,8 +538,27 @@ function run(
   const decide: Decide = (d) => {
     const c = d.combatant.id ? e.combatants.find((x) => x.id === d.combatant.id) : undefined;
     if (!c || (c.decisions ?? e.decisions) === "auto") return d.recommended;
-    if (answered < answers.length) return answers[answered++] as boolean;
+    if (answered < answers.length) return answers[answered++] !== false;
     throw new PendingDecision(c.id, d.kind, d.message, d.recommended);
+  };
+  /**
+   * kenli F-002 T12 B2b: a choice of dice the player asked for with the action (Empowered Spell),
+   * asked whatever the decision mode (never answered automatically): the indexes picked in `dice`,
+   * or `null` to keep the roll.
+   */
+  const chooseDice = (
+    c: EncounterCombatant,
+    question: Message,
+    dice: NonNullable<Pending["dice"]>,
+    max_dice: number,
+  ): readonly number[] | null => {
+    if (answered < answers.length) {
+      const a = answers[answered++];
+      if (a === false || a === undefined) return null;
+      if (a === true) fail(message("refusal.empowered_pick_dice", { max: max_dice }));
+      return a;
+    }
+    throw new PendingDecision(c.id, "empowered_spell", question, false, { dice, max_dice });
   };
   const play = (c: EncounterCombatant, a: PlayAction): void => {
     const ref = characterRef(ctx, c);
@@ -553,6 +595,10 @@ function run(
     from?: EncounterCombatant,
   ): void => {
     for (const a of actions) {
+      if (a.type === "damage" && c.monster !== null && defeatedNow.has(c.id)) {
+        notes.push(message("note.defeated_this_action", { name: c.name }));
+        continue;
+      }
       let dc: number | null = null;
       let dealt = 0;
       if (a.type === "damage") {
@@ -566,7 +612,10 @@ function run(
       if (c.monster !== null) {
         const alive = !c.defeated;
         notes.push(...monsterEffect(ctx, c, a));
-        if (alive && c.defeated) deathBurst(c);
+        if (alive && c.defeated) {
+          defeatedNow.add(c.id);
+          deathBurst(c);
+        }
       } else {
         const relentless = a.type === "damage" ? relentlessRage(c, a) : null;
         if (relentless === null) play(c, a);
@@ -825,7 +874,14 @@ function run(
     });
     if (!who.length) return;
     const views = who.map((t) => encounterCombatant(e, t.id, ctx));
-    const r = saveAgainst({ ...save, conditions: z.conditions }, z.damage, views, { rng, decide });
+    // kenli F-002 T12 B2a: Heightened Spell's creature saves against the spell with Disadvantage.
+    const heightened = who.findIndex((t) => t.id === z.heightened);
+    const r = saveAgainst({ ...save, conditions: z.conditions }, z.damage, views, {
+      rng,
+      decide,
+      overrides:
+        heightened >= 0 ? [{ target: heightened, disadvantage: message("reason.heightened") }] : [],
+    });
     notes.push(
       message("zone.save", {
         label: z.label,
@@ -1186,8 +1242,9 @@ function run(
     c.inspiration = null;
   };
   const spendLegendaryResistance = (c: EncounterCombatant, save: SaveResult | null): void => {
-    // Staggering Blow's Disadvantage is on the next saving throw only.
-    if (save) e.marks = e.marks.filter((m) => !(m.kind === "staggered" && m.on === c.id));
+    // Staggering Blow's Disadvantage is on the next saving throw only; its Opportunity Attack ban
+    // (`staggered`) lasts until the start of the Barbarian's next turn regardless (D042).
+    if (save) e.marks = e.marks.filter((m) => !(m.kind === "staggered_save" && m.on === c.id));
     if (save?.indomitable && c.character !== null) {
       const ref = characterRef(ctx, c);
       const use = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).play.uses.find(
@@ -1512,9 +1569,10 @@ function run(
       thrown?: boolean;
       cover?: Cover;
       opportunity?: boolean;
-      cunning?: readonly ("poison" | "trip" | "withdraw")[];
+      cunning?: readonly CunningStrike[];
       brutal?: readonly ("forceful" | "hamstring" | "staggering" | "sundering")[];
       mastery_as?: "push" | "sap" | "slow";
+      damage_type?: string;
     },
   ): AttackResult => {
     const attacker = encounterCombatant(e, c.id, ctx);
@@ -1539,6 +1597,8 @@ function run(
     const paidUses: string[] = [];
     const alternatives: string[] = [];
     const riderSaves: NonNullable<AttackRider["save"] & { rider: string }>[] = [];
+    // kenli F-002 T12 (D024): conditions on the hit without a save (Charge's Prone), up to a size.
+    const riderConditions: NonNullable<AttackRider["conditions"] & { rider: string }>[] = [];
     for (const r of riders) {
       const rider = line?.riders.find((x) => x.id === r.rider || x.name === r.rider);
       if (rider?.own_turn && current()?.id !== c.id) {
@@ -1574,6 +1634,7 @@ function run(
         if (!carried) alternatives.push(again);
       } else if (rider?.uses && c.character !== null) paidUses.push(rider.uses);
       if (rider?.save) riderSaves.push({ ...rider.save, rider: rider.name });
+      if (rider?.conditions) riderConditions.push({ ...rider.conditions, rider: rider.name });
     }
     // Paid riders are checked before any die is rolled: all of this attack's uses together.
     if (paidUses.length) {
@@ -1645,6 +1706,7 @@ function run(
         decide,
         mode: options.mode,
         two_handed: options.two_handed,
+        ...(options.damage_type ? { damage_type: options.damage_type } : {}),
         riders,
         ally_adjacent: spatial.ally_adjacent,
         within_5ft: spatial.within_5ft,
@@ -1669,6 +1731,8 @@ function run(
       throw error;
     }
     c.extended = true; // an attack roll extends Rage
+    // Brutal Strike: the chosen roll is this one, hit or miss (once per turn).
+    if (strikes.forgo_advantage) c.riders_used.push(BRUTAL_STRIKE);
     unhide(c, message("why.attack_roll"));
     useInspiration(c, hit.inspiration);
     if (help) e.helps = e.helps.filter((h) => h !== help);
@@ -1747,6 +1811,30 @@ function run(
             t,
             rs.conditions.map((condition) => ({ type: "add_condition" as const, condition })),
           );
+      }
+      for (const rc of riderConditions) {
+        const size = encounterCombatant(e, t.id, ctx).size;
+        const order = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
+        const names = rc.names
+          .map((x) => lookup(catalogOf(ctx, t).conditions, x)?.name ?? x)
+          .join(", ");
+        if (rc.max_size && size && order.indexOf(size) > order.indexOf(rc.max_size)) {
+          notes.push(
+            message("attack.rider_condition_size", {
+              target: t.name,
+              rider: rc.rider,
+              conditions: names,
+            }),
+          );
+          continue;
+        }
+        applyTo(
+          t,
+          rc.names.map((condition) => ({ type: "add_condition" as const, condition })),
+        );
+        notes.push(
+          message("attack.rider_condition", { target: t.name, rider: rc.rider, conditions: names }),
+        );
       }
       c.hits.push(t.id);
       c.last_hit = {
@@ -1862,8 +1950,11 @@ function run(
           state: ref.state,
         }
       : null;
-    // "Brutal Strike": on your turn, not with an Opportunity Attack.
+    // "Brutal Strike": on your turn, not with an Opportunity Attack; kenli F-002 T12 B2b: "one
+    // Strength-based attack roll of your choice on your turn" — once per turn.
     const turn = options.opportunity || current()?.id !== c.id ? false : undefined;
+    if (options.brutal?.length && c.riders_used.includes(BRUTAL_STRIKE))
+      refuse(message("refusal.already_used_turn", { name: c.name, again: "Brutal Strike" }));
     try {
       return strikeDice(attacker, attackName, options, character, { turn });
     } catch (error) {
@@ -1894,7 +1985,7 @@ function run(
         notes.push(message("cunning.too_large", { name: t.name }));
         continue;
       }
-      const ability = effect === "poison" ? "con" : "dex";
+      const ability = effect === "trip" || effect === "obscure" ? "dex" : "con";
       const save = rollSavingThrow(encounterCombatant(e, t.id, ctx), ability, dc, { rng, decide });
       notes.push(
         message("cunning.save", {
@@ -1907,7 +1998,41 @@ function run(
       spendLegendaryResistance(t, save);
       if (save.success) continue;
       if (effect === "trip") applyTo(t, [{ type: "add_condition", condition: "prone" }]);
-      else {
+      else if (effect === "daze") {
+        // "on its next turn, it can do only one of the following: move or take an action or a
+        // Bonus Action" (its coming turn: this one's if it's its own turn now is the next one's).
+        e.marks = e.marks.filter((m) => !(m.on === t.id && m.kind === "dazed"));
+        e.marks.push({
+          kind: "dazed",
+          label: "Cunning Strike (Daze)",
+          by: c.id,
+          on: t.id,
+          ends: { at: "end", of: t.id, count: 1, skip_current: current()?.id === t.id },
+          damage: null,
+        });
+        notes.push(message("cunning.dazed", { name: t.name }));
+      } else if (effect === "knock_out") {
+        // "the Unconscious condition for 1 minute or until it takes any damage … repeats the save
+        // at the end of each of its turns".
+        applyTo(t, [{ type: "add_condition", condition: "unconscious" }]);
+        addEffects(t, ["unconscious"], {
+          source: c.id,
+          label: "Cunning Strike (Knock Out)",
+          concentration: false,
+          ends: { at: "start", of: c.id, count: 10, skip_current: false },
+          ends_on: ["damage"],
+          repeat_save: { ability: "con", dc },
+        });
+      } else if (effect === "obscure") {
+        // "the Blinded condition until the end of its next turn".
+        applyTo(t, [{ type: "add_condition", condition: "blinded" }]);
+        addEffects(t, ["blinded"], {
+          source: c.id,
+          label: "Cunning Strike (Obscure)",
+          concentration: false,
+          ends: { at: "end", of: t.id, count: 1, skip_current: current()?.id === t.id },
+        });
+      } else {
         applyTo(t, [{ type: "add_condition", condition: "poisoned" }]);
         // "for 1 minute. At the end of each of its turns, the Poisoned target repeats the save"
         addEffects(t, ["poisoned"], {
@@ -1919,17 +2044,21 @@ function run(
         });
       }
     }
-    const mark = (kind: "hamstrung" | "staggered" | "sundered", text: Message) => {
+    const mark = (
+      kind: "hamstrung" | "staggered" | "staggered_save" | "sundered",
+      text: Message | null,
+      ends: typeof until | null = until,
+    ) => {
       e.marks = e.marks.filter((m) => !(m.on === t.id && m.kind === kind));
       e.marks.push({
         kind,
         label: "Brutal Strike",
         by: c.id,
         on: t.id,
-        ends: { ...until },
+        ends: ends ? { ...ends } : null,
         damage: null,
       });
-      notes.push(text);
+      if (text) notes.push(text);
     };
     for (const effect of options.brutal ?? []) {
       if (effect === "forceful") {
@@ -1938,6 +2067,9 @@ function run(
         mark("hamstrung", message("brutal.hamstring", { target: t.name, name: c.name }));
       } else if (effect === "staggering") {
         mark("staggered", message("brutal.staggering", { target: t.name, name: c.name }));
+        // XPHB: "Disadvantage on the next saving throw it makes" has no end of its own (only the
+        // Opportunity Attack ban is "until the start of your next turn"): used by its next save.
+        mark("staggered_save", null, null);
       } else {
         mark("sundered", message("brutal.sundering", { target: t.name }));
       }
@@ -2154,10 +2286,23 @@ function run(
       unaffected?: readonly string[];
       /** A readied spell, its slot spent when it was readied. */
       held?: boolean;
+      /** kenli F-002 T12 (R14-02): paid by a free cast: no slot; its use spent instead (none at will). */
+      free?: { use: string; at_will: boolean };
       /** A wall's placement (`placeWall`). */
       wall?: PlacedWall;
       /** A smite riding a Critical Hit: its dice are doubled. */
       critical?: boolean;
+      /** kenli F-002 T12 B2a (Metamagic): Subtle Spell, Heightened/Careful targets (ids). */
+      subtle?: boolean;
+      heightened?: string;
+      careful?: readonly string[];
+      castPlan?: CastOptionPlan;
+      /** The caster's sheet for the options (a `PlaySheet`: its uses name Empowered's cost). */
+      castSheet?: CastOptionSheet & {
+        readonly play: { readonly uses: readonly { key: string; name: string }[] };
+      };
+      /** A place-only zone's creatures (no save when cast): Heightened chooses among them. */
+      zoneTargets?: readonly string[];
     },
   ): SpellCastResult => {
     const zone = spell.mechanics?.zone ?? null;
@@ -2187,8 +2332,50 @@ function run(
       unaffected: _unaffected,
       held,
       wall: placedWall,
+      subtle,
+      heightened: heightenedId,
+      careful: carefulIds,
+      castPlan,
+      castSheet,
+      zoneTargets,
       ...cast
     } = options;
+    // kenli F-002 T12 B2a: Heightened and Careful on the spell's actual targets (after its area).
+    const optionSaves =
+      castPlan && castSheet
+        ? (() => {
+            // A place-only zone: its creatures now, for the choice only (no save is made now).
+            const pool = !targets.length && zoneTargets ? zoneTargets.map(find) : targets;
+            // Careful: its creatures succeed on the save "when you cast" — a place-only zone makes none.
+            if (pool !== targets && castPlan.careful)
+              fail(
+                message("refusal.careful_no_save_now", {
+                  option: castPlan.picked.find((o) => o.effect === "careful")?.name ?? "",
+                  spell: spell.name,
+                }),
+              );
+            const idx = (id: string) => pool.findIndex((t) => t.id === id);
+            try {
+              const r = castOptionSaves(
+                castPlan,
+                castSheet,
+                spell,
+                pool,
+                {
+                  heightened: heightenedId === undefined ? undefined : idx(heightenedId),
+                  careful: carefulIds?.map(idx),
+                },
+                pool.findIndex((t) => t.id === c.id),
+              );
+              return pool === targets ? r : { overrides: [], messages: r.messages };
+            } catch (error) {
+              if (error instanceof RangeError) fail(ruleReason(error));
+              throw error;
+            }
+          })()
+        : null;
+    if (!castPlan && (heightenedId !== undefined || carefulIds?.length))
+      fail(message("refusal.heightened_one_target", { option: "Heightened Spell" }));
     const relevant = !!spell.mechanics?.attack || spell.mechanics?.save?.ability === "dex";
     const views = targets.map((t) =>
       withCover(
@@ -2238,6 +2425,44 @@ function run(
       }
       return out;
     };
+    // kenli F-002 T12 B2b, Empowered Spell asked for with the cast: once its damage is rolled
+    // (an area's one roll, or a beam's), the player picks the dice to reroll or keeps the roll;
+    // used once per cast, its cost paid then, the targets' damage worked out from the new dice.
+    const empowered = castPlan?.empowered ?? null;
+    let empoweredUse: { cost: PlayAction; note: Message } | null = null;
+    const empower = (damage: RolledDamage): RolledDamage => {
+      if (!empowered || !castSheet || empoweredUse) return damage;
+      const dice = damageDice(damage);
+      if (!dice.length) return damage;
+      const max = empowered.reroll_dice ?? Math.max(1, castSheet.modifiers.cha);
+      const question = message("decision.empowered_spell", {
+        name: c.name,
+        option: empowered.name,
+        spell: spell.name,
+        dice: dice.map((d) => d.value).join(", "),
+        total: damage.total,
+        max,
+        cost: empowered.cost,
+        use: castSheet.play.uses.find((u) => u.key === empowered.uses)?.name ?? empowered.uses,
+      });
+      const picked = chooseDice(c, question, dice, max);
+      if (picked === null) return damage;
+      const chosen = picked.map((i) => dice[i] ?? fail(message("refusal.reroll_die_unknown")));
+      try {
+        const done = empowerDamage(
+          empowered,
+          castSheet.modifiers.cha,
+          damage,
+          chosen.map((d) => ({ part: d.part, die: d.die })),
+          { rng },
+        );
+        empoweredUse = { cost: done.cost, note: done.message };
+        return done.damage;
+      } catch (error) {
+        if (error instanceof RangeError) fail(ruleReason(error));
+        throw error;
+      }
+    };
     let r: SpellCastResult;
     try {
       r = castSpell(encounterCombatant(e, c.id, ctx), spell, views, {
@@ -2248,6 +2473,8 @@ function run(
         modesFor,
         within_5ft,
         nearby: nearbyViews,
+        ...(optionSaves ? { save_overrides: optionSaves.overrides } : {}),
+        ...(empowered ? { empower } : {}),
       });
     } catch (error) {
       if (error instanceof RangeError) fail(ruleReason(error));
@@ -2260,17 +2487,25 @@ function run(
     const upcast = r.slot_level !== null && r.slot_level > spell.level ? r.slot_level : 0;
     notes.push(
       message("spell.cast", { name: c.name, spell: spell.name, level: upcast }),
+      ...(castPlan?.messages ?? []),
+      ...(optionSaves?.messages ?? []),
       ...r.messages,
+      ...(empoweredUse ? [(empoweredUse as { note: Message }).note] : []),
     );
+    // Empowered Spell's Sorcery Point: once, only when it was used on this cast's damage.
+    if (empoweredUse) applyTo(c, [(empoweredUse as { cost: PlayAction }).cost]);
     // A held spell's slot was spent when it was readied.
-    applyTo(
-      c,
-      r.caster_actions.filter(
-        (a) => !held || (a.type !== "spend_slot" && a.type !== "spend_pact_slot"),
+    const free = options.free;
+    applyTo(c, [
+      ...r.caster_actions.filter(
+        (a) => !(held || free) || (a.type !== "spend_slot" && a.type !== "spend_pact_slot"),
       ),
-    );
+      ...(free && !free.at_will ? [{ type: "use" as const, key: free.use }] : []),
+    ]);
     // "you make … or you cast a spell with a Verbal component": no longer hidden.
-    if (/\bV\b/.test(spell.components)) unhide(c, message("why.cast_spell", { spell: spell.name }));
+    // Subtle Spell: no Verbal component, so it doesn't give the caster away.
+    if (!subtle && /\bV\b/.test(spell.components))
+      unhide(c, message("why.cast_spell", { spell: spell.name }));
     for (const hit of r.targets) {
       const t = targets[hit.target] as EncounterCombatant;
       useInspiration(c, hit.attack?.inspiration);
@@ -2436,6 +2671,7 @@ function run(
         once_per_turn: zone?.once_per_turn ?? true,
         optional: zone?.optional ?? false,
         space: zone?.space ?? 1,
+        ...(heightenedId ? { heightened: heightenedId } : {}),
         ram: zone?.ram ?? false,
         difficult: (zone?.difficult ?? false) || (wallSpec?.difficult ?? false),
         squares: placedWall ? placedWall.zone : null,
@@ -3651,6 +3887,31 @@ function run(
           if (t.disengaged && !action.guardian)
             fail(message("refusal.disengaged_movement_doesnt_provoke", { target: t.name }));
         }
+        // kenli F-002 T12 (D022): "sacrifice one of your attacks when you take the Attack action to
+        // command the beast to take the Beast's Strike action": one of the Attack action's attacks.
+        if (!reaction && c.character !== null) {
+          const ref = characterRef(ctx, c);
+          const own = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
+          if (own.companions.some((x) => x.attack === action.attack)) {
+            if (c.features_used.includes(COMPANION_STRIKE))
+              refuse(message("refusal.companion_strike_once", { name: c.name }));
+            // D037: the beast takes one action a turn, however it's commanded (Bonus Action or
+            // a given-up attack).
+            if (c.features_used.includes(COMPANION_ACTION))
+              refuse(message("refusal.companion_action_once", { name: c.name }));
+            c.features_used.push(COMPANION_STRIKE, COMPANION_ACTION);
+            // Bestial Fury: the Beast's Strike action is two strikes however it's commanded; the
+            // given-up attack is the first, the rest are granted like the command's.
+            const count = Math.max(
+              1,
+              ...own.actions
+                .filter((a) => a.attacks?.attack === action.attack)
+                .map((a) => a.attacks?.count ?? 1),
+            );
+            if (count > 1 && (!c.granted_attacks || c.granted_attacks.count === 0))
+              c.granted_attacks = { attack: action.attack, count: count - 1 };
+          }
+        }
         spendAttack(c, reaction);
         if (light && !reaction) c.light_attacks.push(action.attack);
         // Which attacks the Attack action was made with (Pole Strike needs a qualifying one).
@@ -3927,6 +4188,17 @@ function run(
       const alternative = f.alternative ? `alternative:${f.alternative.label}` : null;
       if (f.alternative && alternative && c.riders_used.includes(alternative))
         refuse(message("refusal.already_used_turn", { name: c.name, again: f.alternative.label }));
+      // kenli F-002 T12 (D022) Exceptional Training: only after the command this turn.
+      if (f.after_feature && !c.features_used.includes(f.after_feature)) {
+        const ref = c.character !== null ? characterRef(ctx, c) : null;
+        const after =
+          (ref &&
+            computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).actions.find(
+              (a) => a.key === f.after_feature,
+            )?.name) ??
+          f.after_feature;
+        fail(message("refusal.needs_feature_first", { feature: f.name, after }));
+      }
       if (f.after_attack_action && !c.features_used.includes(ATTACK_ACTION))
         fail(message("refusal.needs_attack_action", { feature: f.name }));
       // Pole Strike: an attack with a qualifying weapon as part of this turn's Attack action.
@@ -3938,11 +4210,30 @@ function run(
       if (f.extra_action && !c.used.action) {
         fail(message("refusal.take_your_action_gives", { feature: f.name }));
       }
+      // D037: commanding the companion's strike is its one action this turn (also when an
+      // attack was given up for it).
+      const commandsCompanion =
+        !!f.attacks &&
+        computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog).companions.some(
+          (x) => x.attack === f.attacks?.attack,
+        );
+      if (commandsCompanion && c.features_used.includes(COMPANION_ACTION))
+        refuse(message("refusal.companion_action_once", { name: c.name }));
       const on = f.many ? targets.map((x) => x.name) : t === c ? [] : [t.name];
       notes.push(
         message("feature.used", { name: c.name, feature: f.name, count: on.length, targets: on }),
       );
-      play(c, { type: "use_feature", key: f.key, amount: action.amount });
+      // kenli F-002 T12 B2a (D040): a feature that switches a toggle on (Innate Sorcery) does it
+      // with its economy, through the toggle's own activation (its use, or its alternative).
+      if (f.activates) applyTo(c, [{ type: "activate", key: f.activates }]);
+      else
+        play(c, {
+          type: "use_feature",
+          key: f.key,
+          amount: action.amount,
+          ...(action.payment ? { payment: action.payment } : {}),
+          ...(action.form ? { form: action.form } : {}),
+        });
       c.features_used.push(f.key);
       // A die-free variant counts as the maneuver's use, marked as taken under its alternative.
       if (f.counts_as)
@@ -3989,6 +4280,7 @@ function run(
         if (also === "dodge") c.dodging = true;
       }
       if (f.attacks) c.granted_attacks = { ...f.attacks };
+      if (commandsCompanion) c.features_used.push(COMPANION_ACTION);
       if (f.save) {
         const fs = f.save;
         // Damage is rolled once for every creature (SRD "Damage against Multiple Targets").
@@ -4079,9 +4371,12 @@ function run(
     case "cast": {
       const c = find(action.id);
       canAct(c);
-      const spell =
+      let spell =
         lookup(catalogOf(ctx, c).spells, action.spell) ??
         fail(message("refusal.unknown_spell", { spell: action.spell }));
+      let freeCast: { use: string; at_will: boolean } | undefined;
+      let castPlan: CastOptionPlan | undefined;
+      let castSheet: ReturnType<typeof computePlaySheet> | undefined;
       let what: "action" | "bonus_action" | "reaction" = "action";
       let slot_level = action.slot_level;
       let spellcasting: string | undefined;
@@ -4094,12 +4389,89 @@ function run(
           ref.catalog ?? ctx.catalog,
         ).spells.find((x) => x.id === spell.id);
         if (!known) fail(message("refusal.cant_cast", { name: c.name, spell: spell.name }));
-        // kenli F-002 T12 (D026): only through its free cast (the sheet's roll), never a slot.
-        if (known.grants.length > 0 && known.grants.every((g) => g.free_only === true))
+        // kenli F-002 T12 (R14-03): the range this character casts it with (Eldritch Spear, Spell
+        // Sniper: the sheet line's `range`), on a copy for this cast only.
+        if (known.range) spell = { ...spell, range: known.range };
+        // kenli F-002 T12 (R14-02): a free cast's payment, checked as the sheet's roll checks it.
+        if (action.payment) {
+          const pay = action.payment;
+          const line = computePlaySheet(
+            ref.build,
+            ref.state,
+            ref.catalog ?? ctx.catalog,
+          ).spells.find((x) => x.id === spell.id);
+          const entry =
+            line?.free.find((f) => f.use === pay.use) ??
+            fail(message("refusal.free_cast_not_for_spell", { use: pay.use, spell: spell.name }));
+          if (!entry.available)
+            refuse(
+              entry.reason?.message ?? message("refusal.free_cast_spent", { use: entry.name }),
+            );
+          if ((action.slot_level !== undefined && action.slot_level !== spell.level) || action.pact)
+            fail(
+              message("refusal.free_cast_base_level", {
+                spell: spell.name,
+                use: entry.name,
+                level: spell.level,
+              }),
+            );
+          if (action.spellcasting !== undefined && action.spellcasting !== entry.spellcasting)
+            fail(
+              message("refusal.free_cast_source", {
+                spell: spell.name,
+                use: entry.name,
+                spellcasting: entry.spellcasting ?? "",
+              }),
+            );
+          if (action.triggers?.length)
+            fail(
+              message("refusal.trigger_needs_slotted_school", {
+                trigger: action.triggers[0]?.key ?? "",
+                school: spell.school,
+              }),
+            );
+          freeCast = { use: entry.use, at_will: entry.at_will };
+          slot_level = spell.level;
+          spellcasting = entry.spellcasting ?? undefined;
+        } else if (known.grants.length > 0 && known.grants.every((g) => g.free_only === true))
+          // kenli F-002 T12 (D026): only through its free cast, never a slot.
           fail(message("refusal.free_cast_only", { spell: spell.name, use: known.source }));
-        spellcasting = action.spellcasting ?? spellcastingOf(known);
+        spellcasting ??= action.spellcasting ?? spellcastingOf(known);
         what = castingEconomy(spell);
+        // kenli F-002 T12 B2a: cast options (Metamagic) on this cast, checked as by hand.
+        if (action.options?.length) {
+          const sheetNow = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
+          try {
+            castPlan = planCastOptions(sheetNow, spell, action.options);
+          } catch (error) {
+            if (error instanceof RangeError) fail(ruleReason(error));
+            throw error;
+          }
+          castSheet = sheetNow;
+          // kenli F-002 T12 B2b: Empowered Spell asked for needs its Sorcery Point on top of the
+          // cast's other options (checked now, paid only if it's used on the damage).
+          const emp = castPlan.empowered;
+          if (emp) {
+            const use = sheetNow.play.uses.find((u) => u.key === emp.uses);
+            const others = castPlan.costs.reduce(
+              (n, x) => n + (x.type === "use" && x.key === emp.uses ? (x.amount ?? 1) : 0),
+              0,
+            );
+            const left = use ? use.max - use.spent : 0;
+            if (left < others + emp.cost)
+              refuse(
+                message("refusal.character", {
+                  name: c.name,
+                  reason: message("refusal.uses_left_count", { name: use?.name ?? emp.uses, left }),
+                }),
+              );
+          }
+          if (castPlan.range) spell = { ...spell, range: castPlan.range };
+          if (castPlan.quickened) what = "bonus_action";
+        }
       } else {
+        if (action.options?.length)
+          fail(message("refusal.no_cast_option", { key: action.options[0] ?? "" }));
         // A monster casts it through an action that lists it (legendary ones: `legendary`).
         try {
           line = monsterCastLine(monsterDef(ctx, c), c.name, spell, action.via);
@@ -4130,6 +4502,15 @@ function run(
         }
       }
       const released = releasing?.id === c.id;
+      // kenli F-002 T12 B2a, Quickened Spell: "You can't modify a spell in this way if you've
+      // already cast a level 1+ spell on the current turn, nor can you cast a level 1+ spell on
+      // this turn after modifying a spell in this way" (the current turn, whoever's it is).
+      const turnKey = `${e.round}:${e.turn}`;
+      const leveled = spell.level >= 1;
+      if (castPlan?.quickened && c.features_used.includes(`${LEVELED_CAST}@${turnKey}`))
+        refuse(message("refusal.quickened_after_leveled", { spell: spell.name }));
+      if (leveled && c.features_used.includes(`${QUICKENED_CAST}@${turnKey}`))
+        refuse(message("refusal.leveled_after_quickened", { spell: spell.name }));
       if (what === "reaction") {
         if (e.round === 0) fail(message("refusal.fight_hasnt_started"));
       } else onTurn(c, "cast");
@@ -4166,6 +4547,9 @@ function run(
       // A zone that makes no save when it appears (Spirit Guardians, Web) only takes its place.
       const placeOnly = action.area && spell.mechanics?.zone && !spell.mechanics.zone.on_cast;
       if (placeOnly) checkZonePoint(c, spell, action.area?.point);
+      // kenli F-002 T12 B2a (D039): a place-only zone (Web) has no save when cast; Heightened's
+      // creature is one of those in its area, its later saves made with Disadvantage.
+      const zoneTargets = placeOnly && action.area ? spellArea(c, spell, action.area) : undefined;
       const area = smite
         ? [smite.target]
         : wall
@@ -4189,8 +4573,17 @@ function run(
         point: action.area?.point,
         unaffected: action.unaffected,
         held: released && releasing?.held,
+        ...(freeCast ? { free: freeCast } : {}),
+        ...(castPlan ? { castPlan, castSheet, subtle: !!castPlan.subtle } : {}),
+        ...(action.heightened !== undefined ? { heightened: action.heightened } : {}),
+        ...(action.careful?.length ? { careful: action.careful } : {}),
+        ...(zoneTargets ? { zoneTargets } : {}),
       });
       if (!released) c.used[what] = true;
+      // Metamagic paid once with the cast (Sorcery Points), through the character's play actions.
+      if (castPlan) applyTo(c, [...castPlan.costs]);
+      if (leveled) c.features_used.push(`${LEVELED_CAST}@${turnKey}`);
+      if (castPlan?.quickened) c.features_used.push(`${QUICKENED_CAST}@${turnKey}`);
       // kenli F-002 T12 (D016): cast triggers (Arcane Ward) paid with this cast, after its slot,
       // through the character's own play action (it checks the school, the slot and the pool).
       if (action.triggers?.length) {
@@ -4233,6 +4626,19 @@ function run(
     const c = find(releasing.id);
     c.used.reaction = true;
     c.readied = null;
+  }
+  // kenli F-002 T12 B2b, Cunning Strike's Daze: on that turn, only one of moving, an action or a
+  // Bonus Action (checked after the action: refused, nothing of it applied).
+  const dazedNow = current();
+  if (
+    dazedNow &&
+    e.marks.some(
+      (m) => m.kind === "dazed" && m.on === dazedNow.id && m.ends && !m.ends.skip_current,
+    )
+  ) {
+    const done = [dazedNow.used.action, dazedNow.used.bonus_action, dazedNow.moved > 0];
+    if (done.filter(Boolean).length > 1)
+      refuse(message("refusal.dazed_one", { name: dazedNow.name }));
   }
   sweep();
   return {
@@ -4712,8 +5118,17 @@ function sizeOf(ctx: EncounterContext, c: EncounterCombatant): string | null | u
 const SIZES = ["tiny", "small", "medium", "large", "huge", "gargantuan"];
 /** `features_used` marker: the Attack action was taken this turn (Pole Strike needs it). */
 const ATTACK_ACTION = "action:attack";
+/** kenli F-002 T12 (D022): an Attack action attack given up for the companion's strike this turn. */
+const COMPANION_STRIKE = "action:companion-strike";
+/** kenli F-002 T12 (D037): the companion's one action this turn taken (either command). */
+const COMPANION_ACTION = "action:companion-action";
+/** kenli F-002 T12 B2a: a level 1+ spell cast on a turn, and a Quickened Spell (by turn key). */
+const LEVELED_CAST = "cast:leveled";
+const QUICKENED_CAST = "cast:quickened";
 /** kenli F-002 T08: Savage Attacker used this turn (in `riders_used`, reset at every turn). */
 const SAVAGE_ATTACKER = "savage_attacker";
+/** kenli F-002 T12 B2b: Brutal Strike used this turn (`riders_used`). */
+const BRUTAL_STRIKE = "brutal_strike";
 /** `features_used` marker: an attack with this line was made as part of the Attack action. */
 const attackMark = (attack: string): string => `${ATTACK_ACTION}:${attack}`;
 /** `features_used` marker: `feature` was used this turn under the alternative `label`. */

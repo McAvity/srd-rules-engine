@@ -32,6 +32,7 @@ import {
   resolve,
 } from "../rules/build-resolution";
 import {
+  exhaustedGrant,
   type Issue,
   issuesForLevel,
   issuesForStep,
@@ -234,9 +235,12 @@ export function setChoice(
     errors.push(message("builder.choose_at_most", { choice: choice.label, count }));
   }
   const views = new Map(res.options(choice).map((v) => [v.id, v]));
+  // kenli F-002 T12 (R14-05): an exhausted skill grant records a redundant pick (no effect).
+  const exhausted = exhaustedGrant(choice.definition.kind, [...views.values()]);
   for (const value of values) {
     const view = views.get(value);
     if (!view) errors.push(message("builder.not_option_for", { value, choice: choice.label }));
+    else if (exhausted && view.unavailable_message?.code === "option.proficient_from") continue;
     else if (view.unavailable_message) {
       errors.push(message("issue.option_why", { name: view.name, why: view.unavailable_message }));
     }
@@ -608,6 +612,8 @@ function firstInvalidValue(res: Resolution): [string, number, Message] | null {
       }
       continue;
     }
+    // kenli F-002 T12 (R14-05): a redundant pick on an exhausted skill grant is kept (no effect).
+    const exhausted = exhaustedGrant(choice.definition.kind, [...views.values()]);
     for (const [i, value] of values.entries()) {
       const view = views.get(value);
       if (!view && !seen.has(value)) {
@@ -620,7 +626,10 @@ function firstInvalidValue(res: Resolution): [string, number, Message] | null {
       if (seen.has(value) || !view) {
         return [choice.key, i, repaired(choice, message("builder.removed_invalid", { value }))];
       }
-      if (view.unavailable_message) {
+      if (
+        view.unavailable_message &&
+        !(exhausted && view.unavailable_message.code === "option.proficient_from")
+      ) {
         const note = message("builder.removed_because", {
           name: view.name,
           why: view.unavailable_message,

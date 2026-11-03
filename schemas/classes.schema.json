@@ -956,6 +956,13 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "lines": {
+                    "type": "string",
+                    "enum": [
+                      "shape",
+                      "companion"
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -1058,6 +1065,55 @@
               },
               "requires_feature": {
                 "type": "string"
+              },
+              "scaling": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 20
+                    },
+                    "dice": {
+                      "type": "string",
+                      "pattern": "^\\d+d\\d+$"
+                    }
+                  },
+                  "required": [
+                    "level",
+                    "dice"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "conditions": {
+                "type": "object",
+                "properties": {
+                  "names": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "max_size": {
+                    "type": "string",
+                    "enum": [
+                      "tiny",
+                      "small",
+                      "medium",
+                      "large",
+                      "huge",
+                      "gargantuan"
+                    ]
+                  }
+                },
+                "required": [
+                  "names"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -1157,6 +1213,7 @@
               "great_weapon_fighting",
               "cunning_strike",
               "improved_cunning_strike",
+              "devious_strikes",
               "brutal_strike",
               "improved_brutal_strike",
               "relentless_rage"
@@ -1478,6 +1535,33 @@
                 ],
                 "additionalProperties": false
               },
+              "after_failed_roll": {
+                "type": "object",
+                "properties": {
+                  "kinds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "check",
+                        "attack"
+                      ]
+                    }
+                  },
+                  "spend": {
+                    "type": "string",
+                    "enum": [
+                      "on_success"
+                    ]
+                  }
+                },
+                "required": [
+                  "kinds",
+                  "spend"
+                ],
+                "additionalProperties": false
+              },
               "shape": {
                 "type": "object",
                 "properties": {
@@ -1795,6 +1879,23 @@
               "restores": {
                 "type": "string"
               },
+              "restores_when_empty": {
+                "type": "boolean"
+              },
+              "also_spends": {
+                "type": "string"
+              },
+              "restores_slot": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9
+              },
+              "after_feature": {
+                "type": "string"
+              },
+              "activates": {
+                "type": "string"
+              },
               "slot_payment": {
                 "type": "string",
                 "enum": [
@@ -1809,6 +1910,17 @@
                     "properties": {
                       "progression": {
                         "type": "string"
+                      },
+                      "ability": {
+                        "type": "string",
+                        "enum": [
+                          "str",
+                          "dex",
+                          "con",
+                          "int",
+                          "wis",
+                          "cha"
+                        ]
                       }
                     },
                     "required": [
@@ -1822,6 +1934,17 @@
                       "dice": {
                         "type": "string",
                         "pattern": "^\\d+d\\d+$"
+                      },
+                      "ability": {
+                        "type": "string",
+                        "enum": [
+                          "str",
+                          "dex",
+                          "con",
+                          "int",
+                          "wis",
+                          "cha"
+                        ]
                       }
                     },
                     "required": [
@@ -2270,7 +2393,11 @@
                     "type": "string",
                     "enum": [
                       "distant",
-                      "quickened"
+                      "quickened",
+                      "subtle",
+                      "heightened",
+                      "careful",
+                      "empowered"
                     ]
                   },
                   {
@@ -2322,6 +2449,130 @@
         },
         "shape_casting": {
           "type": "boolean"
+        },
+        "cast_option_limit": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "while_active": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "count",
+            "while_active"
+          ],
+          "additionalProperties": false
+        },
+        "toggle_alternatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "toggle": {
+                "type": "string"
+              },
+              "resource_class": {
+                "type": "string"
+              },
+              "resource": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "toggle",
+              "resource_class",
+              "resource",
+              "amount"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "shape_saves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "save": {
+                "type": "string",
+                "enum": [
+                  "str",
+                  "dex",
+                  "con",
+                  "int",
+                  "wis",
+                  "cha"
+                ]
+              },
+              "ability": {
+                "type": "string",
+                "enum": [
+                  "str",
+                  "dex",
+                  "con",
+                  "int",
+                  "wis",
+                  "cha"
+                ]
+              }
+            },
+            "required": [
+              "save",
+              "ability"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "attack_damage_types": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lines": {
+                "type": "string",
+                "enum": [
+                  "shape",
+                  "companion"
+                ]
+              },
+              "types": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "acid",
+                    "bludgeoning",
+                    "cold",
+                    "fire",
+                    "force",
+                    "lightning",
+                    "necrotic",
+                    "piercing",
+                    "poison",
+                    "psychic",
+                    "radiant",
+                    "slashing",
+                    "thunder"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "lines",
+              "types"
+            ],
+            "additionalProperties": false
+          }
         },
         "d20_floors": {
           "type": "array",

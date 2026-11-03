@@ -31,7 +31,7 @@ import {
 import { finalScores } from "./ability-scores";
 import { type ActiveSource, mergeGrants, type Resolution, resolve } from "./build-resolution";
 import { type DamagePart, formatDamage } from "./damage";
-import { abilityModifier, proficiencyBonus } from "./dice";
+import { abilityModifier, parseDiceExpression, proficiencyBonus } from "./dice";
 import { isMonkWeapon, isWeaponProficient, parseRange } from "./weapons";
 
 export interface Contribution {
@@ -85,10 +85,17 @@ export interface AttackRider {
   readonly alternative?: { readonly dice: string; readonly label: string };
   /** The feature action (its key) that must have been used this turn. */
   readonly requires_feature?: string;
+  /** kenli F-002 T12 (D024): conditions on the hit without a save, up to `max_size` (Charge). */
+  readonly conditions?: { readonly names: readonly string[]; readonly max_size?: string };
 }
 
 export interface AttackLine {
   readonly name: string;
+  /**
+   * kenli F-002 T12 (D021/D022): the damage types its damage can be dealt as, the normal one first
+   * (an attack's `damage_type`): Lunar Radiance, Exceptional Training. Absent: only its own.
+   */
+  readonly damage_types?: readonly string[];
   readonly kind: "melee" | "ranged";
   /** The ability the attack uses (`null` for a monster's attack, which doesn't say). */
   readonly ability: Ability | null;
@@ -187,6 +194,11 @@ export interface FeatureActionLine {
   readonly restores_per_slot_level?: number;
   /** Temporary Hit Points it gives when used, at this class level (Wild Shape). */
   readonly temp_hp?: number;
+  /** kenli F-002 T12 (R14-01): used on a failed roll of these kinds (`useAfterFailedRoll`). */
+  readonly after_failed_roll?: {
+    readonly kinds: readonly ("check" | "attack")[];
+    readonly spend: "on_success";
+  };
   /** It takes one of the known forms (`use_feature`'s `form`): the class's choice id. */
   readonly shape?: {
     readonly choice: string;
@@ -202,6 +214,16 @@ export interface FeatureActionLine {
   readonly slot_payment?: "instead" | "required";
   /** The die the user rolls when using it (`1d8`), when it has one; `null`: no column value. */
   readonly roll_die?: string | null;
+  /** kenli F-002 T12 (D021): `restores` only when none of it is left (Wild Resurgence). */
+  readonly restores_when_empty?: boolean;
+  /** kenli F-002 T12 (D021): another limited use it spends one of (`druid:wild-shape`). */
+  readonly also_spends?: string;
+  /** kenli F-002 T12 (D021): the level of the spell slot it gives back. */
+  readonly restores_slot?: number;
+  /** kenli F-002 T12 (D022): the action (its key) that must have been used this turn first. */
+  readonly after_feature?: string;
+  /** kenli F-002 T12 B2a (D040): the toggle (its key) it switches on. */
+  readonly activates?: string;
 }
 
 /** kenli F-002 T10 (H3): a form choice's picks with the engine's availability now. */
@@ -393,7 +415,23 @@ export interface CastOptionLine {
   /** The limited use it spends (`sorcerer:sorcery-points`). */
   readonly uses: string;
   readonly combinable: boolean;
-  readonly effect: "distant" | "quickened" | null;
+  readonly effect:
+    | "distant"
+    | "quickened"
+    | "subtle"
+    | "heightened"
+    | "careful"
+    | "empowered"
+    | null;
+  /** kenli F-002 T12 B2b, `empowered`: how many dice of one damage roll it rerolls (CHA, min 1). */
+  readonly reroll_dice?: number;
+}
+
+/** kenli F-002 T12 B2a: a toggle switched on by spending another resource (Sorcery Incarnate). */
+export interface ToggleAlternativeLine {
+  readonly toggle: string;
+  readonly uses: string;
+  readonly amount: number;
 }
 
 export interface DerivedSheet {
@@ -482,6 +520,12 @@ export interface DerivedSheet {
   readonly shape: ShapeLine | null;
   readonly companions: readonly CompanionLine[];
   readonly cast_options: readonly CastOptionLine[];
+  /**
+   * kenli F-002 T12 B2a: how many cast options (not `combinable`) one spell can take now: 1, or
+   * more while a `cast_option_limit` toggle is active (Sorcery Incarnate).
+   */
+  readonly cast_option_limit: number;
+  readonly toggle_alternatives: readonly ToggleAlternativeLine[];
   /** d20 floors on ability checks from features (besides the named rule Reliable Talent). */
   readonly d20_floors: readonly D20FloorLine[];
   /**
@@ -1069,6 +1113,22 @@ export function computeSheet(
       uses: `${o.resource_class}:${o.resource}`,
       combinable: o.combinable,
       effect: o.effect,
+      // kenli F-002 T12 B2b: Empowered Spell's dice: the Charisma modifier, minimum one.
+      ...(o.effect === "empowered" ? { reroll_dice: Math.max(1, mod.cha) } : {}),
+    })),
+  );
+  const cast_option_limit = Math.max(
+    1,
+    ...res.sources.flatMap((src) => {
+      const l = src.grants.cast_option_limit;
+      return l && play?.active?.has(`${usesScope(src)}:${l.while_active}`) ? [l.count] : [];
+    }),
+  );
+  const toggle_alternatives: ToggleAlternativeLine[] = res.sources.flatMap((src) =>
+    (src.grants.toggle_alternatives ?? []).map((t) => ({
+      toggle: `${usesScope(src)}:${t.toggle}`,
+      uses: `${t.resource_class}:${t.resource}`,
+      amount: t.amount,
     })),
   );
   // kenli F-002 T10 (H3): in a form, its attacks are lines of the sheet and its AC is yours.
@@ -1124,6 +1184,37 @@ export function computeSheet(
       attacks: names,
     };
     acParts = [{ source: `${beast.name} form`, value: acNow }];
+  }
+
+  // kenli F-002 T12 (D021/D022): riders and damage types of a form's attacks and a companion's
+  // strike (`applies_to.lines`, `attack_damage_types`); Increased Toughness while in a form.
+  const shapeNames = new Set(shape?.attacks ?? []);
+  const companionNames = new Set(
+    res.sources.flatMap((src) => (src.grants.companions ?? []).map((c) => c.attack)),
+  );
+  const typeChoices = res.sources.flatMap((src) => src.grants.attack_damage_types ?? []);
+  for (const [i, a] of attacks.entries()) {
+    const kind = shapeNames.has(a.name)
+      ? ("shape" as const)
+      : companionNames.has(a.name)
+        ? ("companion" as const)
+        : undefined;
+    if (!kind) continue;
+    const extra = [
+      ...new Set(typeChoices.filter((t) => t.lines === kind).flatMap((t) => t.types)),
+    ].filter((t) => t !== a.damage_type);
+    const line = withRiders(a, resolvedRiders, kind);
+    attacks[i] = extra.length ? { ...line, damage_types: [a.damage_type, ...extra] } : line;
+  }
+  if (shape) {
+    for (const src of res.sources)
+      for (const g of src.grants.shape_saves ?? []) {
+        const line = savingThrows[g.save];
+        (savingThrows as Record<Ability, SaveLine>)[g.save] = {
+          ...line,
+          modifier: line.modifier + mod[g.ability],
+        };
+      }
   }
 
   let size: Size | null = null;
@@ -1205,16 +1296,20 @@ export function computeSheet(
             ? /(\d+)$/.exec(String(column(a.inspiration.progression)))?.[1]
             : null;
           const rollDie = (roll: NonNullable<typeof a.roll>): string | null => {
-            if ("dice" in roll) return roll.dice;
-            const sides = /(\d+)$/.exec(String(column(roll.progression)))?.[1];
-            return sides ? `1d${sides}` : null;
+            const sides =
+              "progression" in roll ? /(\d+)$/.exec(String(column(roll.progression)))?.[1] : null;
+            const dice = "dice" in roll ? roll.dice : sides ? `1d${sides}` : null;
+            if (dice === null || roll.ability === undefined) return dice;
+            const parsed = parseDiceExpression(dice);
+            const bonus = parsed.modifier + mod[roll.ability];
+            return `${parsed.count}d${parsed.sides}${bonus ? (bonus > 0 ? `+${bonus}` : bonus) : ""}`;
           };
           const qualifying = a.after_attack_with;
           return {
             key: `${scope}:${a.id}`,
             name: a.name,
             economy: a.economy,
-            uses: a.uses === null ? null : `${scope}:${a.uses}`,
+            uses: a.uses === null ? null : actionUsesKey(src, a.uses, res, uses),
             cost: a.cost,
             pool: a.pool,
             target: a.target,
@@ -1273,6 +1368,7 @@ export function computeSheet(
               ? { restores_per_slot_level: a.restores_per_slot_level }
               : {}),
             ...(a.temp_hp ? { temp_hp: a.temp_hp.per_class_level * classLevel } : {}),
+            ...(a.after_failed_roll ? { after_failed_roll: a.after_failed_roll } : {}),
             ...(a.shape
               ? {
                   shape: {
@@ -1284,6 +1380,11 @@ export function computeSheet(
               : {}),
             ...(a.slot_payment ? { slot_payment: a.slot_payment } : {}),
             ...(a.roll ? { roll_die: rollDie(a.roll) } : {}),
+            ...(a.restores_when_empty ? { restores_when_empty: true } : {}),
+            ...(a.also_spends ? { also_spends: `${scope}:${a.also_spends}` } : {}),
+            ...(a.restores_slot ? { restores_slot: a.restores_slot } : {}),
+            ...(a.after_feature ? { after_feature: `${scope}:${a.after_feature}` } : {}),
+            ...(a.activates ? { activates: `${scope}:${a.activates}` } : {}),
           };
         }),
       ),
@@ -1337,6 +1438,8 @@ export function computeSheet(
     shape,
     companions,
     cast_options,
+    cast_option_limit,
+    toggle_alternatives,
     cast_triggers: res.sources.flatMap((src) =>
       (src.grants.cast_triggers ?? []).map((t) => ({
         key: `${usesScope(src)}:${t.id}`,
@@ -1560,6 +1663,31 @@ function wornArmorClass(
 /** Resources and toggles of a class are keyed by the class (`barbarian:rage`), others by source. */
 function usesScope(src: ActiveSource): string {
   return src.feat === null && src.feature === null && src.class_id ? src.class_id : src.key;
+}
+
+/** An option's action may spend a resource declared by that option or its nearest parent.
+ * Follow real option ancestry, never an unrelated source with the same resource id.
+ * An unresolved reference keeps its old key and remains unpayable.
+ */
+function actionUsesKey(
+  src: ActiveSource,
+  id: string,
+  res: Resolution,
+  uses: readonly UsesLine[],
+): string {
+  const original = `${usesScope(src)}:${id}`;
+  let current: ActiveSource | undefined = src;
+  while (current) {
+    const key = `${usesScope(current)}:${id}`;
+    if (uses.some((u) => u.key === key)) return key;
+    const childKey: string = current.key;
+    current = res.choices.find(
+      (choice) =>
+        choice.definition.kind === "option" &&
+        choice.definition.options.some((option) => `${choice.key}=${option.id}` === childKey),
+    )?.source;
+  }
+  return original;
 }
 
 function limitedUses(
@@ -1976,8 +2104,13 @@ function resolveRider(
   classLevels: ReadonlyMap<string, number>,
 ): ResolvedRider | null {
   let value: string | number | undefined;
-  if (typeof def.damage === "string") value = def.damage;
-  else {
+  if (typeof def.damage === "string") {
+    value = def.damage;
+    // kenli F-002 T12 (D022): other dice from a class level (the highest reached).
+    const lvl = src.class_id ? (classLevels.get(src.class_id) ?? 0) : 0;
+    for (const x of [...(def.scaling ?? [])].sort((p, q) => p.level - q.level))
+      if (lvl >= x.level) value = x.dice;
+  } else {
     const cls = lookup(catalog.classes, src.class_id);
     const classLevel = src.class_id ? (classLevels.get(src.class_id) ?? 0) : 0;
     value = cls?.progression[def.damage.progression]?.[classLevel - 1];
@@ -1996,8 +2129,13 @@ function resolveRider(
   return null;
 }
 
-function riderApplies(rider: DamageRider, line: AttackLine): boolean {
+function riderApplies(
+  rider: DamageRider,
+  line: AttackLine,
+  lineKind?: "shape" | "companion",
+): boolean {
   const to = rider.applies_to;
+  if (to.lines !== lineKind) return false;
   if (to.ability !== null && line.ability !== to.ability) return false;
   if (to.weapon && !line.weapon) return false;
   if (to.any_of.length && !to.any_of.some((x) => x === line.kind || line.properties.includes(x))) {
@@ -2010,7 +2148,11 @@ function riderApplies(rider: DamageRider, line: AttackLine): boolean {
  * Add riders to the attack lines they apply to: automatic ones (Rage Damage) become a damage part
  * of the weapon's type; the others are listed for `makeAttack`.
  */
-function withRiders(line: AttackLine, riders: readonly ResolvedRider[]): AttackLine {
+function withRiders(
+  line: AttackLine,
+  riders: readonly ResolvedRider[],
+  lineKind?: "shape" | "companion",
+): AttackLine {
   let parts = [...line.damage_parts];
   let twoHanded = line.two_handed_damage_parts ? [...line.two_handed_damage_parts] : null;
   let lightExtra = line.light_extra_damage_parts ? [...line.light_extra_damage_parts] : null;
@@ -2018,7 +2160,7 @@ function withRiders(line: AttackLine, riders: readonly ResolvedRider[]): AttackL
   const notes = [...line.notes];
   const optional: AttackRider[] = [];
   for (const r of riders) {
-    if (!riderApplies(r.def, line)) continue;
+    if (!riderApplies(r.def, line, lineKind)) continue;
     const type = r.def.type === "weapon" ? line.damage_type : r.def.type;
     if (r.def.automatic && typeof type === "string") {
       const part = { dice: r.dice, bonus: r.bonus, type };
@@ -2042,6 +2184,7 @@ function withRiders(line: AttackLine, riders: readonly ResolvedRider[]): AttackL
         ...(r.save ? { save: r.save } : {}),
         ...(r.def.alternative ? { alternative: r.def.alternative } : {}),
         ...(r.requires_feature ? { requires_feature: r.requires_feature } : {}),
+        ...(r.def.conditions ? { conditions: r.def.conditions } : {}),
       });
     }
   }

@@ -457,6 +457,24 @@
                                       "two_handed": {
                                         "type": "boolean"
                                       },
+                                      "damage_type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "acid",
+                                          "bludgeoning",
+                                          "cold",
+                                          "fire",
+                                          "force",
+                                          "lightning",
+                                          "necrotic",
+                                          "piercing",
+                                          "poison",
+                                          "psychic",
+                                          "radiant",
+                                          "slashing",
+                                          "thunder"
+                                        ]
+                                      },
                                       "riders": {
                                         "type": "array",
                                         "items": {
@@ -533,7 +551,10 @@
                                           "enum": [
                                             "poison",
                                             "trip",
-                                            "withdraw"
+                                            "withdraw",
+                                            "daze",
+                                            "knock_out",
+                                            "obscure"
                                           ]
                                         }
                                       },
@@ -810,6 +831,37 @@
                                             "key",
                                             "mode"
                                           ]
+                                        }
+                                      },
+                                      "payment": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "const": "free"
+                                          },
+                                          "use": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "use"
+                                        ]
+                                      },
+                                      "options": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "heightened": {
+                                        "type": "string"
+                                      },
+                                      "careful": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
                                         }
                                       }
                                     },
@@ -1256,8 +1308,10 @@
                           "studied",
                           "hamstrung",
                           "staggered",
+                          "staggered_save",
                           "sundered",
-                          "quarry"
+                          "quarry",
+                          "dazed"
                         ]
                       },
                       "label": {
@@ -1558,6 +1612,9 @@
                         "minimum": 1,
                         "maximum": 9007199254740991
                       },
+                      "heightened": {
+                        "type": "string"
+                      },
                       "difficult": {
                         "default": false,
                         "type": "boolean"
@@ -1804,7 +1861,19 @@
                         "answers": {
                           "type": "array",
                           "items": {
-                            "type": "boolean"
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              }
+                            ]
                           }
                         },
                         "combatant": {
@@ -1823,7 +1892,8 @@
                             "hit_on_miss",
                             "tactical_mind",
                             "guarded_mind",
-                            "savage_attacker"
+                            "savage_attacker",
+                            "empowered_spell"
                           ]
                         },
                         "question": {
@@ -1835,6 +1905,49 @@
                         "recommended": {
                           "default": true,
                           "type": "boolean"
+                        },
+                        "dice": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "part": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "die": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "sides": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "part",
+                              "die",
+                              "value",
+                              "sides",
+                              "type"
+                            ]
+                          }
+                        },
+                        "max_dice": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
@@ -2513,6 +2626,14 @@
             },
             "use": {
               "type": "boolean"
+            },
+            "dice": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
             }
           },
           "required": [
@@ -3601,6 +3722,24 @@
                     "two_handed": {
                       "type": "boolean"
                     },
+                    "damage_type": {
+                      "type": "string",
+                      "enum": [
+                        "acid",
+                        "bludgeoning",
+                        "cold",
+                        "fire",
+                        "force",
+                        "lightning",
+                        "necrotic",
+                        "piercing",
+                        "poison",
+                        "psychic",
+                        "radiant",
+                        "slashing",
+                        "thunder"
+                      ]
+                    },
                     "riders": {
                       "type": "array",
                       "items": {
@@ -3677,7 +3816,10 @@
                         "enum": [
                           "poison",
                           "trip",
-                          "withdraw"
+                          "withdraw",
+                          "daze",
+                          "knock_out",
+                          "obscure"
                         ]
                       }
                     },
@@ -3955,6 +4097,37 @@
                           "mode"
                         ]
                       }
+                    },
+                    "payment": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "free"
+                        },
+                        "use": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "use"
+                      ]
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "heightened": {
+                      "type": "string"
+                    },
+                    "careful": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -4210,6 +4383,24 @@
             "two_handed": {
               "type": "boolean"
             },
+            "damage_type": {
+              "type": "string",
+              "enum": [
+                "acid",
+                "bludgeoning",
+                "cold",
+                "fire",
+                "force",
+                "lightning",
+                "necrotic",
+                "piercing",
+                "poison",
+                "psychic",
+                "radiant",
+                "slashing",
+                "thunder"
+              ]
+            },
             "riders": {
               "type": "array",
               "items": {
@@ -4286,7 +4477,10 @@
                 "enum": [
                   "poison",
                   "trip",
-                  "withdraw"
+                  "withdraw",
+                  "daze",
+                  "knock_out",
+                  "obscure"
                 ]
               }
             },
@@ -4357,6 +4551,43 @@
                 "slashing",
                 "thunder"
               ]
+            },
+            "payment": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "slot"
+                    },
+                    "level": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "level"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "pact"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                }
+              ]
+            },
+            "form": {
+              "type": "string"
             }
           },
           "required": [
@@ -4656,6 +4887,37 @@
                   "key",
                   "mode"
                 ]
+              }
+            },
+            "payment": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "free"
+                },
+                "use": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "use"
+              ]
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "heightened": {
+              "type": "string"
+            },
+            "careful": {
+              "type": "array",
+              "items": {
+                "type": "string"
               }
             }
           },
@@ -5856,6 +6118,24 @@
             "two_handed": {
               "type": "boolean"
             },
+            "damage_type": {
+              "type": "string",
+              "enum": [
+                "acid",
+                "bludgeoning",
+                "cold",
+                "fire",
+                "force",
+                "lightning",
+                "necrotic",
+                "piercing",
+                "poison",
+                "psychic",
+                "radiant",
+                "slashing",
+                "thunder"
+              ]
+            },
             "riders": {
               "type": "array",
               "items": {
@@ -5889,7 +6169,10 @@
                 "enum": [
                   "poison",
                   "trip",
-                  "withdraw"
+                  "withdraw",
+                  "daze",
+                  "knock_out",
+                  "obscure"
                 ]
               }
             },

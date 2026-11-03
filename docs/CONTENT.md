@@ -203,6 +203,10 @@ resources:
 # ({name, feet?, per_class_level?: {class, feet}, spell?: id or $choice, attack_roll?, min_feet?});
 # `initiative_regain: [{uses, to}]`; `slot_refund: {name, die, max_level}`; effect target
 # `attack.melee_weapon`.
+# kenli F-002 T12 (R14): an action's `after_failed_roll: {kinds: [check, attack], spend: on_success}`
+# (Peerless Skill); a pack's top-level `automation: [{id, name, when: {class?, subclass?,
+# class_level?, feat?}, grants}]` adds ordinary grants to characters whose features meet `when`;
+# its grants add no choice and no feat, also not nested (`at_class_level`, toggles; D035).
 free_casts:                     # cast without a slot by spending a use of the same source
 - {uses: free-cast, choice: spell}          # the spells picked in this source's `spell` choice
 - {uses: misty, spells: [misty-step]}       # or named
@@ -668,3 +672,21 @@ SRD and invented homebrew), the same steps the SRD importers follow work by hand
 If you have many entities in a regular format, a script that drafts YAML from your transcription
 (like `scripts/import-srd-spells.ts`, with its `--report` of drafts and skips) saves time; the
 review step stays the same.
+
+### kenli F-002 T12 batch B1: forms and companions (optional fields)
+
+- `shape_saves: [{save, ability}]` — while in a Wild Shape form, `ability`'s modifier is added to `save` (Increased Toughness).
+- `attack_damage_types: [{lines: "shape" | "companion", types}]` — a form's attacks or a companion's strike can deal one of `types` instead of their own (`damage_type` on the attack).
+- Damage riders: `applies_to.lines` (only form attacks / a companion's strike), `scaling: [{level, dice}]` (dice by class level), `conditions: {names, max_size?}` (applied on the hit without a save).
+- Feature actions: `restores_when_empty` (restore only with none left), `also_spends` (another resource of the source), `restores_slot` (a spell slot of that level back), `after_feature` (only after that action this turn, in an encounter).
+
+### kenli F-002 T12 batch B2a: cast-time Metamagic (optional fields)
+
+- `cast_options[].effect`: `distant` (range ≥ 5 ft doubled, Touch → 30 ft), `quickened` (an Action spell as a Bonus Action; no level 1+ spell on that turn, and none before it), `subtle` (no components but a consumed or costly Material one), `heightened` (one target saves with Disadvantage, its zone's later saves too), `careful` (up to CHA modifier, min 1, creatures succeed and take no damage instead of half). Without an effect the option is paid and named only.
+- `cast_option_limit: {count, while_active}` — more non-combinable options per spell while that toggle (same source) is active.
+- `toggle_alternatives: [{toggle, resource_class, resource, amount}]` — the toggle switched on with that resource when it has no use left.
+
+### kenli F-002 T12 batch B2b: after-damage Metamagic, Devious Strikes (optional values)
+
+- `cast_options[].effect: empowered` — used after the damage is rolled, never paid with the cast: up to the Charisma modifier (minimum 1) of that one damage roll's dice rerolled, the new rolls kept even lower, its `cost` paid once then. Named with an encounter `cast` (`options`), the cast stops after the roll for the choice (`encounter.pending`, kind `empowered_spell`, `dice`, `max_dice`; `decide` with `dice` indexes, or `use: false` to keep the roll); on the sheet `useEmpoweredSpell` on a spell rolled by hand. An area's one roll for every target; once per cast.
+- Feature rule `devious_strikes` (Rogue 14) — Cunning Strike's Daze (2d6, CON: only one of moving, an action or a Bonus Action on its next turn), Knock Out (6d6, CON: Unconscious up to 1 minute or until it takes damage, the save repeated at the end of its turns) and Obscure (3d6, DEX: Blinded until the end of its next turn). Absent, those effects are refused.

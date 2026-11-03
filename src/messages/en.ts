@@ -112,7 +112,7 @@ export const MESSAGES_EN = {
     "Cunning Strike (Withdraw): {name} can move {feet} feet without provoking Opportunity Attacks.",
   "cunning.too_large": "Cunning Strike (Trip): {name} is too large to trip.",
   "cunning.save":
-    "Cunning Strike ({effect, select, poison {Poison} other {Trip}}): {name} {success, select, true {succeeds} other {fails}} ({save}).",
+    "Cunning Strike ({effect, select, poison {Poison} daze {Daze} knock_out {Knock Out} obscure {Obscure} other {Trip}}): {name} {success, select, true {succeeds} other {fails}} ({save}).",
   "brutal.sundered_bonus": "Sundering Blow: +5 to {name}'s attack roll against {target}.",
   "brutal.forceful":
     "Forceful Blow: {target} is pushed 15 feet straight away; {name} can move up to half its Speed toward it without provoking Opportunity Attacks.",
@@ -266,6 +266,7 @@ export const MESSAGES_EN = {
     "{feature}: regains {amount} Hit Points{capped, select, true { (rolled {rolled})} other {}}.",
   "play.exhaustion_dies": "Exhaustion 6: the character dies.",
   "play.starting_equipment": "Starting equipment added: {items}.",
+  "play.level_items": "Granted with this level: {items}.",
   "play.took_off": "Took off {item}.",
   "play.item_stored": "{item} put away (stored: not carried).",
   "play.item_retrieved": "{item} taken back (carried).",
@@ -742,6 +743,7 @@ export const MESSAGES_EN = {
   "issue.chosen_twice": "{value} chosen twice",
   "issue.not_an_option": "'{value}' isn't an option",
   "issue.option_unavailable": "{name} — {why}",
+  "issue.redundant_pick": "{name}: no effect ({why}): every option is already known",
   "issue.choose_more": "choose {count} more",
   "issue.choose_only": "choose only {count}",
   "builder.bonuses_reset_background":
@@ -935,6 +937,45 @@ export const MESSAGES_EN = {
   "cast.slot_kept": "{feature}: {die} rolled {rolled}, the level {level} slot isn't expended",
   "cast.slot_not_kept": "{feature}: {die} rolled {rolled}, the level {level} slot is expended",
   "initiative.regained": "{name}: {use} back to {left} ({feature})",
+  "refusal.after_roll_kind": "{feature} is used on a failed ability check or attack roll only",
+  "refusal.after_roll_needs_dc": "{feature}: give the DC or AC the roll failed against",
+  "refusal.after_roll_not_failed": "{feature}: the roll didn't fail",
+  "refusal.after_roll_used": "{feature}: already used on this roll",
+  "refusal.restores_when_empty": "{feature}: only when no {use} is left ({left} left)",
+  "refusal.toggle_alternative": "{toggle}: no use left, and {amount} {use} needed ({left} left)",
+  "play.toggle_alternative": "{toggle}: switched on with {amount} {use} (no use left)",
+  "refusal.cast_options_limit": "{options}: only {count} cast option(s) on one spell now",
+  "refusal.quickened_after_leveled":
+    "{spell}: Quickened Spell can't be used after a level 1+ spell this turn",
+  "refusal.leveled_after_quickened":
+    "{spell}: no level 1+ spell on a turn Quickened Spell was used",
+  "refusal.metamagic_needs_save": "{option}: {spell} forces no saving throw",
+  "refusal.heightened_one_target": "{option}: choose one of the spell's targets",
+  "refusal.careful_targets": "{option}: up to {max} of the spell's targets (not you)",
+  "cast.subtle": "{spell} cast without Verbal, Somatic or Material components{still}",
+  "cast.subtle_still": " (still needed: {material})",
+  "cast.heightened": "{target} has Disadvantage on saves against {spell} (Heightened Spell)",
+  "cast.careful": "{targets} succeed on the save against {spell} (Careful Spell)",
+  "reason.heightened": "Heightened Spell",
+  "save.careful": "Careful Spell: an automatic success",
+  "refusal.careful_no_save_now": "{option}: {spell} forces no saving throw when it's cast",
+  "cast.option_targets_by_hand":
+    "{option}: its creatures are the table's (a roll by hand has no targets)",
+  "play.feature_slot_back": "{feature}: a level {level} spell slot back",
+  "refusal.needs_feature_first": "{feature}: only after {after} this turn",
+  "refusal.companion_strike_once":
+    "{name} has already given up an attack of this Attack action for the companion's strike",
+  "refusal.companion_action_once": "{name}'s companion has already used its one action this turn",
+  "attack.damage_as": "{attack}: its damage dealt as {type}",
+  "rule.damage_type_not_allowed": "{attack} can't deal {type} damage (only {types})",
+  "attack.rider_condition": "{target}: {conditions} ({rider})",
+  "attack.rider_condition_size": "{target} is too large for {rider}'s {conditions}",
+  "note.defeated_this_action":
+    "{name} is already defeated by this action: the rest of its damage to them has no effect",
+  "after_roll.succeeds":
+    "{feature}: {die} rolled {rolled}, total {total} against {dc}: it succeeds, one use spent",
+  "after_roll.still_fails":
+    "{feature}: {die} rolled {rolled}, total {total} against {dc}: it still fails, nothing spent",
   "cast.at_will": "{spell} cast at will with {use}: no spell slot, nothing spent",
   "unarmed.grapple":
     "Grapple, DC {dc}: the target makes a Strength or Dexterity saving throw (its choice) or has the Grappled condition. Only a creature at most one size larger than you, with a hand of yours free.",
@@ -987,6 +1028,25 @@ export const MESSAGES_EN = {
     "Attunement to {item} requires {by}: the table judges whether you qualify",
   "item.restriction.attunement_limit":
     "You're attuned to {count} items, the most you can be ({max}): end an Attunement first",
+  "refusal.empowered_needs_damage": "{option}: {spell} rolls no damage",
+  "refusal.empowered_used": "{option}: already used on this spell",
+  "refusal.no_empowered": "{name} has no Empowered Spell",
+  "refusal.reroll_too_many": "{label}: at most {max} dice",
+  "refusal.reroll_die_twice": "{label}: each die once",
+  "refusal.empowered_pick_dice": "Choose up to {max} damage dice to reroll, or keep the roll",
+  "decision.empowered_spell":
+    "{name}: {option} on {spell}'s damage ({dice}; total {total})? Reroll up to {max} of its dice for {cost} {use}, or keep it",
+  "empowered.rerolled": "{option}: dice rerolled ({dice}), damage {from} → {total}",
+  "refusal.devious_strikes_needed":
+    "Daze, Knock Out and Obscure come with Devious Strikes (Rogue level 14): {name} doesn't have it",
+  "refusal.dazed_one": "{name} is Dazed: only one of moving, an action or a Bonus Action this turn",
+  "cunning.dazed":
+    "{name} is Dazed: on its next turn, only one of moving, an action or a Bonus Action",
+  "label.cost_sneak_dice": "{count}d6 of Sneak Attack",
+  "refusal.stock_units": "{item}: a whole number of units, at least 1",
+  "refusal.stock_twice": "{item} is listed twice",
+  "refusal.stock_equip_conflict": "{item} can't be worn or held together with the rest of the list",
+  "refusal.stock_unpriced": "{item} has no listed price: it can't be bought",
 } as const;
 
 export type MessageCode = keyof typeof MESSAGES_EN;

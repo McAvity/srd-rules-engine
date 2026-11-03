@@ -53,7 +53,7 @@ import {
   spellRangeFeet,
   spellTargetRange,
 } from "./encounter";
-import { computePlaySheet, spellSlots } from "./play";
+import { computePlaySheet, type PlaySheet, spellSlots } from "./play";
 import { optionReason, refusalCode } from "./refusals";
 
 /** Dice that always land in the middle: a dry run checks legality, not outcomes. */
@@ -195,11 +195,17 @@ function reasonsAndRoll(
   };
 }
 
-/** SRD Rogue "Cunning Strike" (each costs 1d6 of Sneak Attack). */
+/**
+ * SRD Rogue "Cunning Strike" (each costs 1d6 of Sneak Attack); kenli F-002 T12 B2b: Devious
+ * Strikes' Daze (2d6), Knock Out (6d6) and Obscure (3d6), with the `devious_strikes` rule.
+ */
 const CUNNING = [
-  { send: "cunning", id: "poison", name: "Poison", improved: false },
-  { send: "cunning", id: "trip", name: "Trip", improved: false },
-  { send: "cunning", id: "withdraw", name: "Withdraw", improved: false },
+  { send: "cunning", id: "poison", name: "Poison", improved: false, dice: 1, devious: false },
+  { send: "cunning", id: "trip", name: "Trip", improved: false, dice: 1, devious: false },
+  { send: "cunning", id: "withdraw", name: "Withdraw", improved: false, dice: 1, devious: false },
+  { send: "cunning", id: "daze", name: "Daze", improved: false, dice: 2, devious: true },
+  { send: "cunning", id: "knock_out", name: "Knock Out", improved: false, dice: 6, devious: true },
+  { send: "cunning", id: "obscure", name: "Obscure", improved: false, dice: 3, devious: true },
 ] as const;
 /** SRD Barbarian "Brutal Strike" (Staggering and Sundering Blow: Improved Brutal Strike). */
 const BRUTAL = [
@@ -449,7 +455,7 @@ export function combatantOptions(
   // Cunning Strike and Brutal Strike effects on each attack (a character's).
   const has = (rule: string) => view.rules.some((r) => r === rule);
   const strikeDefs = [
-    ...(has("cunning_strike") ? CUNNING : []),
+    ...(has("cunning_strike") ? CUNNING.filter((d) => !d.devious || has("devious_strikes")) : []),
     ...(has("brutal_strike")
       ? BRUTAL.filter((b) => !b.improved || has("improved_brutal_strike"))
       : []),
@@ -463,9 +469,12 @@ export function combatantOptions(
       option.strikes = strikeDefs
         .filter((d) => d.send === "brutal" || sneak)
         .map((d): StrikeOption => {
-          const strikeCost = message(
-            d.send === "cunning" ? "label.cost_sneak_die" : "label.cost_reckless",
-          );
+          const strikeCost =
+            d.send !== "cunning"
+              ? message("label.cost_reckless")
+              : d.dice === 1
+                ? message("label.cost_sneak_die")
+                : message("label.cost_sneak_dice", { count: d.dice });
           const action: EncounterAction =
             d.send === "cunning"
               ? { ...a, riders: [...(a.riders ?? []), { rider: "sneak-attack" }], cunning: [d.id] }
@@ -488,7 +497,7 @@ export function combatantOptions(
             name: d.name,
             cost: strikeCost.text,
             cost_message: strikeCost,
-            sneak_attack_dice: d.send === "cunning" ? 1 : 0,
+            sneak_attack_dice: d.send === "cunning" ? d.dice : 0,
             action,
             available: reason === null,
             reason: reason?.text ?? null,
@@ -535,25 +544,45 @@ export function combatantOptions(
     const sheet = computePlaySheet(ref.build, ref.state, ref.catalog ?? ctx.catalog);
     const play = sheet.play;
     for (const known of sheet.spells) {
-      const spell = lookup((ref.catalog ?? ctx.catalog).spells, known.id);
-      if (!spell) continue;
+      const def = lookup((ref.catalog ?? ctx.catalog).spells, known.id);
+      if (!def) continue;
+      // kenli F-002 T12 (R14-03): targets within the range this character casts it with.
+      const spell = known.range ? { ...def, range: known.range } : def;
       const cantrip = spell.level === 0;
-      const { slot_levels, pact_slot } = spellSlots(spell.level, play);
+      // kenli F-002 T12 (R14-02): a line cast only through a free cast has no slot.
+      const { slot_levels, pact_slot } = known.slots.length
+        ? spellSlots(spell.level, play)
+        : { slot_levels: [] as number[], pact_slot: null };
+      const free = known.free.map((f) => ({
+        use: f.use,
+        name: f.name,
+        at_will: f.at_will,
+        left: f.left,
+        available: f.available,
+      }));
       const targets = spellTargets(spell);
+      const firstFree = free.find((f) => f.available) ?? free[0];
       const slot = cantrip
         ? {}
         : slot_levels[0] !== undefined
           ? { slot_level: slot_levels[0] }
           : pact_slot !== null
             ? { slot_level: pact_slot, pact: true }
-            : { slot_level: spell.level };
+            : firstFree
+              ? { payment: { type: "free" as const, use: firstFree.use } }
+              : { slot_level: spell.level };
       spells.push(
         entry(
           { type: "cast", id: c.id, spell: spell.id, targets: spellAim(targets), ...slot },
           spellLabel(spell),
           spellCost(spell),
           targets,
-          { slot_levels: [...slot_levels], pact_slot, ...noted(spellNote(spell)) },
+          {
+            slot_levels: [...slot_levels],
+            pact_slot,
+            ...(free.length ? { free_casts: free } : {}),
+            ...noted(spellNote(spell)),
+          },
         ),
       );
     }
@@ -634,6 +663,17 @@ export function combatantOptions(
         feature: f.key,
         ...(target !== undefined ? { target } : {}),
         ...(f.pool ? { amount: 1 } : {}),
+        // kenli F-002 T12 B1: a feature a slot pays for (Wild Resurgence, Font of Inspiration):
+        // the lowest slot with one left by default (the caller may pick another), so it's judged
+        // with its payment, not refused for the lack of one.
+        ...(f.slot_payment === "required" ? defaultSlotPayment(sheet) : {}),
+        // …and a feature that takes a form (Wild Shape): the first known form allowed now.
+        ...(f.shape
+          ? (() => {
+              const form = f.shape.forms.find((x) => !x.unavailable)?.id;
+              return form ? { form } : {};
+            })()
+          : {}),
       };
       const made = entry(action, named(f.name), cost, targets, { uses });
       // "hasn't hit X this turn" said of its placeholder target: no hit at all.
@@ -1074,4 +1114,15 @@ function joined(reasons: readonly Message[]): Message {
 function firstCode(reason: Message): RefusalCode {
   const first = reason.code === "refusal.all" ? (reason.params.reasons as Message[])[0] : reason;
   return refusalCode((first ?? reason).text);
+}
+
+/** The lowest spell slot with one left (else the Pact Magic slot), as a feature's `payment`. */
+function defaultSlotPayment(sheet: PlaySheet): {
+  payment?: { type: "slot"; level: number } | { type: "pact" };
+} {
+  const slot = sheet.play.spell_slots.find((x) => x.spent < x.total);
+  if (slot) return { payment: { type: "slot", level: slot.level } };
+  const pact = sheet.play.pact_magic;
+  if (pact && pact.spent < pact.slots) return { payment: { type: "pact" } };
+  return {};
 }
